@@ -30,13 +30,14 @@ def point_to_segment_distance_km(p_lat: float, p_lng: float, a_lat: float, a_lng
 
 class RideMatchingEngine:
     """
-    5-Factor Weighted Ride Matching & Route Insertion Optimization Engine.
-    Weights:
-      - Destination Similarity: 30%
-      - Route Corridor Overlap: 30%
-      - Time Compatibility:    20%
-      - Pickup Proximity:      10%
+    6-Factor Weighted Ride Matching & Route Insertion Optimization Engine.
+    Dominant Weights:
+      - Driver Pickup Proximity: 40%
+      - Active Ride Bonus:      15%
+      - Route Corridor Overlap: 15%
+      - Destination Similarity: 15%
       - Detour Minimization:   10%
+      - Time Compatibility:     5%
     """
     def __init__(self, max_detour_km: float = 3.5):
         self.max_detour_km = max_detour_km
@@ -53,16 +54,33 @@ class RideMatchingEngine:
         if ride.is_female_only and (request.gender or "").upper() == "MALE":
             return None
 
-        # 3. Factor 1: Destination Similarity (Max 30 pts)
-        dest_dist = haversine_distance_km(
-            request.destination.lat, request.destination.lng,
-            ride.destination.lat, ride.destination.lng
+        # 3. Factor 1: Driver Pickup Proximity (Max 40 pts)
+        # Dominant metric: Driver's actual current location to rider pickup
+        pickup_dist = haversine_distance_km(
+            ride.current_location.lat, ride.current_location.lng,
+            request.pickup.lat, request.pickup.lng
         )
-        # Exponential decay: 0 km = 30 pts, 3 km = ~15 pts, >= 6 km = 0 pts
-        dest_score = max(0.0, 30.0 * math.exp(-dest_dist / 2.5))
+        if pickup_dist <= 0.8:
+            pickup_score = 40.0
+        elif pickup_dist <= 2.0:
+            pickup_score = 36.0
+        elif pickup_dist <= 4.0:
+            pickup_score = 30.0
+        elif pickup_dist <= 7.0:
+            pickup_score = 20.0
+        elif pickup_dist <= 12.0:
+            pickup_score = 10.0
+        elif pickup_dist <= 18.0:
+            pickup_score = 4.0
+        else:
+            pickup_score = 0.0
 
-        # 4. Factor 2: Route Corridor Overlap (Max 30 pts)
-        # Check proximity of request pickup & dropoff to ride's route trajectory
+        # 4. Factor 2: Active Ride Priority (Max 15 pts)
+        is_active = getattr(ride, 'status', 'waiting') == 'active'
+        is_boarding = getattr(ride, 'status', 'waiting') == 'boarding'
+        active_score = 15.0 if is_active else (12.0 if is_boarding else 8.0)
+
+        # 5. Factor 3: Route Corridor Overlap (Max 15 pts)
         route_coords = ride.route_coordinates
         if not route_coords or len(route_coords) < 2:
             route_coords = [
@@ -89,20 +107,14 @@ class RideMatchingEngine:
         )
 
         avg_corridor_dist = (min_pickup_dist_to_corridor + min_dropoff_dist_to_corridor) / 2.0
-        route_score = max(0.0, 30.0 * math.exp(-avg_corridor_dist / 1.5))
+        route_score = max(0.0, 15.0 * math.exp(-avg_corridor_dist / 1.5))
 
-        # 5. Factor 3: Time Compatibility (Max 20 pts)
-        req_time = parse_time_to_minutes(request.desired_time)
-        ride_time = parse_time_to_minutes(ride.departure_time)
-        time_diff = abs(req_time - ride_time) if (req_time and ride_time) else 5.0
-        time_score = max(0.0, 20.0 * max(0.0, 1.0 - (time_diff / 30.0)))
-
-        # 6. Factor 4: Pickup Proximity (Max 10 pts)
-        pickup_dist = haversine_distance_km(
-            ride.current_location.lat, ride.current_location.lng,
-            request.pickup.lat, request.pickup.lng
+        # 6. Factor 4: Destination Similarity (Max 15 pts)
+        dest_dist = haversine_distance_km(
+            request.destination.lat, request.destination.lng,
+            ride.destination.lat, ride.destination.lng
         )
-        pickup_score = max(0.0, 10.0 * math.exp(-pickup_dist / 2.0))
+        dest_score = max(0.0, 15.0 * math.exp(-dest_dist / 2.5))
 
         # 7. Factor 5: Detour Penalty & Best Stop Insertion (Max 10 pts)
         best_pickup_idx, best_dropoff_idx, detour_km = self._find_optimal_insertion(ride, request)
@@ -111,17 +123,30 @@ class RideMatchingEngine:
         else:
             detour_score = max(0.0, 10.0 * (1.0 - (detour_km / self.max_detour_km)))
 
-        total_score = round(dest_score + route_score + time_score + pickup_score + detour_score, 1)
+        # 8. Factor 6: Time Compatibility (Max 5 pts)
+        req_time = parse_time_to_minutes(request.desired_time)
+        ride_time = parse_time_to_minutes(ride.departure_time)
+        time_diff = abs(req_time - ride_time) if (req_time and ride_time) else 5.0
+        time_score = max(0.0, 5.0 * max(0.0, 1.0 - (time_diff / 40.0)))
+
+        total_score = round(pickup_score + active_score + route_score + dest_score + detour_score + time_score, 1)
         extra_time_min = round((detour_km / 30.0) * 60.0, 1)
 
         # Recommendation explanation
         reasons = []
-        if dest_score > 20:
-            reasons.append("Identical destination corridor")
-        if route_score > 20:
+        if pickup_dist <= 2.0:
+            reasons.append(f"Nearest active driver ({pickup_dist:.1f}km away)")
+        elif pickup_dist <= 5.0:
+            reasons.append(f"Nearby driver ({pickup_dist:.1f}km away)")
+        elif pickup_dist > 10.0:
+            reasons.append(f"Long drive ({pickup_dist:.1f}km away)")
+
+        if is_active:
+            reasons.append("Live active ride")
+        if dest_score > 10:
+            reasons.append("Same destination corridor")
+        if route_score > 10:
             reasons.append("High route overlap")
-        if time_score > 15:
-            reasons.append("Exact departure match")
         if detour_km < 1.0:
             reasons.append(f"Minimal {detour_km:.1f}km detour")
         rec_reason = " & ".join(reasons) if reasons else "Compatible shared transit route"
@@ -132,6 +157,8 @@ class RideMatchingEngine:
             time_compatibility=round(time_score, 1),
             pickup_proximity=round(pickup_score, 1),
             detour_penalty=round(detour_score, 1),
+            active_ride_bonus=round(active_score, 1),
+            driver_distance_km=round(pickup_dist, 2),
             total_score=total_score
         )
 
@@ -143,7 +170,8 @@ class RideMatchingEngine:
             additional_time_min=extra_time_min,
             insertion_pickup_index=best_pickup_idx,
             insertion_dropoff_index=best_dropoff_idx,
-            recommendation_reason=rec_reason
+            recommendation_reason=rec_reason,
+            driver_distance_km=round(pickup_dist, 2)
         )
 
     def _find_optimal_insertion(self, ride: ExistingRide, request: RideRequest) -> Tuple[int, int, float]:
@@ -192,11 +220,11 @@ class RideMatchingEngine:
         matches: List[RideMatch] = []
         for ride in req.candidate_rides:
             eval_res = self.evaluate_match(req.request, ride)
-            if eval_res and eval_res.match_score >= (req.min_score_threshold or 40.0):
+            if eval_res and eval_res.match_score >= (req.min_score_threshold or 35.0):
                 matches.append(eval_res)
 
-        # Sort descending by match score
-        matches.sort(key=lambda m: m.match_score, reverse=True)
+        # Sort descending by match score, and break close scores with nearest driver distance
+        matches.sort(key=lambda m: (-m.match_score, m.driver_distance_km or 0.0))
         best = matches[0] if matches else None
 
         return MatchResponse(

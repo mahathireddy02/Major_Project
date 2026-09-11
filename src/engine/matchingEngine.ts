@@ -42,6 +42,8 @@ export interface MatchScore {
   timeCompatibility: number
   pickupProximity: number
   detour: number
+  activeBonus?: number
+  driverDistanceKm?: number
   explanation: {
     destinationLabel: string
     routeLabel: string
@@ -107,11 +109,16 @@ function scoreLabel(score: number): string {
   return 'Poor'
 }
 
-function getSummary(scores: MatchScore): string[] {
+function getSummary(scores: MatchScore, driverDistKm?: number, rideStatus?: string): string[] {
   const bullets: string[] = []
-  if (scores.destination >= 80)  bullets.push('Same destination')
-  if (scores.pickupProximity >= 70) bullets.push('Pickup within 1km')
-  if (scores.timeCompatibility >= 70) bullets.push('Departure within 15 minutes')
+  if (typeof driverDistKm === 'number') {
+    if (driverDistKm <= 2.0) bullets.push(`Nearest active driver (${driverDistKm.toFixed(1)} km away)`)
+    else if (driverDistKm <= 5.0) bullets.push(`Driver nearby (${driverDistKm.toFixed(1)} km away)`)
+    else if (driverDistKm > 10.0) bullets.push(`Long drive (${driverDistKm.toFixed(1)} km away)`)
+  }
+  if (rideStatus === 'active') bullets.push('Live active ride')
+  if (scores.destination >= 80) bullets.push('Same destination')
+  if (scores.pickupProximity >= 70) bullets.push('Pickup stop within 1km')
   if (scores.routeOverlap >= 70) bullets.push(`${Math.round(scores.routeOverlap)}% route overlap`)
   if (scores.detour >= 70) bullets.push('Minimal detour added')
   return bullets
@@ -134,20 +141,63 @@ export function calculateMatchScore(
   const dLat = request.destinationCoords?.lat || ride.destinationLat || 17.2063
   const dLng = request.destinationCoords?.lng || ride.destinationLng || 78.6015
 
-  // 1. Destination (30%)
+  // 0. Driver's actual current location
+  const vehicleLat = typeof ride.currentLat === 'number' && ride.currentLat !== 0
+    ? ride.currentLat
+    : typeof ride.startLocationLat === 'number' && ride.startLocationLat !== 0
+    ? ride.startLocationLat
+    : (ride.pickupPoints?.[0]?.lat ?? ride.destinationLat)
+
+  const vehicleLng = typeof ride.currentLng === 'number' && ride.currentLng !== 0
+    ? ride.currentLng
+    : typeof ride.startLocationLng === 'number' && ride.startLocationLng !== 0
+    ? ride.startLocationLng
+    : (ride.pickupPoints?.[0]?.lng ?? ride.destinationLng)
+
+  const driverDistKm = haversineKm(vehicleLat, vehicleLng, pLat, pLng)
+
+  // Route stop waypoint distance
+  let minRouteDist = Infinity
+  for (const pp of (ride.pickupPoints || [])) {
+    minRouteDist = Math.min(minRouteDist, haversineKm(pLat, pLng, pp.lat, pp.lng))
+  }
+  if (minRouteDist === Infinity) minRouteDist = driverDistKm
+
+  // 1. Driver & Pickup Proximity (40% Weight) - dominant factor
+  // Distant vehicles (> 10 km) are severely penalized
+  let driverProxScore = 0
+  if (driverDistKm <= 0.8) driverProxScore = 100
+  else if (driverDistKm <= 1.5) driverProxScore = 95
+  else if (driverDistKm <= 3.0) driverProxScore = 85
+  else if (driverDistKm <= 5.0) driverProxScore = 70
+  else if (driverDistKm <= 8.0) driverProxScore = 50
+  else if (driverDistKm <= 12.0) driverProxScore = 25
+  else if (driverDistKm <= 18.0) driverProxScore = 10
+  else driverProxScore = 0
+
+  const routeProxScore = minRouteDist < 0.4 ? 100 : minRouteDist < 1.0 ? 85 : minRouteDist < 2.5 ? 65 : minRouteDist < 5.0 ? 40 : 10
+  const proxScore = Math.round(driverProxScore * 0.75 + routeProxScore * 0.25)
+
+  // 2. Active Ride Priority Bonus (15% Weight)
+  let activeScore = 50
+  if (ride.status === 'active') activeScore = 100
+  else if (ride.status === 'boarding') activeScore = 80
+  else if (ride.status === 'waiting') activeScore = 60
+
+  // 3. Destination (15% Weight)
   const dDest = haversineKm(dLat, dLng, ride.destinationLat, ride.destinationLng)
   const isExactDest =
     ride.destination.toLowerCase() === request.destination.toLowerCase() ||
     ride.destination.toLowerCase().includes(request.destination.toLowerCase()) ||
     request.destination.toLowerCase().includes(ride.destination.toLowerCase())
   const destScore = isExactDest ? 100
-    : dDest < 0.8 ? 95
-    : dDest < 1.5 ? 80
-    : dDest < 3.0 ? 60
-    : dDest < 5.0 ? 40
-    : 15
+    : dDest < 0.8 ? 90
+    : dDest < 2.0 ? 75
+    : dDest < 4.0 ? 50
+    : dDest < 7.0 ? 30
+    : 10
 
-  // 2. Route overlap (30%) — check if request pickup is on/near the route
+  // 4. Route Overlap (15% Weight)
   let routeScore = 20
   for (const pp of (ride.pickupPoints || [])) {
     const d = haversineKm(pLat, pLng, pp.lat, pp.lng)
@@ -170,33 +220,27 @@ export function calculateMatchScore(
     routeScore = Math.min(routeScore, 40)
   }
 
-  // 3. Time (20%)
+  // 5. Detour (10% Weight)
+  const detourScore = minRouteDist < 0.5 ? 100 : minRouteDist < 1.5 ? 85 : minRouteDist < 3.0 ? 60 : 30
+
+  // 6. Time (5% Weight)
   const reqMin  = parseTime(request.requestedTime)
   const rideMin = parseTime(ride.departureTime)
   const timeDiff = Math.abs(reqMin - rideMin)
-  const timeScore = timeDiff <= 5  ? 100
-    : timeDiff <= 15 ? 85
-    : timeDiff <= 25 ? 65
-    : timeDiff <= 45 ? 40
-    : 15
+  const timeScore = timeDiff <= 10 ? 100
+    : timeDiff <= 20 ? 85
+    : timeDiff <= 35 ? 65
+    : timeDiff <= 60 ? 40
+    : 20
 
-  // 4. Pickup proximity (10%)
-  let minDist = Infinity
-  for (const pp of (ride.pickupPoints || [])) {
-    minDist = Math.min(minDist, haversineKm(pLat, pLng, pp.lat, pp.lng))
-  }
-  const proxScore = minDist < 0.5 ? 100 : minDist < 1.2 ? 80 : minDist < 2.5 ? 60 : minDist < 4.0 ? 40 : 15
-
-  // 5. Detour (10%)
-  const detourScore = minDist < 0.5 ? 100 : minDist < 1.5 ? 85 : minDist < 3.0 ? 60 : 30
-
-  // Weighted total
+  // Weighted total (40% Prox + 15% Active + 15% Dest + 15% Route + 10% Detour + 5% Time)
   const total = Math.round(
-    destScore  * 0.30 +
-    routeScore * 0.30 +
-    timeScore  * 0.20 +
-    proxScore  * 0.10 +
-    detourScore * 0.10
+    proxScore   * 0.40 +
+    activeScore * 0.15 +
+    destScore   * 0.15 +
+    routeScore  * 0.15 +
+    detourScore * 0.10 +
+    timeScore   * 0.05
   )
 
   const score: MatchScore = {
@@ -206,6 +250,8 @@ export function calculateMatchScore(
     timeCompatibility: timeScore,
     pickupProximity:   proxScore,
     detour:            detourScore,
+    activeBonus:       activeScore,
+    driverDistanceKm:  Math.round(driverDistKm * 10) / 10,
     explanation: {
       destinationLabel: scoreLabel(destScore),
       routeLabel:       scoreLabel(routeScore),
@@ -215,7 +261,7 @@ export function calculateMatchScore(
       summary: [],
     },
   }
-  score.explanation.summary = getSummary(score)
+  score.explanation.summary = getSummary(score, driverDistKm, ride.status)
   return score
 }
 
@@ -255,7 +301,17 @@ export function findMatches(
       }
     })
     .filter((m) => m.score.total >= minScore)
-    .sort((a, b) => b.score.total - a.score.total)
+    .sort((a, b) => {
+      const scoreDiff = b.score.total - a.score.total
+      if (Math.abs(scoreDiff) <= 8) {
+        const distA = a.score.driverDistanceKm ?? Infinity
+        const distB = b.score.driverDistanceKm ?? Infinity
+        if (distA !== distB) {
+          return distA - distB
+        }
+      }
+      return scoreDiff
+    })
 
   return matches
 }
