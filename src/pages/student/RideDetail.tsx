@@ -277,6 +277,8 @@ export default function RideDetail() {
           vehicleLat={ride.currentLat}
           vehicleLng={ride.currentLng}
           height="h-52"
+          rideBookedSeats={ride.bookedSeats}
+          rideCapacity={ride.capacity}
         />
       </div>
 
