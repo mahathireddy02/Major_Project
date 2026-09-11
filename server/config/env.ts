@@ -12,7 +12,7 @@ export const ENV = {
   JWT_SECRET: process.env.JWT_SECRET || 'campus-mobility-hackathon-secret-key-2026',
   AUTHORIZED_COLLEGE_DOMAINS: (
     process.env.AUTHORIZED_COLLEGE_DOMAINS ||
-    'campus.edu,college.edu,university.ac.in,iit.ac.in,nit.ac.in,campusflow.io,sriindu.ac.in,gmail.com'
+    'campusflow.io'
   )
     .split(',')
     .map((d) => d.trim().toLowerCase())

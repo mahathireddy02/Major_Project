@@ -4,6 +4,7 @@ import {
   fuzzyMatchCollege, fuzzyMatchId, fuzzyMatchName,
   preprocessImage, extractStudentFields, verifyCollegeInOcrText,
 } from '../../lib/ocrUtils'
+import { validateInstitutionalEmail } from '../../lib/emailValidation'
 import {
   Navigation, User, GraduationCap, ArrowLeft, ArrowRight, CheckCircle2,
   AlertTriangle, Upload, Eye, EyeOff, ShieldCheck, Mail, Lock, Phone,
@@ -100,21 +101,20 @@ export default function StudentFacultyAuth() {
         setDemoCode(genCode)
         toast.success(`Domain verified! Prototype verification code: ${genCode}`, { duration: 6000 })
       } else {
-        toast.error(`Domain not authorized. Allowed: ${res.authorizedDomains.join(', ')}`)
+        toast.error(res.message || 'Email domain is not authorized for institutional registration.')
       }
     } catch {
-      // Offline fallback check
-      const domain = collegeEmail.split('@')[1]?.toLowerCase()
-      const allowed = ['campus.edu', 'college.edu', 'university.ac.in', 'iit.ac.in', 'nit.ac.in', 'campusflow.io', 'sriindu.ac.in', 'gmail.com']
-      const isValid = allowed.some((d) => domain === d || domain?.endsWith(`.${d}`))
+      // Reusable offline fallback check
+      const validation = validateInstitutionalEmail(collegeEmail)
       setEmailChecked(true)
-      setEmailValid(isValid)
-      if (isValid) {
+      setEmailValid(validation.isValid)
+      setDomainMessage(validation.message)
+      if (validation.isValid) {
         const genCode = '2026'
         setDemoCode(genCode)
         toast.success(`Domain verified! Prototype code: 2026`, { duration: 6000 })
       } else {
-        toast.error(`Domain @${domain} is not in authorized college domains.`)
+        toast.error(validation.message)
       }
     }
   }
@@ -658,7 +658,7 @@ export default function StudentFacultyAuth() {
                       Official College Email *
                     </label>
                     <p className="text-[11px] text-slate-500 mb-2">
-                      Must end with an authorized university domain (e.g., <code>@campus.edu</code>, <code>@college.edu</code>, <code>@university.ac.in</code>)
+                      Must be an official educational/institutional email (e.g., <code>@college.ac.in</code>, <code>@university.edu.in</code>, <code>@institute.res.in</code>)
                     </p>
                     <div className="relative">
                       <Mail size={16} className="absolute left-3 top-3 text-slate-400" />
