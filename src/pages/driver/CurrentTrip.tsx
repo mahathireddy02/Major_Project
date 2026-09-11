@@ -63,10 +63,25 @@ export default function CurrentTrip() {
   const completeRideInStore = useAppStore((s) => s.completeRide)
   const refreshRides = useAppStore((s) => s.refreshRides)
 
+  // Driver-specific rides fetched directly from the authenticated driver endpoint
+  const [driverRides, setDriverRides] = useState<any[]>([])
+
+  const loadDriverRides = useCallback(async () => {
+    try {
+      const fresh = await api.getDriverRides()
+      if (Array.isArray(fresh)) {
+        setDriverRides(fresh)
+      }
+    } catch {
+      // fallback — use global rides store
+    }
+  }, [])
+
   // Fetch freshest rides from server on mount
   useEffect(() => {
     refreshRides()
-  }, [refreshRides])
+    loadDriverRides()
+  }, [refreshRides, loadDriverRides])
 
   // Real-time synchronization for passenger bookings & ride status updates
   useEffect(() => {
@@ -83,21 +98,45 @@ export default function CurrentTrip() {
         event === 'ROUTE_UPDATED'
       ) {
         refreshRides()
+        loadDriverRides()
       }
     })
     return unsub
-  }, [refreshRides])
+  }, [refreshRides, loadDriverRides])
 
-  // Find active ride with priority matching
-  const filteredRides = rides.filter(
-    (r) =>
-      r.driverId === currentDriverId ||
-      r.driverId === currentDriver?.id ||
-      r.driverId === currentUser?.id ||
-      r.driverId === 'd1' ||
-      (currentDriver?.name && (r as any).driverName === currentDriver.name)
-  )
-  const sortedRides = [...filteredRides].sort((a, b) => {
+  // Merge driverRides (authoritative) with global rides store for ride selection
+  // driverRides takes priority — these are the rides actually assigned to this driver
+  const allDriverRides = useMemo(() => {
+    const driverIds = new Set([
+      currentDriverId,
+      currentDriver?.id,
+      currentUser?.id,
+    ].filter(Boolean))
+
+    // Start with driver-specific rides from the driver endpoint
+    const merged = new Map<string, any>()
+    for (const r of driverRides) {
+      merged.set(r.id, r)
+    }
+
+    // Also include rides from the global store that match this driver
+    for (const r of rides) {
+      if (!merged.has(r.id)) {
+        const isMyRide =
+          (r.driverId && driverIds.has(r.driverId)) ||
+          // fallback for demo rides when no real auth
+          ((!currentDriverId || currentDriverId === 'd1') && (r.driverId === 'd1' || r.driverId === 'driver-1')) ||
+          (currentDriver?.name && (r as any).driverName === currentDriver.name)
+        if (isMyRide) {
+          merged.set(r.id, r)
+        }
+      }
+    }
+
+    return Array.from(merged.values())
+  }, [driverRides, rides, currentDriverId, currentDriver, currentUser])
+
+  const sortedRides = [...allDriverRides].sort((a, b) => {
     const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
     const timeB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0
     if (timeA !== timeB) return timeB - timeA
@@ -105,7 +144,7 @@ export default function CurrentTrip() {
   })
 
   // Prioritize rides that actually have booked passengers or active status
-  const activeRide = (targetRideId ? (rides.find((r) => r.id === targetRideId) || sortedRides.find((r) => r.id === targetRideId)) : null) ||
+  const activeRide = (targetRideId ? (allDriverRides.find((r) => r.id === targetRideId) || sortedRides.find((r) => r.id === targetRideId)) : null) ||
     // Priority 1: In-progress ride that has passengers
     sortedRides.find((r) => (r.status === 'active' || r.status === 'boarding') && ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0))) ||
     // Priority 2: Waiting/full ride that has passengers
@@ -118,25 +157,37 @@ export default function CurrentTrip() {
     sortedRides.find((r) => r.status === 'waiting') ||
     sortedRides[0]
 
-  // Directly fetch authoritative ride bookings from backend for instantaneous passenger sync
-  const [rideBookings, setRideBookings] = useState<any[]>([])
+  // Fetch enriched passenger manifest from the new /rides/:id/passengers endpoint
+  // This merges ride.passengers + BookingModel for complete, authoritative data
+  const [ridePassengers, setRidePassengers] = useState<any[]>([])
 
-  const loadRideBookings = useCallback(async () => {
-    if (!activeRide?.id) return
+  const loadRidePassengers = useCallback(async (rideId?: string) => {
+    const id = rideId || activeRide?.id
+    if (!id) return
     try {
-      const data = await api.getRideBookings(activeRide.id)
+      const data = await api.getRidePassengers(id)
       if (Array.isArray(data)) {
-        setRideBookings(data.filter((b: any) => b.status !== 'cancelled'))
+        setRidePassengers(data)
       }
     } catch {
-      // ignore
+      // fallback: try the bookings endpoint
+      try {
+        const data = await api.getRideBookings(id)
+        if (Array.isArray(data)) {
+          setRidePassengers(data.filter((b: any) => b.status !== 'cancelled'))
+        }
+      } catch {
+        // ignore
+      }
     }
   }, [activeRide?.id])
 
+  // Load passengers immediately when activeRide changes
   useEffect(() => {
-    loadRideBookings()
-  }, [loadRideBookings])
+    loadRidePassengers()
+  }, [loadRidePassengers])
 
+  // Keep passengers in sync on all relevant realtime events
   useEffect(() => {
     const unsub = api.onRealtimeEvent((event, payload) => {
       if (
@@ -145,15 +196,18 @@ export default function CurrentTrip() {
         event === 'BOOKING_CANCELLED' ||
         event === 'PASSENGER_ADDED' ||
         event === 'PASSENGER_BOARDED' ||
-        event === 'PASSENGER_DROPPED'
+        event === 'PASSENGER_DROPPED' ||
+        event === 'RIDE_UPDATED'
       ) {
-        if (!payload?.rideId || payload.rideId === activeRide?.id) {
-          loadRideBookings()
+        // Reload passengers for the affected ride or current active ride
+        const affectedRideId = payload?.rideId || payload?.ride?.id || activeRide?.id
+        if (affectedRideId) {
+          loadRidePassengers(affectedRideId)
         }
       }
     })
     return unsub
-  }, [activeRide?.id, loadRideBookings])
+  }, [activeRide?.id, loadRidePassengers])
 
   // Live Trip Hook
   const {
@@ -181,26 +235,16 @@ export default function CurrentTrip() {
   // Authoritative synced ride state
   const effectiveRide = tripState?.ride ? { ...activeRide, ...tripState.ride } : activeRide
 
-  // Complete passenger manifest merging ride.passengers with authoritative bookings
+  // Complete passenger manifest: use the enriched ridePassengers from /rides/:id/passengers as primary source
+  // Falls back to effectiveRide.passengers if ridePassengers is not yet loaded
   const manifestPassengers = useMemo(() => {
-    const list = [...(effectiveRide?.passengers || [])]
-    const existingStudentIds = new Set(list.map((p) => p.studentId))
-
-    for (const b of rideBookings) {
-      if (!existingStudentIds.has(b.studentId)) {
-        list.push({
-          studentId: b.studentId,
-          name: b.studentName || 'Student Passenger',
-          pickup: b.pickupName || b.pickup,
-          destination: b.destinationName || b.destination || effectiveRide?.destination || 'Destination Hub',
-          status: b.status === 'in_transit' ? 'boarded' : b.status === 'completed' ? 'dropped' : 'waiting',
-          seatNo: b.seatNo || list.length + 1,
-        })
-        existingStudentIds.add(b.studentId)
-      }
+    // If we have authoritative data from the new endpoint, use it
+    if (ridePassengers.length > 0) {
+      return ridePassengers
     }
-    return list
-  }, [effectiveRide?.passengers, effectiveRide?.destination, rideBookings])
+    // Fallback: use passengers embedded in the ride document
+    return effectiveRide?.passengers || []
+  }, [ridePassengers, effectiveRide?.passengers])
 
   // Computed route stops ensuring driver origin is stop 1 and omitting unbooked placeholder stops
   const routeStops = useMemo(() => {
@@ -814,7 +858,7 @@ export default function CurrentTrip() {
             </h3>
           </div>
           <span className="text-xs font-semibold text-slate-500">
-            {manifestPassengers.filter((p) => p.status === 'boarded').length} on board
+            {manifestPassengers.filter((p: any) => p.status === 'boarded').length} on board
           </span>
         </div>
 
@@ -822,7 +866,7 @@ export default function CurrentTrip() {
           {manifestPassengers.length === 0 ? (
             <p className="text-xs text-slate-400 py-3 text-center">No passengers booked yet.</p>
           ) : (
-            manifestPassengers.map((passenger) => (
+            manifestPassengers.map((passenger: any) => (
               <div key={passenger.studentId} className="py-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <Avatar name={passenger.name} size="sm" />
@@ -859,6 +903,7 @@ export default function CurrentTrip() {
                       className="text-xs h-7 px-2.5"
                       onClick={async () => {
                         await updatePassengerStatus(passenger.studentId, 'boarded')
+                        await loadRidePassengers()
                         await refreshRides()
                         toast.success(`${passenger.name} marked as boarded`)
                       }}
@@ -874,6 +919,7 @@ export default function CurrentTrip() {
                       className="text-xs h-7 px-2.5"
                       onClick={async () => {
                         await updatePassengerStatus(passenger.studentId, 'dropped')
+                        await loadRidePassengers()
                         await refreshRides()
                         toast.success(`${passenger.name} marked as dropped off`)
                       }}

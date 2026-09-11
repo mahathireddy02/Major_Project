@@ -111,6 +111,73 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  // Get enriched passenger manifest for a ride (merges ride.passengers + BookingModel)
+  fastify.get('/:id/passengers', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    // Start with ride.passengers as the base
+    const passengerMap = new Map<string, any>()
+    for (const p of ride.passengers || []) {
+      passengerMap.set(p.studentId, {
+        studentId: p.studentId,
+        name: p.name || 'Student Passenger',
+        pickup: p.pickup || '',
+        destination: p.destination || ride.destination,
+        status: p.status || 'waiting',
+        seatNo: p.seatNo,
+        gender: p.gender,
+        genderPreference: p.genderPreference,
+        bookingId: p.bookingId,
+        fare: p.fare,
+      })
+    }
+
+    // Enrich / fill gaps from BookingModel
+    const bookings = await BookingModel.find({ rideId: id, status: { $ne: 'cancelled' } })
+    const studentIds = [...new Set(bookings.map((b) => b.studentId))]
+    const users = await UserModel.find({ id: { $in: studentIds } }, { id: 1, name: 1, gender: 1 })
+    const userMap = Object.fromEntries(users.map((u) => [u.id, u]))
+
+    for (const b of bookings) {
+      const user = userMap[b.studentId]
+      const existing = passengerMap.get(b.studentId)
+      if (existing) {
+        // Merge booking data into existing passenger record
+        passengerMap.set(b.studentId, {
+          ...existing,
+          name: existing.name !== 'Student Passenger' ? existing.name : (b.studentName || user?.name || existing.name),
+          pickup: existing.pickup || b.pickupName || b.pickup,
+          destination: existing.destination || b.destinationName || b.destination || ride.destination,
+          bookingId: existing.bookingId || b.id,
+          fare: existing.fare || b.fare,
+          gender: existing.gender || user?.gender,
+          bookingStatus: b.status,
+        })
+      } else {
+        // Add passenger from booking if not in ride.passengers (can happen if event was missed)
+        const bookingStatus = b.status
+        passengerMap.set(b.studentId, {
+          studentId: b.studentId,
+          name: b.studentName || user?.name || 'Student Passenger',
+          pickup: b.pickupName || b.pickup || '',
+          destination: b.destinationName || b.destination || ride.destination,
+          status: bookingStatus === 'in_transit' ? 'boarded' : bookingStatus === 'completed' ? 'dropped' : 'waiting',
+          seatNo: b.seatNo || passengerMap.size + 1,
+          gender: user?.gender,
+          bookingId: b.id,
+          fare: b.fare,
+          bookingStatus,
+        })
+      }
+    }
+
+    return { success: true, data: Array.from(passengerMap.values()) }
+  })
+
   // Get current trip route
   fastify.get('/:id/route', async (request, reply) => {
     const { id } = request.params as { id: string }

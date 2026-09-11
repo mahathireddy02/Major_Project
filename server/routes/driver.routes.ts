@@ -17,9 +17,12 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/rides', async (request) => {
     const driverId = request.user?.id || (request.headers['x-driver-id'] as string) || 'd1'
     const query = request.query as { date?: string; status?: string; all?: string }
-    const filter: any = {
-      $or: [{ driverId }, { driverId: 'd1' }, { driverId: 'driver-1' }]
+    // Only include demo fallback IDs when the driver has no real authenticated ID
+    const orConditions: any[] = [{ driverId }]
+    if (!driverId || driverId === 'd1' || driverId === 'driver-1') {
+      orConditions.push({ driverId: 'd1' }, { driverId: 'driver-1' })
     }
+    const filter: any = { $or: orConditions }
     if (query.date && query.all !== 'true') {
       filter.date = query.date
     }

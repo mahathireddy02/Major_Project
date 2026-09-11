@@ -629,6 +629,10 @@ class ApiClient {
     return this.request<any[]>(`/rides/bookings?rideId=${rideId}`)
   }
 
+  async getRidePassengers(rideId: string): Promise<any[]> {
+    return this.request<any[]>(`/rides/${rideId}/passengers`)
+  }
+
   // --- Emergency Contact ---
   async getEmergencyContact(userId: string): Promise<EmergencyContact | null> {
     return this.request<EmergencyContact | null>(`/users/${userId}/emergency-contact`)
