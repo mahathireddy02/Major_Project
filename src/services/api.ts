@@ -57,9 +57,15 @@ class ApiClient {
   private ws: WebSocket | null = null
   private listeners = new Set<(event: string, payload: any) => void>()
 
-  setAuth(userId: string, driverId: string = 'd1', token?: string | null) {
-    this.userId = userId
-    this.driverId = driverId
+  setAuth(userId: string, driverId?: string, token?: string | null) {
+    if (userId) {
+      this.userId = userId
+      localStorage.setItem('campusflow_user_id', userId)
+    }
+    if (driverId) {
+      this.driverId = driverId
+      localStorage.setItem('campusflow_driver_id', driverId)
+    }
     if (token !== undefined) {
       this.token = token
       if (token) localStorage.setItem('campusflow_token', token)
@@ -633,6 +639,32 @@ class ApiClient {
 
   async markAllNotificationsRead(): Promise<void> {
     return this.request<void>('/notifications/read-all', { method: 'POST' })
+  }
+
+  // --- Ride Messaging (persisted via Notification model) ---
+  async sendRideMessage(data: {
+    rideId: string
+    bookingId?: string
+    senderId: string
+    senderName?: string
+    senderRole: 'student' | 'driver'
+    receiverId?: string
+    studentId?: string
+    driverId?: string
+    text: string
+  }): Promise<any> {
+    return this.request<any>('/notifications/message', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getRideMessages(rideId: string): Promise<any[]> {
+    return this.request<any[]>(`/notifications/messages/${rideId}`)
+  }
+
+  async markRideMessagesRead(rideId: string): Promise<void> {
+    return this.request<void>(`/notifications/messages/${rideId}/read`, { method: 'POST' })
   }
 
   // --- Bookings ---

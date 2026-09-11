@@ -18,23 +18,31 @@ function DriverTopNavBar() {
   const navigate = useNavigate()
   const logout = useAppStore((s) => s.logout)
   const currentDriver = useAppStore((s) => s.currentDriver())
+  const currentUser = useAppStore((s) => s.currentUser)
   const notifications = useAppStore((s) => s.notifications)
   const currentDriverId = useAppStore((s) => s.currentDriverId)
   const markNotificationRead = useAppStore((s) => s.markNotificationRead)
   const markAllRead = useAppStore((s) => s.markAllRead)
-  const userName = currentDriver?.name ?? 'Driver'
+  const rides = useAppStore((s) => s.rides)
+  const userName = currentDriver?.name ?? currentUser?.name ?? 'Driver'
   const [open, setOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
 
+  const driverIds = new Set([currentDriverId, currentDriver?.id, currentUser?.id].filter(Boolean) as string[])
+  const myRideIds = new Set(rides.filter((r) => driverIds.has(r.driverId) || r.driverId === 'd1').map((r) => r.id))
+
   // Driver-relevant notifications
-  const driverNotifs = notifications.filter((n) =>
-    n.driverId === currentDriverId ||
-    n.userId === currentDriverId ||
-    (n as any).role === 'driver' ||
-    (n as any).targetRole === 'DRIVER'
-  ).slice(0, 30)
+  const driverNotifs = notifications.filter((n: any) =>
+    (n.driverId && driverIds.has(n.driverId)) ||
+    (n.userId && driverIds.has(n.userId)) ||
+    (n.metadata?.receiverId && driverIds.has(n.metadata.receiverId)) ||
+    (n.metadata?.driverId && driverIds.has(n.metadata.driverId)) ||
+    (n.rideId && myRideIds.has(n.rideId)) ||
+    n.role === 'driver' ||
+    n.targetRole === 'DRIVER'
+  ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 30)
   const unread = driverNotifs.filter((n) => !n.read).length
 
   useEffect(() => {
@@ -113,12 +121,17 @@ function DriverTopNavBar() {
               {driverNotifs.length === 0 ? (
                 <div className="px-4 py-6 text-center text-xs text-slate-400">No notifications yet</div>
               ) : (
-                driverNotifs.map((n) => (
+                driverNotifs.map((n: any) => (
                   <div
                     key={n.id}
                     onClick={() => {
                       markNotificationRead(n.id)
-                      if (n.rideId) navigate('/driver/trip')
+                      setNotifOpen(false)
+                      if (n.type === 'message' || n.eventType === 'RIDE_MESSAGE') {
+                        navigate(n.rideId ? `/driver/passengers?rideId=${n.rideId}&tab=messages` : '/driver/dashboard')
+                      } else if (n.rideId) {
+                        navigate(`/driver/passengers?rideId=${n.rideId}`)
+                      }
                     }}
                     className={cn(
                       'px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50',
@@ -141,7 +154,13 @@ function DriverTopNavBar() {
                       )}
                     </div>
                     <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{n.message}</p>
-                    <p className="text-[10px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    {(n.metadata?.studentName || n.metadata?.pickup) && (
+                      <p className="text-[10px] text-emerald-700 font-medium mt-1">
+                        {n.metadata?.studentName ? `Student: ${n.metadata.studentName} · ` : ''}
+                        {n.metadata?.pickup ? `${n.metadata.pickup} → ${n.metadata.destination || 'Campus'}` : ''}
+                      </p>
+                    )}
+                    <p className="text-[10px] text-slate-400 mt-0.5">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 ))
               )}
