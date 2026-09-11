@@ -14,6 +14,7 @@ import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import toast from 'react-hot-toast'
 import { compressImage } from '../../lib/utils'
+import { PhoneOtpModal } from '../../components/auth/PhoneOtpModal'
 
 export default function DriverAuth() {
   const navigate = useNavigate()
@@ -34,6 +35,7 @@ export default function DriverAuth() {
 
   // Multi-step Registration Wizard
   const [step, setStep] = useState<number>(1)
+  const [showOtpModal, setShowOtpModal] = useState<boolean>(false)
 
   // Registration Fields
   const [fullName, setFullName] = useState('')
@@ -231,16 +233,20 @@ export default function DriverAuth() {
     }
   }
 
-  // Demo Driver Login (Uses real database credentials)
+  // Demo Driver Login (Uses real existing database credentials)
   const handleDemoDriverLogin = async () => {
     setLoading(true)
+    const email = 'rahul.kumar.driver@gmail.com'
+    const password = 'campus2026'
+    setSignInCredential(email)
+    setSignInPassword(password)
     try {
       const res = await login({
-        email: 'driver.demo@gmail.com',
-        password: 'campus2026',
+        email,
+        password,
         role: 'driver',
       })
-      toast.success(`Welcome back, Driver ${res.user?.name || 'Rahul'}!`)
+      toast.success(`Welcome back, Driver ${res.user?.name || 'Rahul Kumar'}!`)
       navigate('/driver/dashboard')
     } catch (err: any) {
       toast.error(err.message || 'Driver demo login failed')
@@ -437,7 +443,7 @@ export default function DriverAuth() {
                     required
                     value={signInCredential}
                     onChange={(e) => setSignInCredential(e.target.value)}
-                    placeholder="driver.demo@gmail.com or 9988776655"
+                    placeholder="rahul.kumar.driver@gmail.com or 9988776655"
                     className="input-field pl-9 text-sm"
                   />
                 </div>
@@ -474,14 +480,29 @@ export default function DriverAuth() {
                 className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-sm shadow-md mt-2"
                 loading={loading}
               >
-                Sign In to Driver Dashboard
+                Sign In with Password
                 <ArrowRight size={16} />
               </Button>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-slate-400 text-xs font-semibold uppercase">Or</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOtpModal(true)}
+                className="w-full py-3 px-4 rounded-xl border-2 border-emerald-600 bg-emerald-50/60 hover:bg-emerald-100/80 text-emerald-800 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <Phone size={15} className="text-emerald-700" />
+                <span>Sign In via Twilio Phone OTP</span>
+              </button>
 
               {/* Demo Driver 1-Click Button */}
               <div className="pt-4 mt-4 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick 1-Click Demo Login (Real Database Account)
+                  ⚡ Sandbox Demo Credentials (Existing Record)
                 </span>
                 <button
                   type="button"
@@ -494,12 +515,13 @@ export default function DriverAuth() {
                       🚗
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">Rahul Kumar (Demo Driver)</p>
-                      <p className="text-[11px] text-emerald-700 font-mono">driver.demo@gmail.com</p>
+                      <p className="font-bold text-slate-900 text-xs">Driver Demo • Rahul Kumar</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">Email: rahul.kumar.driver@gmail.com</p>
+                      <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                     </div>
                   </div>
                   <Badge variant="green" size="sm" className="font-semibold">
-                    1-Click Sign In →
+                    Use Demo Credentials →
                   </Badge>
                 </button>
               </div>
@@ -997,7 +1019,7 @@ export default function DriverAuth() {
               {/* Demo Driver 1-Click Button (Sign Up Mode) */}
               <div className="pt-5 mt-6 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick 1-Click Demo Login (Skip Registration)
+                  ⚡ Sandbox Demo Credentials (Existing Record)
                 </span>
                 <button
                   type="button"
@@ -1010,12 +1032,13 @@ export default function DriverAuth() {
                       🚗
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">Rahul Kumar (Demo Driver)</p>
-                      <p className="text-[11px] text-emerald-700 font-mono">driver.demo@gmail.com</p>
+                      <p className="font-bold text-slate-900 text-xs">Driver Demo • Rahul Kumar</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">Email: rahul.kumar.driver@gmail.com</p>
+                      <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                     </div>
                   </div>
                   <Badge variant="green" size="sm" className="font-semibold">
-                    1-Click Sign In →
+                    Use Demo Credentials →
                   </Badge>
                 </button>
               </div>
@@ -1400,6 +1423,16 @@ export default function DriverAuth() {
       <footer className="py-4 text-center text-xs text-slate-400 bg-white border-t border-slate-200">
         CampusFlow Mobility • Driver Fleet Operations
       </footer>
+
+      <PhoneOtpModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        role="driver"
+        initialPhone={phone}
+        onSuccess={() => {
+          navigate('/driver/dashboard')
+        }}
+      />
     </div>
   )
 }

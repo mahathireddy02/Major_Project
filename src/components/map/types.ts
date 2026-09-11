@@ -63,4 +63,6 @@ export interface CampusMapProps {
   alertMode?: boolean
   showRouteInfo?: boolean
   autoFit?: boolean
+  origin?: { lat: number; lng: number; name?: string }
+  highlightStopStudentId?: string
 }

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { api } from '../services/api'
+import { useAppStore } from '../store/appStore'
 import type { LiveTripState, MapCameraMode, RouteStop, RouteStep, TripRoute } from '../types'
 
 interface UseLiveTripOptions {
@@ -169,16 +170,36 @@ export function useLiveTrip({
             stops: stops || prev.stops,
           }
         })
-      } else if (event === 'RIDE_STATUS_UPDATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED') {
+      } else if (
+        event === 'RIDE_STATUS_UPDATED' ||
+        event === 'RIDE_STARTED' ||
+        event === 'RIDE_COMPLETED' ||
+        event === 'RIDE_UPDATED'
+      ) {
         const updatedRide = payload.ride
-        setTripState((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            status: updatedRide?.status || prev.status,
-            ride: updatedRide ? { ...prev.ride, ...updatedRide } : prev.ride,
-          }
-        })
+        if (updatedRide) {
+          setTripState((prev) => {
+            if (!prev) return prev
+            return {
+              ...prev,
+              status: updatedRide?.status || prev.status,
+              ride: { ...prev.ride, ...updatedRide },
+              stops: updatedRide.stops || prev.stops,
+              route: updatedRide.tripRoute || prev.route,
+            }
+          })
+          useAppStore.setState((state) => ({
+            rides: state.rides.map((r) => (r.id === updatedRide.id ? { ...r, ...updatedRide } : r)),
+          }))
+        }
+      } else if (
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED' ||
+        event === 'PASSENGER_ADDED' ||
+        event === 'BOOKING_CREATED' ||
+        event === 'BOOKING_UPDATED'
+      ) {
+        fetchTrip()
       }
     })
 
@@ -276,8 +297,19 @@ export function useLiveTrip({
     async (studentId: string, status: 'waiting' | 'boarded' | 'dropped') => {
       if (!rideId) return
       try {
-        await api.updatePassengerStatus(rideId, studentId, status)
-        fetchTrip()
+        const res: any = await api.updatePassengerStatus(rideId, studentId, status)
+        const updatedRide = res?.data || res
+        if (updatedRide && updatedRide.id) {
+          setTripState((prev) => (prev ? {
+            ...prev,
+            ride: { ...prev.ride, ...updatedRide },
+            stops: updatedRide.stops || prev.stops,
+          } : prev))
+          useAppStore.setState((state) => ({
+            rides: state.rides.map((r) => (r.id === rideId ? { ...r, ...updatedRide } : r)),
+          }))
+        }
+        await fetchTrip()
       } catch (err) {
         console.warn('[useLiveTrip] Failed to update passenger status:', err)
       }

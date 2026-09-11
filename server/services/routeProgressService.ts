@@ -77,10 +77,38 @@ export class RouteProgressService {
     const pickupStops: IRouteStop[] = []
     const processedPickups = new Set<string>()
 
+    // Check if originName should be the initial stop
+    const originPassenger = (ride.passengers || []).find((p) => p.pickup.toLowerCase() === originName.toLowerCase())
+    const originBooking = bookings.find((b) => b.pickup?.toLowerCase() === originName.toLowerCase())
+
+    pickupStops.push({
+      id: `stop-${ride.id}-origin`,
+      bookingId: originBooking?.id,
+      studentId: originPassenger?.studentId || originBooking?.studentId,
+      type: 'PICKUP',
+      name: originName,
+      latitude: originLat,
+      longitude: originLng,
+      sequence: 1,
+      status: ride.status === 'active'
+        ? (originPassenger?.status === 'boarded' ? 'BOARDED' : originPassenger ? 'ARRIVED' : 'COMPLETED')
+        : 'UPCOMING',
+      estimatedArrival: 'Departed',
+    })
+    processedPickups.add(originName.toLowerCase())
+
     // First from ride.pickupPoints (official predefined stops)
     for (const pp of ride.pickupPoints || []) {
+      if (processedPickups.has(pp.name.toLowerCase())) continue
+
       const passenger = (ride.passengers || []).find((p) => p.pickup.toLowerCase() === pp.name.toLowerCase())
       const b = bookings.find((item) => item.pickup?.toLowerCase() === pp.name.toLowerCase())
+
+      // Skip unbooked template pickup points if driver has a custom start location
+      if (!passenger && !b && (customStartName || ride.startLocation)) {
+        continue
+      }
+
       const stopId = `stop-${ride.id}-pickup-${pp.id || pp.name.toLowerCase().replace(/\s+/g, '-')}`
 
       pickupStops.push({
@@ -562,8 +590,48 @@ export class RouteProgressService {
       })
     }
 
+    // Clean up unbooked template placeholder stops (e.g. Railway Station) that have no passenger assigned
+    if (ride.startLocation && ride.pickupPoints && ride.pickupPoints.length > 1) {
+      ride.pickupPoints = ride.pickupPoints.filter((pp) => {
+        const hasPax = (ride.passengers || []).some((p: any) => p.pickup?.toLowerCase() === pp.name.toLowerCase())
+        const isStart = pp.name.toLowerCase() === ride.startLocation?.toLowerCase()
+        const isNewPickup = pp.name.toLowerCase() === pickup.toLowerCase()
+        return hasPax || isStart || isNewPickup
+      })
+    }
+
+    // If destination provided, update ride destination if generic/campus or single passenger
+    if (destination) {
+      const isGenericCampus =
+        !ride.destination ||
+        ride.destination.toLowerCase().includes('campus main gate') ||
+        ride.destination.toLowerCase().includes('sri indu campus') ||
+        ride.passengers.length <= 1
+
+      if (isGenericCampus || ride.destination.toLowerCase() === destination.toLowerCase()) {
+        ride.destination = destination
+        if (destinationCoords?.lat && destinationCoords?.lng) {
+          ride.destinationLat = destinationCoords.lat
+          ride.destinationLng = destinationCoords.lng
+        }
+        ride.routeName = `${pickup} → ${destination}`
+      }
+    }
+
+    // Ensure passenger record in ride has the passenger's destination
+    const passengerItem = (ride.passengers || []).find((p: any) => p.studentId === studentId)
+    if (passengerItem && destination) {
+      passengerItem.destination = destination
+    }
+
     // Rebuild stops and route
     await this.buildTripRoute(ride)
+
+    ride.markModified('passengers')
+    ride.markModified('pickupPoints')
+    ride.markModified('stops')
+    if (ride.tripRoute) ride.markModified('tripRoute')
+    await ride.save()
 
     realtimeService.broadcast('ROUTE_UPDATED', {
       rideId: ride.id,
@@ -571,6 +639,7 @@ export class RouteProgressService {
       stops: ride.stops,
       action: 'PASSENGER_JOINED',
     })
+    realtimeService.broadcast('RIDE_UPDATED', { ride })
   }
 
   /**
@@ -635,6 +704,11 @@ export class RouteProgressService {
         }
       }
     }
+
+    ride.markModified('passengers')
+    ride.markModified('stops')
+    if (ride.tripRoute) ride.markModified('tripRoute')
+    await ride.save()
 
     const driverUser = await UserModel.findOne({ id: ride.driverId })
 

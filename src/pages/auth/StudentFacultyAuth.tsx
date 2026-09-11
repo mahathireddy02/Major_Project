@@ -18,6 +18,7 @@ import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import toast from 'react-hot-toast'
 import { compressImage } from '../../lib/utils'
+import { PhoneOtpModal } from '../../components/auth/PhoneOtpModal'
 
 export default function StudentFacultyAuth() {
   const navigate = useNavigate()
@@ -37,6 +38,7 @@ export default function StudentFacultyAuth() {
 
   // Multi-step Registration Wizard
   const [step, setStep] = useState<number>(1)
+  const [showOtpModal, setShowOtpModal] = useState<boolean>(false)
 
   // Form Fields
   const [fullName, setFullName] = useState('')
@@ -322,14 +324,16 @@ export default function StudentFacultyAuth() {
     setOcrResult(null)
   }
 
-  // Quick Demo Login Handler (Uses real database credentials)
+  // Quick Demo Login Handler (Uses real existing database credentials)
   const handleQuickDemoLogin = async (role: 'student' | 'faculty') => {
     setLoading(true)
-    const email = role === 'student' ? 'student.demo@sriindu.ac.in' : 'faculty.demo@sriindu.ac.in'
+    const email = role === 'student' ? 'uday.kiran@sriindu.ac.in' : 'ramesh.sharma@sriindu.ac.in'
     const password = 'campus2026'
+    setSignInEmail(email)
+    setSignInPassword(password)
     try {
       const res = await login({ email, password, role })
-      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Demo Student' : 'Demo Faculty')}!`)
+      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Uday Kiran' : 'Dr. Ramesh Sharma')}!`)
       navigate('/student/home')
     } catch (err: any) {
       toast.error(err.message || 'Demo login failed')
@@ -484,14 +488,29 @@ export default function StudentFacultyAuth() {
                 className="w-full bg-primary-600 hover:bg-primary-500 font-bold text-sm shadow-md mt-2"
                 loading={loading}
               >
-                Sign In to {userType === 'student' ? 'Student' : 'Faculty'} Portal
+                Sign In with Password
                 <ArrowRight size={16} />
               </Button>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-slate-400 text-xs font-semibold uppercase">Or</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOtpModal(true)}
+                className="w-full py-3 px-4 rounded-xl border-2 border-blue-600 bg-blue-50/60 hover:bg-blue-100/80 text-blue-700 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <Phone size={15} className="text-blue-600" />
+                <span>Sign In via Twilio Phone OTP</span>
+              </button>
 
               {/* Quick 1-Click Demo Account for Evaluators */}
               <div className="pt-4 mt-4 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick 1-Click Demo Login (Real Database Account)
+                  ⚡ Sandbox Demo Credentials (Existing Record)
                 </span>
                 {userType === 'student' ? (
                   <button
@@ -505,12 +524,13 @@ export default function StudentFacultyAuth() {
                         🎓
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
-                        <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Student Demo • Uday Kiran</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: uday.kiran@sriindu.ac.in</p>
+                        <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
                     <Badge variant="blue" size="sm" className="font-semibold">
-                      1-Click Sign In →
+                      Use Demo Credentials →
                     </Badge>
                   </button>
                 ) : (
@@ -525,12 +545,13 @@ export default function StudentFacultyAuth() {
                         👨‍🏫
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
-                        <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Faculty Demo • Dr. Ramesh Sharma</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: ramesh.sharma@sriindu.ac.in</p>
+                        <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
                     <Badge variant="blue" size="sm" className="font-semibold">
-                      1-Click Sign In →
+                      Use Demo Credentials →
                     </Badge>
                   </button>
                 )}
@@ -1067,7 +1088,7 @@ export default function StudentFacultyAuth() {
               {/* Quick 1-Click Demo Login for Evaluators (Sign Up Mode) */}
               <div className="pt-5 mt-6 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick 1-Click Demo Login (Skip Registration)
+                  ⚡ Sandbox Demo Credentials (Existing Record)
                 </span>
                 {userType === 'student' ? (
                   <button
@@ -1081,12 +1102,13 @@ export default function StudentFacultyAuth() {
                         🎓
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
-                        <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Student Demo • Uday Kiran</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: uday.kiran@sriindu.ac.in</p>
+                        <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
                     <Badge variant="blue" size="sm" className="font-semibold">
-                      1-Click Sign In →
+                      Use Demo Credentials →
                     </Badge>
                   </button>
                 ) : (
@@ -1101,12 +1123,13 @@ export default function StudentFacultyAuth() {
                         👨‍🏫
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
-                        <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Faculty Demo • Dr. Ramesh Sharma</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: ramesh.sharma@sriindu.ac.in</p>
+                        <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
                     <Badge variant="blue" size="sm" className="font-semibold">
-                      1-Click Sign In →
+                      Use Demo Credentials →
                     </Badge>
                   </button>
                 )}
@@ -1119,6 +1142,16 @@ export default function StudentFacultyAuth() {
       <footer className="py-4 text-center text-xs text-slate-400 bg-white border-t border-slate-200">
         CampusFlow Mobility • Student & Faculty Portal
       </footer>
+
+      <PhoneOtpModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        role={userType}
+        initialPhone={phone}
+        onSuccess={() => {
+          navigate('/student/home')
+        }}
+      />
     </div>
   )
 }

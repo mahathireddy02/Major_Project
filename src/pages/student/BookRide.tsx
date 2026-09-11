@@ -190,20 +190,34 @@ const BookRide: React.FC = () => {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords;
-        const place = await geocodingService.reverseGeocode(latitude, longitude);
-        const userLoc: PlaceResult = {
-          ...place,
-          name: 'Current Location (GPS)',
-          lat: latitude,
-          lng: longitude,
-        };
-        setPickupPlace(userLoc);
-        setErrors((prev) => ({ ...prev, pickup: '' }));
-        toast.success('Pickup set to your current GPS position!', { icon: '🎯' });
+        try {
+          const place = await geocodingService.reverseGeocode(latitude, longitude);
+          const userLoc: PlaceResult = {
+            ...place,
+            name: place.name || 'Current Location (GPS)',
+            lat: latitude,
+            lng: longitude,
+          };
+          setPickupPlace(userLoc);
+          setErrors((prev) => ({ ...prev, pickup: '' }));
+          toast.success('Pickup set to your current GPS position!', { icon: '🎯' });
+        } catch {
+          const userLoc: PlaceResult = {
+            id: `loc-gps-${latitude.toFixed(4)}-${longitude.toFixed(4)}`,
+            name: 'Current Location (GPS)',
+            address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+            lat: latitude,
+            lng: longitude,
+            type: 'pin',
+          };
+          setPickupPlace(userLoc);
+          setErrors((prev) => ({ ...prev, pickup: '' }));
+          toast.success('Pickup set to your current GPS position!', { icon: '🎯' });
+        }
       },
       (err) => {
         console.warn('Geolocation error:', err.message);
-        toast.error('Location permission denied. You can search or tap on the map.', { duration: 4000 });
+        toast.error('Location permission denied. Please enter a pickup location or select on the map.', { duration: 4000 });
       },
       { timeout: 8000, enableHighAccuracy: true }
     );
@@ -219,7 +233,7 @@ const BookRide: React.FC = () => {
   // Validation
   const validate = (): boolean => {
     const newErrors: Record<string, string> = {};
-    if (!pickupPlace) newErrors.pickup = 'Please select a real pickup location.';
+    if (!pickupPlace) newErrors.pickup = 'Please enter a pickup location.';
     if (!destinationPlace) newErrors.destination = 'Please select a destination.';
     if (!time) newErrors.time = 'Please select a departure time.';
     if (routeType === 'recurring' && recurringDays.length === 0)
@@ -409,7 +423,7 @@ const BookRide: React.FC = () => {
           {/* Real Pickup Place Search */}
           <LocationSearchInput
             label="Pickup Location"
-            placeholder="Search pickup: e.g. Charminar, Kukatpally, Hostel..."
+            placeholder="Enter pickup address"
             value={pickupPlace ? pickupPlace.name : ''}
             selectedPlace={pickupPlace}
             onSelectPlace={(place) => {

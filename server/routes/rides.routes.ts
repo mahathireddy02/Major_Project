@@ -111,6 +111,73 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  // Get enriched passenger manifest for a ride (merges ride.passengers + BookingModel)
+  fastify.get('/:id/passengers', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    // Start with ride.passengers as the base
+    const passengerMap = new Map<string, any>()
+    for (const p of ride.passengers || []) {
+      passengerMap.set(p.studentId, {
+        studentId: p.studentId,
+        name: p.name || 'Student Passenger',
+        pickup: p.pickup || '',
+        destination: p.destination || ride.destination,
+        status: p.status || 'waiting',
+        seatNo: p.seatNo,
+        gender: p.gender,
+        genderPreference: p.genderPreference,
+        bookingId: p.bookingId,
+        fare: p.fare,
+      })
+    }
+
+    // Enrich / fill gaps from BookingModel
+    const bookings = await BookingModel.find({ rideId: id, status: { $ne: 'cancelled' } })
+    const studentIds = [...new Set(bookings.map((b) => b.studentId))]
+    const users = await UserModel.find({ id: { $in: studentIds } }, { id: 1, name: 1, gender: 1 })
+    const userMap = Object.fromEntries(users.map((u) => [u.id, u]))
+
+    for (const b of bookings) {
+      const user = userMap[b.studentId]
+      const existing = passengerMap.get(b.studentId)
+      if (existing) {
+        // Merge booking data into existing passenger record
+        passengerMap.set(b.studentId, {
+          ...existing,
+          name: existing.name !== 'Student Passenger' ? existing.name : (b.studentName || user?.name || existing.name),
+          pickup: existing.pickup || b.pickupName || b.pickup,
+          destination: existing.destination || b.destinationName || b.destination || ride.destination,
+          bookingId: existing.bookingId || b.id,
+          fare: existing.fare || b.fare,
+          gender: existing.gender || user?.gender,
+          bookingStatus: b.status,
+        })
+      } else {
+        // Add passenger from booking if not in ride.passengers (can happen if event was missed)
+        const bookingStatus = b.status
+        passengerMap.set(b.studentId, {
+          studentId: b.studentId,
+          name: b.studentName || user?.name || 'Student Passenger',
+          pickup: b.pickupName || b.pickup || '',
+          destination: b.destinationName || b.destination || ride.destination,
+          status: bookingStatus === 'in_transit' ? 'boarded' : bookingStatus === 'completed' ? 'dropped' : 'waiting',
+          seatNo: b.seatNo || passengerMap.size + 1,
+          gender: user?.gender,
+          bookingId: b.id,
+          fare: b.fare,
+          bookingStatus,
+        })
+      }
+    }
+
+    return { success: true, data: Array.from(passengerMap.values()) }
+  })
+
   // Get current trip route
   fastify.get('/:id/route', async (request, reply) => {
     const { id } = request.params as { id: string }
@@ -141,25 +208,40 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       routeCoords = osrmRoute.geometry
     }
 
+    const startLocationName = body.startLocation || (body.pickupPoints?.[0]?.name) || 'Current Position'
+    const startLat = typeof body.startLocationLat === 'number' ? body.startLocationLat : (body.pickupPoints?.[0]?.lat ?? body.currentLat ?? 17.3616)
+    const startLng = typeof body.startLocationLng === 'number' ? body.startLocationLng : (body.pickupPoints?.[0]?.lng ?? body.currentLng ?? 78.4747)
+
     const newRide = await RideModel.create({
       id: rideId,
       routeName: body.routeName || `Campus Route #${rideId}`,
       driverId: body.driverId || 'd1',
       vehicleId: body.vehicleId || 'v1',
-      pickupPoints: body.pickupPoints || [],
-      destination: body.destination,
-      destinationLat: body.destinationLat,
-      destinationLng: body.destinationLng,
-      departureTime: body.departureTime,
+      startLocation: startLocationName,
+      startLocationLat: startLat,
+      startLocationLng: startLng,
+      pickupPoints: body.pickupPoints && body.pickupPoints.length > 0 ? body.pickupPoints : [
+        {
+          id: `pp-${Date.now()}`,
+          name: startLocationName,
+          lat: startLat,
+          lng: startLng,
+          estimatedPickupTime: body.departureTime || 'Immediate',
+        }
+      ],
+      destination: body.destination || 'SRI INDU Campus Main Gate',
+      destinationLat: body.destinationLat || 17.2063,
+      destinationLng: body.destinationLng || 78.6015,
+      departureTime: body.departureTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       estimatedArrival: body.estimatedArrival || '',
       capacity: body.capacity || 6,
-      bookedSeats: body.bookedSeats || 1,
+      bookedSeats: body.bookedSeats || 0,
       passengers: body.passengers || [],
-      status: body.status || 'waiting',
+      status: body.status || 'active',
       fare: body.fare || 25,
       routeCoordinates: routeCoords,
-      currentLat: body.currentLat || body.destinationLat,
-      currentLng: body.currentLng || body.destinationLng,
+      currentLat: startLat,
+      currentLng: startLng,
       distanceKm: body.distanceKm || 4.2,
       hasDeviation: false,
       hasSosAlert: false,
@@ -168,9 +250,10 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       date: body.date || 'today',
     })
 
-    // Initialize TripRoute and stops
-    await routeProgressService.buildTripRoute(newRide)
+    // Initialize TripRoute and stops starting at startLocation
+    await routeProgressService.buildTripRoute(newRide, startLat, startLng, startLocationName)
 
+    realtimeService.broadcast('RIDE_STARTED', { rideId: newRide.id, ride: newRide })
     realtimeService.broadcast('RIDE_UPDATED', { ride: newRide })
 
     return { success: true, data: newRide }
@@ -547,6 +630,30 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       ride.startLocationLng = startLng
       if (startLocation) {
         ride.startLocation = startLocation
+      }
+    }
+
+    if (startLocation && typeof startLat === 'number' && typeof startLng === 'number') {
+      const firstPP = ride.pickupPoints?.[0]
+      const hasPaxAtFirst = firstPP && (ride.passengers || []).some((p: any) => p.pickup?.toLowerCase() === firstPP.name?.toLowerCase())
+      if (!hasPaxAtFirst) {
+        if (!ride.pickupPoints || ride.pickupPoints.length === 0) {
+          ride.pickupPoints = [{
+            id: `pp-start-${ride.id}`,
+            name: startLocation,
+            lat: startLat,
+            lng: startLng,
+            estimatedPickupTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }]
+        } else {
+          ride.pickupPoints[0] = {
+            id: ride.pickupPoints[0].id || `pp-start-${ride.id}`,
+            name: startLocation,
+            lat: startLat,
+            lng: startLng,
+            estimatedPickupTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        }
       }
     }
 

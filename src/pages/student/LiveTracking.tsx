@@ -124,19 +124,26 @@ export default function LiveTracking() {
     defaultCameraMode: 'OVERVIEW',
   })
 
+  const effectiveRide = tripState?.ride ? { ...activeRide, ...tripState.ride } : activeRide
+
   const driver =
     tripState?.driver ||
-    (activeRide ? drivers.find((d) => d.id === activeRide.driverId) : undefined) ||
-    (activeRide?.driverId
+    (effectiveRide ? drivers.find((d) => d.id === effectiveRide.driverId) : undefined) ||
+    (effectiveRide?.driverId
       ? {
-          id: activeRide.driverId,
-          name: (activeRide as any).driverName || 'Campus Driver',
-          phone: (activeRide as any).driverPhone || '+91 98765 43210',
+          id: effectiveRide.driverId,
+          name: (effectiveRide as any).driverName || 'Campus Driver',
+          phone: (effectiveRide as any).driverPhone || '+91 98765 43210',
           rating: 4.9,
         }
       : undefined)
-  const vehicle = tripState?.vehicle || (activeRide ? vehicles.find((v) => v.id === activeRide.vehicleId) : undefined)
+
+  const vehicle =
+    tripState?.vehicle ||
+    (effectiveRide ? vehicles.find((v) => v.id === effectiveRide.vehicleId) : undefined)
+
   const progress = tripState?.progress
+  const currentStop = tripState?.currentStop
   const currentStop = tripState?.currentStop
 
   const rideMessages = activeRide ? messages.filter((m) => m.rideId === activeRide.id) : []
@@ -168,18 +175,25 @@ export default function LiveTracking() {
   }
 
   // Determine current student's passenger record (from ride passengers array)
-  const currentPassenger = activeRide?.passengers?.find(
+  const currentPassenger = effectiveRide?.passengers?.find(
     (p) => p.studentId === currentUserId || p.studentId === currentStudentId
   )
   const isDropped = currentPassenger?.status === 'dropped' || myBooking?.status === 'completed'
   const isBoarded = currentPassenger?.status === 'boarded' || myBooking?.status === 'in_transit'
+
+  // Driver starting location
+  const driverStart =
+    effectiveRide?.startLocation ||
+    tripState?.route?.origin?.name ||
+    effectiveRide?.pickupPoints?.[0]?.name ||
+    'Driver Start'
 
   // Personal pickup — prefer booking record, then passenger record, then first stop
   const myPickup =
     myBooking?.pickupName ||
     (myBooking as any)?.pickup ||
     currentPassenger?.pickup ||
-    activeRide?.pickupPoints?.[0]?.name ||
+    effectiveRide?.pickupPoints?.[0]?.name ||
     'Campus Stop'
 
   // Personal destination — prefer booking record first (student's actual destination),
@@ -188,11 +202,11 @@ export default function LiveTracking() {
     myBooking?.destinationName ||
     (myBooking as any)?.destination ||
     currentPassenger?.destination ||
-    activeRide?.destination ||
+    effectiveRide?.destination ||
     'Campus Hub'
 
   // Find student's personal pickup and dropoff stop for accurate personal ETA
-  const stopsList = tripState?.stops || activeRide?.stops || []
+  const stopsList = tripState?.stops || effectiveRide?.stops || []
   const myPickupStop = stopsList.find(
     (s: any) =>
       s.type === 'PICKUP' &&
@@ -205,8 +219,8 @@ export default function LiveTracking() {
   )
 
   const personalEta = isBoarded
-    ? myDropoffStop?.estimatedArrival || progress?.etaString || activeRide?.estimatedArrival
-    : myPickupStop?.estimatedArrival || progress?.etaString || activeRide?.departureTime
+    ? myDropoffStop?.estimatedArrival || progress?.etaString || effectiveRide?.estimatedArrival
+    : myPickupStop?.estimatedArrival || progress?.etaString || effectiveRide?.departureTime
 
   if (!activeRide) {
     return (
@@ -226,7 +240,9 @@ export default function LiveTracking() {
   // Determine dynamic journey status
   let statusBanner = {
     title: 'Driver is en route to pickup',
-    desc: `Heading to your pickup stop: ${myPickup}`,
+    desc: driverStart && driverStart.toLowerCase() !== myPickup.toLowerCase()
+      ? `Started from ${driverStart} · Heading to your pickup at ${myPickup}`
+      : `Heading to your pickup stop: ${myPickup}`,
     color: 'bg-primary-600',
     badge: 'LIVE',
   }
@@ -238,14 +254,14 @@ export default function LiveTracking() {
       color: 'bg-emerald-600',
       badge: 'COMPLETED',
     }
-  } else if (activeRide.status === 'waiting' || activeRide.status === 'full') {
+  } else if (effectiveRide.status === 'waiting' || effectiveRide.status === 'full') {
     statusBanner = {
       title: 'Booking Confirmed — Driver Assigned',
-      desc: `Pickup at ${myPickup} · Departs ${activeRide.departureTime}`,
+      desc: `Pickup at ${myPickup} · Departs ${effectiveRide.departureTime}`,
       color: 'bg-slate-800',
       badge: 'SCHEDULED',
     }
-  } else if (activeRide.status === 'boarding') {
+  } else if (effectiveRide.status === 'boarding') {
     statusBanner = {
       title: 'Boarding in Progress',
       desc: `Driver is boarding passengers at ${myPickupStop?.name || myPickup}`,
@@ -262,7 +278,7 @@ export default function LiveTracking() {
   } else if (isBoarded) {
     statusBanner = {
       title: 'On Trip to Your Destination',
-      desc: `Heading to your dropoff stop: ${myDestination}`,
+      desc: `Boarded at ${myPickup} · Heading to ${myDestination}`,
       color: 'bg-indigo-600',
       badge: 'IN TRANSIT',
     }
@@ -280,7 +296,7 @@ export default function LiveTracking() {
         </button>
 
         <div className="bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-full shadow-lg flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${activeRide.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-primary-500'}`} />
+          <span className={`w-2 h-2 rounded-full ${effectiveRide.status === 'active' ? 'bg-emerald-500 animate-pulse' : 'bg-primary-500'}`} />
           <span className="text-xs font-bold text-slate-800 tracking-wide">{statusBanner.badge} GPS MONITORING</span>
         </div>
 
@@ -294,7 +310,7 @@ export default function LiveTracking() {
       </div>
 
       {/* Route Deviation Banner if active */}
-      {(progress?.isOffRoute || activeRide.hasDeviation) && (
+      {(progress?.isOffRoute || effectiveRide.hasDeviation) && (
         <div className="absolute top-20 left-4 right-4 z-20 bg-amber-500 text-slate-950 px-4 py-2.5 rounded-2xl shadow-xl flex items-center justify-between animate-pulse">
           <div className="flex items-center gap-2">
             <AlertTriangle size={18} className="text-slate-950 flex-shrink-0" />
@@ -309,17 +325,28 @@ export default function LiveTracking() {
       {/* Full screen Map */}
       <div className="flex-1 w-full h-full">
         <CampusMap
-          stops={tripState?.stops || []}
-          routeCoordinates={tripState?.route?.geometry || activeRide.routeCoordinates || []}
-          vehicleLat={vehiclePosition ? vehiclePosition[0] : activeRide.currentLat}
-          vehicleLng={vehiclePosition ? vehiclePosition[1] : activeRide.currentLng}
+          origin={
+            tripState?.route?.origin ||
+            (effectiveRide.startLocation
+              ? {
+                  lat: effectiveRide.startLocationLat || effectiveRide.currentLat,
+                  lng: effectiveRide.startLocationLng || effectiveRide.currentLng,
+                  name: effectiveRide.startLocation,
+                }
+              : undefined)
+          }
+          highlightStopStudentId={currentUserId || currentStudentId}
+          stops={tripState?.stops || effectiveRide.stops || []}
+          routeCoordinates={tripState?.route?.geometry || effectiveRide.routeCoordinates || []}
+          vehicleLat={vehiclePosition ? vehiclePosition[0] : effectiveRide.currentLat}
+          vehicleLng={vehiclePosition ? vehiclePosition[1] : effectiveRide.currentLng}
           vehicleHeading={vehicleHeading}
           cameraMode={cameraMode}
           onCameraModeChange={setCameraMode}
           onRecenter={recenter}
           height="h-full"
           interactive
-          alertMode={progress?.isOffRoute || activeRide.hasDeviation}
+          alertMode={progress?.isOffRoute || effectiveRide.hasDeviation}
           showRecenterButton={isRecenterNeeded}
         />
       </div>
@@ -338,7 +365,85 @@ export default function LiveTracking() {
                 {personalEta}
               </span>
               <div className="text-[10px] text-white/80">
-                {isDropped ? 'Dropped Off' : activeRide.status === 'active' ? (isBoarded ? 'Dropoff ETA' : 'Pickup ETA') : 'Departure'}
+                {isDropped ? 'Dropped Off' : effectiveRide.status === 'active' ? (isBoarded ? 'Dropoff ETA' : 'Pickup ETA') : 'Departure'}
+              </div>
+            </div>
+          </div>
+
+          {/* Journey Itinerary Stepper (Driver Start -> Pickup -> Destination) */}
+          <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-2">
+            <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>Your Trip Route</span>
+              <span className="text-primary-700 font-semibold">{effectiveRide.routeName || `${myPickup} → ${myDestination}`}</span>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 relative">
+              {/* Step 1: Driver Start */}
+              <div className="flex flex-col items-center text-center p-2 rounded-lg bg-white border border-slate-200 shadow-2xs">
+                <div className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-bold text-xs flex items-center justify-center mb-1">
+                  1
+                </div>
+                <span className="text-[10px] text-slate-400 font-semibold">Driver Start</span>
+                <span className="text-xs font-bold text-slate-800 line-clamp-1" title={driverStart}>
+                  {driverStart}
+                </span>
+                <span className="text-[9px] text-emerald-600 font-bold mt-0.5">
+                  {effectiveRide.status === 'active' ? 'En Route' : 'Origin'}
+                </span>
+              </div>
+
+              {/* Step 2: Passenger Pickup */}
+              <div className={`flex flex-col items-center text-center p-2 rounded-lg border shadow-2xs ${
+                isBoarded || isDropped
+                  ? 'bg-slate-50 border-slate-200 opacity-80'
+                  : 'bg-primary-50/50 border-primary-200 ring-2 ring-primary-300/40'
+              }`}>
+                <div className={`w-6 h-6 rounded-full font-bold text-xs flex items-center justify-center mb-1 ${
+                  isBoarded || isDropped
+                    ? 'bg-slate-200 text-slate-600'
+                    : 'bg-primary-600 text-white animate-pulse'
+                }`}>
+                  {isBoarded || isDropped ? '✓' : '2'}
+                </div>
+                <span className="text-[10px] text-slate-400 font-semibold">Your Pickup</span>
+                <span className="text-xs font-bold text-slate-800 line-clamp-1" title={myPickup}>
+                  {myPickup}
+                </span>
+                <span className={`text-[9px] font-bold mt-0.5 ${isBoarded ? 'text-slate-500' : 'text-primary-700'}`}>
+                  {isBoarded ? 'Boarded' : myPickupStop?.status === 'ARRIVED' ? 'Arrived!' : myPickupStop?.estimatedArrival ? `ETA ${myPickupStop.estimatedArrival}` : 'Pickup'}
+                </span>
+              </div>
+
+              {/* Step 3: Passenger Dropoff */}
+              <div className={`flex flex-col items-center text-center p-2 rounded-lg border shadow-2xs ${
+                isDropped
+                  ? 'bg-emerald-50 border-emerald-300'
+                  : isBoarded
+                  ? 'bg-indigo-50 border-indigo-300 ring-2 ring-indigo-300/40'
+                  : 'bg-white border-slate-200'
+              }`}>
+                <div className={`w-6 h-6 rounded-full font-bold text-xs flex items-center justify-center mb-1 ${
+                  isDropped
+                    ? 'bg-emerald-600 text-white'
+                    : isBoarded
+                    ? 'bg-indigo-600 text-white animate-pulse'
+                    : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {isDropped ? '✓' : '3'}
+                </div>
+                <span className="text-[10px] text-slate-400 font-semibold">Your Dropoff</span>
+                <span className="text-xs font-bold text-slate-800 line-clamp-1" title={myDestination}>
+                  {myDestination}
+                </span>
+                <span className={`text-[9px] font-bold mt-0.5 ${
+                  isDropped
+                    ? 'text-emerald-700'
+                    : isBoarded
+                    ? 'text-indigo-700'
+                    : 'text-slate-400'
+                }`}>
+                  {isDropped ? 'Arrived' : personalEta ? `ETA ${personalEta}` : 'Destination'}
+                </span>
               </div>
             </div>
           </div>
@@ -346,7 +451,7 @@ export default function LiveTracking() {
           {/* Ride Details Header */}
           <div className="flex items-center justify-between pt-1">
             <div>
-              <h3 className="font-heading font-bold text-slate-900 text-base">{activeRide.routeName}</h3>
+              <h3 className="font-heading font-bold text-slate-900 text-base">{effectiveRide.routeName}</h3>
               <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
                 <MapPin size={12} className="text-primary-600" />
                 <span>Your Destination: <strong className="text-slate-800">{myDestination}</strong></span>
@@ -361,7 +466,7 @@ export default function LiveTracking() {
                 <span className="text-xs font-bold text-primary-700 bg-primary-50 px-2 py-1 rounded-lg">
                   {progress?.remainingDistanceMeters
                     ? `${(progress.remainingDistanceMeters / 1000).toFixed(1)} km away`
-                    : `${activeRide.distanceKm} km`}
+                    : `${effectiveRide.distanceKm} km`}
                 </span>
               )}
             </div>

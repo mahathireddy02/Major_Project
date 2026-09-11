@@ -288,6 +288,30 @@ export interface SafetyEvent {
   resolved: boolean
   resolvedAt?: string
   resolvedBy?: string
+  userId?: string
+  userName?: string
+  userRole?: string
+  userPhone?: string
+  vehicleId?: string
+  driverId?: string
+  driverName?: string
+  routeName?: string
+  passengerCount?: number
+  emergencyContact?: {
+    name: string
+    relationship?: string
+    phone: string
+  }
+  acknowledgedAt?: string
+  acknowledgedBy?: string
+  smsStatus?: string
+  smsMessage?: string
+  callStatus?: string
+  callSid?: string
+  callMessage?: string
+  lat?: number
+  lng?: number
+  status?: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | string
 }
 
 export interface AdminUser {

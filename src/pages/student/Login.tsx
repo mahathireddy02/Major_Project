@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
 import { api } from '../../services/api'
 import toast from 'react-hot-toast'
+import { PhoneOtpModal } from '../../components/auth/PhoneOtpModal'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function Login() {
   const loginAsStudent = useAppStore((s) => s.loginAsStudent)
   const storeStudents = useAppStore((s) => s.students)
   const [realStudents, setRealStudents] = useState(storeStudents)
+  const [showOtpModal, setShowOtpModal] = useState(false)
 
   useEffect(() => {
     api.getStudents().then((res) => {
@@ -53,11 +55,13 @@ export default function Login() {
 
   const handleDemoLogin = async (role: 'student' | 'faculty') => {
     setLoading(true)
-    const email = role === 'student' ? 'student.demo@sriindu.ac.in' : 'faculty.demo@sriindu.ac.in'
-    const password = 'campus2026'
+    const demoEmail = role === 'student' ? 'uday.kiran@sriindu.ac.in' : 'ramesh.sharma@sriindu.ac.in'
+    const demoPassword = 'campus2026'
+    setEmail(demoEmail)
+    setPassword(demoPassword)
     try {
-      const res = await login({ email, password, role })
-      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Demo Student' : 'Demo Faculty')}!`)
+      const res = await login({ email: demoEmail, password: demoPassword, role })
+      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Uday Kiran' : 'Dr. Ramesh Sharma')}!`)
       navigate('/student/home')
     } catch (err: any) {
       toast.error(err.message || 'Demo login failed')
@@ -141,14 +145,28 @@ export default function Login() {
 
               <div className="pt-2">
                 <Button size="lg" className="w-full" type="submit" loading={loading}>
-                  Sign In
+                  Sign In with Password
                   <ChevronRight size={18} />
                 </Button>
               </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-slate-400 text-xs font-semibold uppercase">Or</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOtpModal(true)}
+                className="w-full py-2.5 px-4 rounded-xl border-2 border-primary-600 bg-primary-50/70 hover:bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <span>Sign In via Twilio Phone OTP</span>
+              </button>
             </form>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-slate-500 mb-2 font-medium">1-Click Demo Login (Real Database Accounts):</p>
+              <p className="text-xs text-slate-500 mb-2 font-medium">Sandbox Demo Credentials (Existing Record):</p>
               
               {/* Student Demo */}
               <button
@@ -162,12 +180,13 @@ export default function Login() {
                     🎓
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
-                    <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
+                    <p className="font-bold text-slate-900 text-xs">Student Demo • Uday Kiran</p>
+                    <p className="text-[11px] text-primary-700 font-mono">Email: uday.kiran@sriindu.ac.in</p>
+                    <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                   </div>
                 </div>
                 <span className="text-xs font-bold text-primary-600 group-hover:translate-x-0.5 transition-transform">
-                  1-Click →
+                  Use Demo Credentials →
                 </span>
               </button>
 
@@ -183,12 +202,13 @@ export default function Login() {
                     👨‍🏫
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
-                    <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                    <p className="font-bold text-slate-900 text-xs">Faculty Demo • Dr. Ramesh Sharma</p>
+                    <p className="text-[11px] text-primary-700 font-mono">Email: ramesh.sharma@sriindu.ac.in</p>
+                    <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                   </div>
                 </div>
                 <span className="text-xs font-bold text-primary-600 group-hover:translate-x-0.5 transition-transform">
-                  1-Click →
+                  Use Demo Credentials →
                 </span>
               </button>
             </div>
@@ -207,6 +227,15 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      <PhoneOtpModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        role="student"
+        onSuccess={() => {
+          navigate('/student/home')
+        }}
+      />
     </div>
   )
 }

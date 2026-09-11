@@ -31,19 +31,24 @@ export default function StudentProfile() {
   const [modalErrors, setModalErrors] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState(false)
 
+  const activeStudentId = currentUser?.id || currentStudentId || 's1'
+
   // Fetch real backend data
   useEffect(() => {
-    if (!currentStudentId) return
+    if (!activeStudentId) return
     let isMounted = true
 
     const loadData = async () => {
       try {
         const [contact, userStats] = await Promise.all([
-          api.getEmergencyContact(currentStudentId).catch(() => null),
-          api.getUserStats(currentStudentId).catch(() => null),
+          api.getEmergencyContact(activeStudentId).catch(() => null),
+          api.getUserStats(activeStudentId).catch(() => null),
         ])
         if (isMounted) {
-          if (contact) setEmergencyContact(contact)
+          if (contact) {
+            setEmergencyContact(contact)
+            useAppStore.getState().setEmergencyContact(contact)
+          }
           if (userStats) setStats(userStats)
           setLoadingContact(false)
         }
@@ -57,7 +62,7 @@ export default function StudentProfile() {
     return () => {
       isMounted = false
     }
-  }, [currentStudentId])
+  }, [activeStudentId])
 
   const openAddEditModal = () => {
     if (emergencyContact) {
@@ -95,12 +100,13 @@ export default function StudentProfile() {
 
     setSaving(true)
     try {
-      const saved = await api.saveEmergencyContact(currentStudentId, {
+      const saved = await api.saveEmergencyContact(activeStudentId, {
         name: contactName.trim(),
         relationship: relationship.trim(),
         phone: contactPhone.trim(),
       })
       setEmergencyContact(saved)
+      useAppStore.getState().setEmergencyContact(saved)
       setIsModalOpen(false)
       toast.success('Emergency contact saved successfully!', { icon: '🛡️' })
     } catch (err: any) {
@@ -113,8 +119,9 @@ export default function StudentProfile() {
   const handleDeleteContact = async () => {
     if (!window.confirm('Are you sure you want to remove this emergency contact?')) return
     try {
-      await api.deleteEmergencyContact(currentStudentId)
+      await api.deleteEmergencyContact(activeStudentId)
       setEmergencyContact(null)
+      useAppStore.getState().setEmergencyContact(null)
       toast.success('Emergency contact removed')
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete emergency contact')

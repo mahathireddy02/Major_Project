@@ -18,7 +18,7 @@ import { connectDatabase } from '../config/database.js'
 // 10 Students Seed Data (All with verified academic institution domains)
 // =============================================================================
 const STUDENTS_SEED = [
-  { id: 's1', name: 'Uday Kiran (Demo Student)', email: 'student.demo@sriindu.ac.in', studentId: 'STUDENT-DEMO-2026', rollNumber: '21IND0501', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science', year: 3, phone: '+91 98765 43210', avatar: 'UK', rating: 4.9, totalRides: 38, isVerified: true, role: 'STUDENT', gender: 'Male' },
+  { id: 's1', name: 'Uday Kiran', email: 'uday.kiran@sriindu.ac.in', studentId: '21IND0501', rollNumber: '21IND0501', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science', year: 3, phone: '+91 98765 43210', avatar: 'UK', rating: 4.9, totalRides: 38, isVerified: true, role: 'STUDENT', gender: 'Male' },
   { id: 's2', name: 'Arjun Rao', email: 'arjun.rao@iith.ac.in', studentId: 'IITH2022015', rollNumber: 'EE22BTECH11015', collegeName: 'IIT Hyderabad', department: 'Electrical Engg', year: 2, phone: '+91 87654 32109', avatar: 'AR', rating: 4.7, totalRides: 22, isVerified: true, role: 'STUDENT', gender: 'Male' },
   { id: 's3', name: 'Priya Sharma', email: 'priya.sharma@nitw.ac.in', studentId: 'NITW2021034', rollNumber: 'ME21B034', collegeName: 'NIT Warangal', department: 'Mechanical Engg', year: 3, phone: '+91 76543 21098', avatar: 'PS', rating: 4.8, totalRides: 31, isVerified: true, role: 'STUDENT', gender: 'Female' },
   { id: 's4', name: 'Rahul Varma', email: 'rahul.varma@cbit.ac.in', studentId: 'CBIT2023007', rollNumber: '160123733007', collegeName: 'Chaitanya Bharathi Institute of Technology', department: 'Computer Science', year: 1, phone: '+91 65432 10987', avatar: 'RV', rating: 4.6, totalRides: 9, isVerified: true, role: 'STUDENT', gender: 'Male' },
@@ -34,7 +34,7 @@ const STUDENTS_SEED = [
 // 5 Faculty Seed Data (All with verified academic institution domains)
 // =============================================================================
 const FACULTY_SEED = [
-  { id: 'f1', name: 'Dr. Ramesh Sharma (Demo Faculty)', email: 'faculty.demo@sriindu.ac.in', studentId: 'FACULTY-DEMO-2026', collegeId: 'FAC-2026-001', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science & Engineering', year: 1, phone: '+91 91234 56780', avatar: 'RS', rating: 5.0, totalRides: 64, isVerified: true, role: 'FACULTY', gender: 'Male' },
+  { id: 'f1', name: 'Dr. Ramesh Sharma', email: 'ramesh.sharma@sriindu.ac.in', studentId: 'FAC-2026-001', collegeId: 'FAC-2026-001', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science & Engineering', year: 1, phone: '+91 91234 56780', avatar: 'RS', rating: 5.0, totalRides: 64, isVerified: true, role: 'FACULTY', gender: 'Male' },
   { id: 'f2', name: 'Prof. Lakshmi Nair', email: 'prof.lakshmi.nair@iith.ac.in', studentId: 'FAC-IITH-012', collegeId: 'FAC-IITH-012', collegeName: 'IIT Hyderabad', department: 'Electrical Engineering', year: 1, phone: '+91 82345 67891', avatar: 'LN', rating: 4.9, totalRides: 42, isVerified: true, role: 'FACULTY', gender: 'Female' },
   { id: 'f3', name: 'Dr. Venkat Rao', email: 'dr.venkat.rao@nitw.ac.in', studentId: 'FAC-NITW-045', collegeId: 'FAC-NITW-045', collegeName: 'NIT Warangal', department: 'Mechanical Engineering', year: 1, phone: '+91 73456 78902', avatar: 'VR', rating: 4.8, totalRides: 37, isVerified: true, role: 'FACULTY', gender: 'Male' },
   { id: 'f4', name: 'Prof. Sunita Gupta', email: 'prof.sunita.gupta@cbit.ac.in', studentId: 'FAC-CBIT-088', collegeId: 'FAC-CBIT-088', collegeName: 'Chaitanya Bharathi Institute of Technology', department: 'Physics & Nanotech', year: 1, phone: '+91 64567 89013', avatar: 'SG', rating: 4.9, totalRides: 51, isVerified: true, role: 'FACULTY', gender: 'Female' },
@@ -45,7 +45,7 @@ const FACULTY_SEED = [
 // 20 Drivers Seed Data (All with personal @gmail.com email addresses)
 // =============================================================================
 const DRIVERS_SEED = [
-  { id: 'd1', name: 'Rahul Kumar (Demo Driver)', email: 'driver.demo@gmail.com', phone: '+91 99887 76655', avatar: 'RK', rating: 4.8, totalTrips: 312, isVerified: true, role: 'DRIVER', vehicleId: 'v1', vehicleRegistration: 'TS 09 AB 1234', vehicleType: 'Campus Shuttle Bus', licenseNumber: 'TS-09-2018-004521' },
+  { id: 'd1', name: 'Rahul Kumar', email: 'rahul.kumar.driver@gmail.com', phone: '+91 99887 76655', avatar: 'RK', rating: 4.8, totalTrips: 312, isVerified: true, role: 'DRIVER', vehicleId: 'v1', vehicleRegistration: 'TS 09 AB 1234', vehicleType: 'Campus Shuttle Bus', licenseNumber: 'TS-09-2018-004521' },
   { id: 'd2', name: 'Suresh Babu', email: 'suresh.babu.driver@gmail.com', phone: '+91 88776 65544', avatar: 'SB', rating: 4.6, totalTrips: 245, isVerified: true, role: 'DRIVER', vehicleId: 'v2', vehicleRegistration: 'TS 09 CD 5678', vehicleType: 'Mini Van', licenseNumber: 'TS-09-2019-005612' },
   { id: 'd3', name: 'Ravi Kumar', email: 'ravi.kumar.cabs@gmail.com', phone: '+91 77665 54433', avatar: 'RK', rating: 4.9, totalTrips: 428, isVerified: true, role: 'DRIVER', vehicleId: 'v3', vehicleRegistration: 'TS 09 EF 9012', vehicleType: 'Campus Bus', licenseNumber: 'TS-09-2017-003489' },
   { id: 'd4', name: 'Mahesh Reddy', email: 'mahesh.reddy.trans@gmail.com', phone: '+91 66554 43322', avatar: 'MR', rating: 4.7, totalTrips: 189, isVerified: true, role: 'DRIVER', vehicleId: 'v4', vehicleRegistration: 'TS 09 GH 3456', vehicleType: 'Mini Van', licenseNumber: 'TS-09-2020-006734' },
@@ -570,6 +570,17 @@ export async function seedDatabase() {
     `[Seed] Inserted ${STUDENTS_SEED.length} students, ${FACULTY_SEED.length} faculty, ` +
     `${DRIVERS_SEED.length} drivers, and 1 admin (Total: ${seededUsers.length} verified users).`
   )
+
+  // Insert Emergency Contacts
+  const emergencyContacts = [
+    { id: 'ec-s1', userId: 's1', name: 'udaykiran', relationship: 'Parent', phone: '+917989442841', isPrimary: true },
+    { id: 'ec-s2', userId: 's2', name: 'S. Rao (Father)', relationship: 'Parent', phone: '+91 87654 32199', isPrimary: true },
+    { id: 'ec-s3', userId: 's3', name: 'M. Sharma (Mother)', relationship: 'Parent', phone: '+91 76543 21999', isPrimary: true },
+    { id: 'ec-f1', userId: 'f1', name: 'Sunita Sharma (Spouse)', relationship: 'Spouse', phone: '+91 91234 56789', isPrimary: true },
+    { id: 'ec-d1', userId: 'd1', name: 'Meena Kumar (Spouse)', relationship: 'Spouse', phone: '+91 99887 76600', isPrimary: true },
+  ]
+  await EmergencyContactModel.insertMany(emergencyContacts)
+  console.log(`[Seed] Inserted ${emergencyContacts.length} emergency contacts for campus accounts.`)
 
   // Insert Vehicles
   await VehicleModel.insertMany(VEHICLES_SEED)

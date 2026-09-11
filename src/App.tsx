@@ -52,6 +52,7 @@ import StudentsManagement from './pages/admin/StudentsManagement'
 import FacultyManagement from './pages/admin/FacultyManagement'
 import DriversManagement from './pages/admin/DriversManagement'
 import ChatBot from './components/chat/ChatBot'
+import { EmergencyAlarmBanner } from './components/safety/EmergencyAlarmBanner'
 
 function RoleSwitcher() {
   const navigate = useNavigate()
@@ -119,8 +120,17 @@ export default function App() {
 
   return (
     <HashRouter>
-      <Toaster position="top-center" />
+      <Toaster
+        position="top-right"
+        containerClassName="pointer-events-none"
+        toastOptions={{
+          style: {
+            pointerEvents: 'auto',
+          },
+        }}
+      />
       <RoleSwitcher />
+      <EmergencyAlarmBanner />
       <ChatBot />
 
       <Routes>

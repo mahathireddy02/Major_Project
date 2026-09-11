@@ -17,9 +17,12 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/rides', async (request) => {
     const driverId = request.user?.id || (request.headers['x-driver-id'] as string) || 'd1'
     const query = request.query as { date?: string; status?: string; all?: string }
-    const filter: any = {
-      $or: [{ driverId }, { driverId: 'd1' }, { driverId: 'driver-1' }]
+    // Only include demo fallback IDs when the driver has no real authenticated ID
+    const orConditions: any[] = [{ driverId }]
+    if (!driverId || driverId === 'd1' || driverId === 'driver-1') {
+      orConditions.push({ driverId: 'd1' }, { driverId: 'driver-1' })
     }
+    const filter: any = { $or: orConditions }
     if (query.date && query.all !== 'true') {
       filter.date = query.date
     }
@@ -77,6 +80,30 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       ride.startLocationLng = startLng
       if (startLocation) {
         ride.startLocation = startLocation
+      }
+    }
+
+    if (startLocation && typeof startLat === 'number' && typeof startLng === 'number') {
+      const firstPP = ride.pickupPoints?.[0]
+      const hasPaxAtFirst = firstPP && (ride.passengers || []).some((p: any) => p.pickup?.toLowerCase() === firstPP.name?.toLowerCase())
+      if (!hasPaxAtFirst) {
+        if (!ride.pickupPoints || ride.pickupPoints.length === 0) {
+          ride.pickupPoints = [{
+            id: `pp-start-${ride.id}`,
+            name: startLocation,
+            lat: startLat,
+            lng: startLng,
+            estimatedPickupTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }]
+        } else {
+          ride.pickupPoints[0] = {
+            id: ride.pickupPoints[0].id || `pp-start-${ride.id}`,
+            name: startLocation,
+            lat: startLat,
+            lng: startLng,
+            estimatedPickupTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        }
       }
     }
 
@@ -434,6 +461,8 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       stop.status = status === 'boarded' ? 'BOARDED' : 'UPCOMING'
     }
 
+    ride.markModified('passengers')
+    ride.markModified('stops')
     await ride.save()
 
     // Also update BookingModel in MongoDB

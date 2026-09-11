@@ -8,8 +8,12 @@ import type {
   SafetyEvent,
   AdminUser,
   Vehicle,
+  EmergencyContact,
 } from '../types'
 import { api } from '../services/api'
+import { sosAlarmPlayer } from '../utils/alarmSound'
+
+import { showNotificationToast } from '../components/notifications/NotificationToast'
 
 export interface RideMessage {
   id: string
@@ -27,7 +31,7 @@ type Role = 'student' | 'faculty' | 'driver' | 'admin'
 export function normalizeSafetyEvent(e: any): SafetyEvent {
   if (!e) return e
   const rawType = e.eventType || e.type || 'OTHER'
-  const rawSeverity = e.severity || 'HIGH'
+  const rawSeverity = e.severity || 'CRITICAL'
   const rawMsg = e.message || e.description || 'Safety incident reported'
   const rawCreatedAt = e.createdAt || e.timestamp || new Date().toISOString()
 
@@ -45,7 +49,19 @@ export function normalizeSafetyEvent(e: any): SafetyEvent {
     resolvedAt: e.resolvedAt,
     resolvedBy: e.resolvedBy,
     userId: e.userId,
+    userName: e.userName,
+    userRole: e.userRole,
+    userPhone: e.userPhone,
     vehicleId: e.vehicleId,
+    driverId: e.driverId,
+    driverName: e.driverName,
+    routeName: e.routeName,
+    passengerCount: e.passengerCount,
+    emergencyContact: e.emergencyContact,
+    acknowledgedAt: e.acknowledgedAt,
+    acknowledgedBy: e.acknowledgedBy,
+    smsStatus: e.smsStatus,
+    smsMessage: e.smsMessage,
     lat: e.lat,
     lng: e.lng,
     status: e.status || (e.resolved ? 'RESOLVED' : 'ACTIVE'),
@@ -65,6 +81,7 @@ interface AppState {
   currentStudentId: string
   currentDriverId: string
   backendReady: boolean
+  emergencyContact: EmergencyContact | null
 
   // Data
   students: Student[]
@@ -92,7 +109,7 @@ interface AppState {
   setRole: (role: Role) => void
   loginAsStudent: (studentId: string) => void
   loginAsDriver: (driverId: string) => void
-  login: (credentials: { email?: string; username?: string; phone?: string; password?: string; role?: string; userId?: string }) => Promise<{ success: boolean; role: Role; user: any }>
+  login: (credentials: { email?: string; username?: string; phone?: string; password?: string; otp?: string; code?: string; role?: string; userId?: string }) => Promise<{ success: boolean; role: Role; user: any }>
   registerStudent: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   registerFaculty: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   registerDriver: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
@@ -114,6 +131,12 @@ interface AppState {
   // Actions — Driver
   acceptRide: (rideId: string) => Promise<void>
   startRide: (rideId: string, startLocation?: { name?: string; lat: number; lng: number }) => Promise<void>
+  createAndActivateRide: (payload: {
+    startLocation: { name: string; lat: number; lng: number; address?: string }
+    destination?: string
+    destinationLat?: number
+    destinationLng?: number
+  }) => Promise<Ride>
   completeRide: (rideId: string) => Promise<void>
   refreshRides: () => Promise<void>
   updatePassengerStatus: (rideId: string, studentId: string, status: 'boarded' | 'dropped') => Promise<void>
@@ -129,9 +152,12 @@ interface AppState {
   loadAuditLog: () => Promise<void>
 
   // Actions — Safety
-  triggerSOS: (rideId: string, studentId: string) => Promise<void>
+  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string } | string, studentId?: string) => Promise<any>
+  acknowledgeSafetyEvent: (eventId: string) => Promise<void>
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
+  setEmergencyContact: (contact: EmergencyContact | null) => void
+  loadEmergencyContact: () => Promise<EmergencyContact | null>
 
   // Actions — Messaging
   sendMessage: (rideId: string, text: string, driverId?: string, bookingId?: string) => Promise<void>
@@ -161,6 +187,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentStudentId: localStorage.getItem('campusflow_user_id') || '',
   currentDriverId: localStorage.getItem('campusflow_driver_id') || '',
   backendReady: false,
+  emergencyContact: null,
   students: [],
   drivers: [],
   vehicles: [],
@@ -197,9 +224,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           const notif = payload.notification || payload.message || payload
           if (notif && (notif.id || notif._id)) {
             const notifId = notif.id || notif._id
+            // 1. Save notification to persist in notification history & update unread badges
             set((state) => ({
               notifications: [{ ...notif, id: notifId }, ...state.notifications.filter((n) => n.id !== notifId)],
             }))
+
             // If it's a ride message, also push into messages state for live chat
             if ((notif.type === 'message' || notif.eventType === 'RIDE_MESSAGE') && notif.rideId) {
               const senderRole = (notif.metadata?.senderRole || (notif.role === 'student' ? 'driver' : 'student')) as 'student' | 'driver'
@@ -222,6 +251,59 @@ export const useAppStore = create<AppState>((set, get) => ({
                   messages: [...existingWithoutThis, msg],
                 }
               })
+            }
+
+            // 2. Determine if the active user should receive a real-time toast popup
+            const currentState = get()
+            const activeRole = (currentState.role || 'student').toLowerCase()
+            const currentStudentId = currentState.currentStudentId || currentState.currentUser?.id
+            const currentDriverId = currentState.currentDriverId || currentState.currentUser?.id
+
+            const targetUserId = notif.userId
+            const targetStudentId = notif.studentId
+            const targetDriverId = notif.driverId
+            const notifRole = (notif.role || '').toLowerCase()
+
+            let isRelevant = false
+            if (activeRole === 'admin' || activeRole === 'dispatcher') {
+              // Dispatcher is the global operations center — receives all operational events
+              isRelevant = true
+            } else if (activeRole === 'driver') {
+              // Driver receives events for their assigned vehicle/rides/passengers
+              isRelevant =
+                Boolean(targetDriverId && targetDriverId === currentDriverId) ||
+                Boolean(targetUserId && targetUserId === currentDriverId) ||
+                notifRole === 'driver' ||
+                notifRole === 'all'
+            } else if (activeRole === 'student' || activeRole === 'faculty') {
+              // Student/Faculty receives events strictly for their own rides
+              isRelevant =
+                Boolean(targetStudentId && targetStudentId === currentStudentId) ||
+                Boolean(targetUserId && targetUserId === currentStudentId) ||
+                notifRole === 'student' ||
+                notifRole === 'faculty' ||
+                notifRole === 'all'
+            }
+
+            if (isRelevant) {
+              showNotificationToast(notif)
+            }
+          }
+        }
+            set((state) => ({
+              notifications: [{ ...notif, id: notifId }, ...state.notifications.filter((n) => n.id !== notifId)],
+            }))
+            // Fetch fresh notifications with authenticated credentials
+            const freshNotifs = await api.getNotifications().catch(() => [])
+            if (Array.isArray(freshNotifs)) {
+              set({ notifications: freshNotifs })
+            }
+            const activeId = profile.id || (isStudent ? get().currentStudentId : get().currentDriverId)
+            if (activeId) {
+              api.getEmergencyContact(activeId).then((ec) => {
+                if (ec) set({ emergencyContact: ec })
+              }).catch(() => {})
+            }
             }
           }
         } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
@@ -246,7 +328,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
           if (payload?.ride) {
             set((state) => ({
-              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r)),
+              rides: state.rides.some((r) => r.id === payload.ride.id)
+                ? state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r))
+                : [payload.ride, ...state.rides],
             }))
           }
         } else if (event === 'BOOKING_UPDATED') {
@@ -272,23 +356,52 @@ export const useAppStore = create<AppState>((set, get) => ({
               rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r)),
             }))
           }
-        } else if (event === 'SAFETY_ALERT' || event === 'SAFETY_ALERT_CREATED' || event === 'SOS_CREATED') {
+        } else if (
+          event === 'SAFETY_ALERT' ||
+          event === 'SAFETY_ALERT_CREATED' ||
+          event === 'SOS_CREATED' ||
+          event === 'STUDENT_SOS_TRIGGERED' ||
+          event === 'DRIVER_SOS_TRIGGERED' ||
+          event === 'SOS_TRIGGERED'
+        ) {
           if (payload?.safetyEvent) {
             const normalized = normalizeSafetyEvent(payload.safetyEvent)
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
+            // Immediately play loud emergency siren alarm across listening devices
+            sosAlarmPlayer.play().catch(() => {})
           }
           if (payload?.ride) {
             set((state) => ({
-              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r)),
+              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride, hasSosAlert: true } : r)),
             }))
           }
-        } else if (event === 'SAFETY_EVENT_RESOLVED') {
-          if (payload?.event) {
-            const normalized = normalizeSafetyEvent(payload.event)
+        } else if (
+          event === 'SAFETY_EVENT_ACKNOWLEDGED' ||
+          event === 'SOS_ACKNOWLEDGED'
+        ) {
+          sosAlarmPlayer.stop()
+          const rawEvent = payload?.safetyEvent || payload?.event || payload
+          if (rawEvent?.id) {
+            const normalized = normalizeSafetyEvent(rawEvent)
             set((state) => ({
-              safetyEvents: state.safetyEvents.map((e) => (e.id === normalized.id ? normalized : e)),
+              safetyEvents: state.safetyEvents.map((e) => (e.id === normalized.id ? { ...e, ...normalized, status: 'ACKNOWLEDGED' } : e)),
+            }))
+          }
+        } else if (
+          event === 'SAFETY_EVENT_RESOLVED' ||
+          event === 'SOS_RESOLVED'
+        ) {
+          sosAlarmPlayer.stop()
+          const rawEvent = payload?.safetyEvent || payload?.event || payload
+          if (rawEvent?.id) {
+            const normalized = normalizeSafetyEvent(rawEvent)
+            set((state) => ({
+              safetyEvents: state.safetyEvents.map((e) => (e.id === normalized.id ? { ...e, ...normalized, resolved: true, status: 'RESOLVED' } : e)),
+              rides: state.rides.map((r) =>
+                normalized.rideId && r.id === normalized.rideId ? { ...r, hasSosAlert: false, hasDeviation: false } : r
+              ),
             }))
           }
         } else if (event === 'VEHICLE_LOCATION_UPDATED') {
@@ -441,6 +554,13 @@ export const useAppStore = create<AppState>((set, get) => ({
             if (Array.isArray(freshNotifs)) {
               set({ notifications: freshNotifs })
             }
+            const activeId = profile.id || (isStudent ? get().currentStudentId : get().currentDriverId)
+            if (activeId) {
+              api.getEmergencyContact(activeId).then((ec) => {
+                if (ec) set({ emergencyContact: ec })
+              }).catch(() => {})
+            }
+            }
           }
         } catch {
           // token expired or invalid — don't overwrite
@@ -492,6 +612,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       })
 
       get().fetchNotifications()
+      if (res.user?.id) {
+        api.getEmergencyContact(res.user.id).then((ec) => {
+          if (ec) set({ emergencyContact: ec })
+        }).catch(() => {})
+      }
 
       return { success: true, role: mappedRole, user: res.user }
     } catch (err: any) {
@@ -509,7 +634,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               d.email?.toLowerCase() === credentials.email?.toLowerCase() ||
               d.phone === credentials.phone ||
               d.id === credentials.userId ||
-              d.email === 'driver.demo@gmail.com'
+              d.email === 'rahul.kumar.driver@gmail.com'
           ) || get().drivers[0]
 
         if (fallbackDriver) {
@@ -728,6 +853,51 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  createAndActivateRide: async (payload: {
+    startLocation: { name: string; lat: number; lng: number; address?: string }
+    destination?: string
+    destinationLat?: number
+    destinationLng?: number
+  }) => {
+    try {
+      const cu = get().currentUser
+      const driverId = get().currentDriverId || cu?.id || 'd1'
+      const vehicle = get().vehicles.find((v) => v.driverId === driverId) || get().vehicles[0]
+      const destName = payload.destination || 'SRI INDU Campus Main Gate'
+      const destLat = payload.destinationLat || 17.2063
+      const destLng = payload.destinationLng || 78.6015
+
+      const newRide = await api.createRide({
+        routeName: `Campus Route #${Math.floor(100 + Math.random() * 900)} [From ${payload.startLocation.name.split(',')[0].trim()}]`,
+        driverId,
+        vehicleId: vehicle?.id || 'v1',
+        startLocation: payload.startLocation.name,
+        startLocationLat: payload.startLocation.lat,
+        startLocationLng: payload.startLocation.lng,
+        currentLat: payload.startLocation.lat,
+        currentLng: payload.startLocation.lng,
+        destination: destName,
+        destinationLat: destLat,
+        destinationLng: destLng,
+        departureTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        capacity: vehicle?.capacity || 6,
+        bookedSeats: 0,
+        passengers: [],
+        status: 'active',
+        fare: 25,
+      })
+
+      set((state) => ({
+        rides: [newRide, ...state.rides.filter((r) => r.id !== newRide.id)],
+      }))
+
+      return newRide
+    } catch (err: any) {
+      console.error('[Store] createAndActivateRide error:', err.message)
+      throw err
+    }
+  },
+
   completeRide: async (rideId: string) => {
     try {
       const updated = await api.completeRide(rideId)
@@ -893,9 +1063,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   resolveSafetyEvent: async (eventId: string) => {
     try {
       const res = await api.resolveSafetyEvent(eventId)
-      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.event || res)
+      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
-        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? resolvedEvent : e)),
+        rides: state.rides.map((r) =>
+          resolvedEvent.rideId && r.id === resolvedEvent.rideId ? { ...r, hasDeviation: false, hasSosAlert: false } : r
+        ),
+        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...resolvedEvent, resolved: true, status: 'RESOLVED' } : e)),
         auditLogs: (res as any)?.auditLog ? [(res as any).auditLog, ...state.auditLogs] : state.auditLogs,
       }))
     } catch (err: any) {
@@ -933,16 +1106,88 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Safety Actions
-  triggerSOS: async (rideId: string, studentId: string) => {
+  triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
     try {
-      const event = await api.triggerSOS(rideId, studentId)
-      const normalized = normalizeSafetyEvent(event)
+      // Immediately start sounding loud siren alarm upon user gesture
+      sosAlarmPlayer.play().catch(() => {})
+
+      let payload: {
+        rideId?: string
+        userId?: string
+        lat?: number
+        lng?: number
+        emergencyPhone?: string
+        emergencyName?: string
+      } = {}
+
+      if (typeof params === 'string') {
+        payload = { rideId: params, userId: studentId || get().currentStudentId || get().currentUser?.id }
+      } else if (params && typeof params === 'object') {
+        payload = { ...params }
+        if (!payload.userId) {
+          payload.userId = get().role === 'driver' ? (get().currentDriverId || get().currentUser?.id) : (get().currentStudentId || get().currentUser?.id)
+        }
+      } else {
+        payload = {
+          userId: get().role === 'driver' ? (get().currentDriverId || get().currentUser?.id) : (get().currentStudentId || get().currentUser?.id)
+        }
+      }
+
+      const isDummy = (p?: string) =>
+        !p ||
+        p.replace(/\D/g, '').includes('9876543210') ||
+        p.replace(/\D/g, '').includes('9876543219') ||
+        p.replace(/\D/g, '').length < 10
+
+      // Auto-attach stored emergency contact if not explicitly provided or if payload has dummy fallback
+      const storeContact = get().emergencyContact
+      if ((!payload.emergencyPhone || isDummy(payload.emergencyPhone)) && storeContact?.phone) {
+        payload.emergencyPhone = storeContact.phone
+        payload.emergencyName = storeContact.name
+      }
+
+      const res = await api.triggerSOS(payload)
+      const eventData = res?.data || res
+      const normalized = normalizeSafetyEvent(eventData)
+
       set((state) => ({
-        rides: state.rides.map((r) => (r.id === rideId ? { ...r, hasSosAlert: true } : r)),
+        rides: state.rides.map((r) => (payload.rideId && r.id === payload.rideId ? { ...r, hasSosAlert: true } : r)),
         safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
       }))
+
+      return eventData
     } catch (err: any) {
       console.error('[Store] triggerSOS error:', err.message)
+      throw err
+    }
+  },
+
+  setEmergencyContact: (contact: EmergencyContact | null) => {
+    set({ emergencyContact: contact })
+  },
+
+  loadEmergencyContact: async () => {
+    const userId = get().currentUser?.id || get().currentStudentId || get().currentDriverId
+    if (!userId) return null
+    try {
+      const contact = await api.getEmergencyContact(userId)
+      set({ emergencyContact: contact || null })
+      return contact
+    } catch {
+      return null
+    }
+  },
+
+  acknowledgeSafetyEvent: async (eventId: string) => {
+    try {
+      const res = await api.acknowledgeSafetyEvent(eventId)
+      const acknowledged: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
+      set((state) => ({
+        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...acknowledged, status: 'ACKNOWLEDGED' } : e)),
+      }))
+    } catch (err: any) {
+      console.error('[Store] acknowledgeSafetyEvent error:', err.message)
+      throw err
     }
   },
 
@@ -960,7 +1205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   resolveDeviation: async (rideId: string, eventId: string) => {
     try {
       const res = await api.resolveSafetyEvent(eventId)
-      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.event || res)
+      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
         rides: state.rides.map((r) => (r.id === rideId ? { ...r, hasDeviation: false, hasSosAlert: false } : r)),
         safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? resolvedEvent : e)),

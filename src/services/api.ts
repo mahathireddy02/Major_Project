@@ -34,7 +34,13 @@ const getWsBase = () => {
   if ((import.meta as any).env?.VITE_WS_BASE_URL) {
     return (import.meta as any).env.VITE_WS_BASE_URL
   }
-  if (typeof window !== 'undefined' && window.location?.host) {
+  if (typeof window !== 'undefined' && window.location) {
+    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (isDev) {
+      // In local dev, connect directly to backend port 5000 to bypass Vite dev server proxy errors
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      return `${proto}//${window.location.hostname}:5000/realtime`
+    }
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     return `${proto}//${window.location.host}/realtime`
   }
@@ -225,6 +231,8 @@ class ApiClient {
     username?: string
     phone?: string
     password?: string
+    otp?: string
+    code?: string
     role?: string
     userId?: string
   }): Promise<{ user: any; token: string; role: string }> {
@@ -238,6 +246,35 @@ class ApiClient {
     if (res.token) {
       this.setToken(res.token)
       this.setAuth(res.user.id, res.role === 'DRIVER' ? res.user.id : this.driverId, res.token)
+    }
+    return res
+  }
+
+  // --- Twilio OTP Authentication ---
+  async sendOtp(phone: string): Promise<{ success: boolean; message: string; data?: any }> {
+    return this.request<{ success: boolean; message: string; data?: any }>(
+      '/auth/send-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ phone }),
+      }
+    )
+  }
+
+  async verifyOtp(
+    phone: string,
+    otp: string
+  ): Promise<{ success: boolean; message: string; data?: { verified: boolean; phone: string; user?: any; token?: string; role?: string } }> {
+    const res = await this.request<{ success: boolean; message: string; data?: { verified: boolean; phone: string; user?: any; token?: string; role?: string } }>(
+      '/auth/verify-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ phone, otp, code: otp }),
+      }
+    )
+    if (res?.data?.token && res?.data?.user) {
+      this.setToken(res.data.token)
+      this.setAuth(res.data.user.id, res.data.role === 'DRIVER' ? res.data.user.id : this.driverId, res.data.token)
     }
     return res
   }
@@ -573,12 +610,6 @@ class ApiClient {
     })
   }
 
-  async resolveSafetyEvent(eventId: string): Promise<{ event: SafetyEvent; auditLog: any }> {
-    return this.request<any>(`/dispatcher/safety-events/${eventId}/resolve`, {
-      method: 'POST',
-    })
-  }
-
   async getDispatcherAuditLog(): Promise<any[]> {
     return this.request<any[]>('/dispatcher/audit-log')
   }
@@ -589,24 +620,12 @@ class ApiClient {
     })
   }
 
-
   // --- Safety ---
-  async triggerSOS(rideId: string, userId: string): Promise<SafetyEvent> {
-    return this.request<SafetyEvent>('/safety/sos', {
-      method: 'POST',
-      body: JSON.stringify({ rideId, userId }),
-    })
-  }
-
   async triggerDeviation(rideId: string): Promise<any> {
     return this.request<any>('/safety/route-deviation', {
       method: 'POST',
       body: JSON.stringify({ rideId }),
     })
-  }
-
-  async getSafetyEvents(): Promise<SafetyEvent[]> {
-    return this.request<SafetyEvent[]>('/safety/events')
   }
 
   // --- Notifications ---
@@ -659,6 +678,10 @@ class ApiClient {
 
   async getRideBookings(rideId: string): Promise<any[]> {
     return this.request<any[]>(`/rides/bookings?rideId=${rideId}`)
+  }
+
+  async getRidePassengers(rideId: string): Promise<any[]> {
+    return this.request<any[]>(`/rides/${rideId}/passengers`)
   }
 
   // --- Emergency Contact ---
@@ -904,6 +927,42 @@ class ApiClient {
 
   async getFleetPricingMetrics(): Promise<{ success: boolean; data: FleetPricingMetrics }> {
     return this.request('/pricing/fleet-metrics')
+  }
+
+  // --- Safety & Emergency SOS ---
+  async triggerSOS(params: {
+    rideId?: string
+    userId?: string
+    lat?: number
+    lng?: number
+    emergencyPhone?: string
+    emergencyName?: string
+  }): Promise<any> {
+    return this.request('/safety/sos', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
+
+  async acknowledgeSafetyEvent(eventId: string): Promise<any> {
+    return this.request(`/safety/events/${eventId}/acknowledge`, {
+      method: 'POST',
+    })
+  }
+
+  async resolveSafetyEvent(eventId: string): Promise<any> {
+    return this.request(`/safety/events/${eventId}/resolve`, {
+      method: 'POST',
+    })
+  }
+
+  async getSafetyEvents(params?: { resolved?: boolean; status?: string; rideId?: string }): Promise<any[]> {
+    const searchParams = new URLSearchParams()
+    if (params?.resolved !== undefined) searchParams.set('resolved', String(params.resolved))
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.rideId) searchParams.set('rideId', params.rideId)
+    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    return this.request(`/safety/events${queryString}`)
   }
 }
 

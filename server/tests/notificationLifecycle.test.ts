@@ -300,9 +300,9 @@ describe('CampusFlow — Real-Time Ride Notification Lifecycle Test Suite', () =
     const driverNotifs = await fetchNotifications({ driverId: driverId, headers: { 'x-driver-id': driverId, 'x-user-id': driverId } })
     const allNotifs = await fetchNotifications({ all: true, headers: { 'x-user-id': 'admin1' } })
 
-    const studentNotif = studentNotifs.find((n) => n.rideId === testRideId && n.eventType === 'SOS_TRIGGERED')
-    const driverNotif = driverNotifs.find((n) => n.rideId === testRideId && n.eventType === 'SOS_TRIGGERED')
-    const dispatcherNotif = allNotifs.find((n) => n.rideId === testRideId && n.eventType === 'SOS_TRIGGERED')
+    const studentNotif = studentNotifs.find((n) => n.rideId === testRideId && (n.eventType === 'SOS_TRIGGERED' || n.eventType === 'STUDENT_SOS_TRIGGERED'))
+    const driverNotif = driverNotifs.find((n) => n.rideId === testRideId && (n.eventType === 'SOS_TRIGGERED' || n.eventType === 'STUDENT_SOS_TRIGGERED'))
+    const dispatcherNotif = allNotifs.find((n) => n.rideId === testRideId && (n.eventType === 'SOS_TRIGGERED' || n.eventType === 'STUDENT_SOS_TRIGGERED'))
 
     expect(studentNotif?.priority).toBe('CRITICAL')
     expect(driverNotif?.priority).toBe('CRITICAL')

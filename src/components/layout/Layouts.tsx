@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils'
 import Avatar from '../ui/Avatar'
 import Sidebar from './Sidebar'
 import BottomNav from './BottomNav'
+import { GlobalSosTriggerButton } from '../safety/GlobalSosModal'
 
 const driverTopNav = [
   { to: '/driver/dashboard',  icon: Home,  label: 'Dashboard' },
@@ -90,6 +91,9 @@ function DriverTopNavBar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* SOS Emergency Trigger */}
+      <GlobalSosTriggerButton size="sm" />
 
       {/* Notification Bell */}
       <div className="relative" ref={notifRef}>
@@ -290,6 +294,9 @@ function StudentTopNavBar() {
         <BookOpen size={14} />
         My Rides
       </NavLink>
+
+      {/* SOS Emergency Trigger */}
+      <GlobalSosTriggerButton size="sm" />
 
       {/* Notification Bell */}
       <div className="relative" ref={notifRef}>
