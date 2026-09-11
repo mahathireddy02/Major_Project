@@ -61,6 +61,20 @@ export default function DriverAuth() {
   const [signInPassword, setSignInPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Handle driving license input - exact 15 characters (2 state letters + 13 digits: SS00 YYYY 0000000)
+  const handleLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15)
+    let formatted = ''
+    if (raw.length <= 4) {
+      formatted = raw
+    } else if (raw.length <= 8) {
+      formatted = `${raw.slice(0, 4)} ${raw.slice(4)}`
+    } else {
+      formatted = `${raw.slice(0, 4)} ${raw.slice(4, 8)} ${raw.slice(8, 15)}`
+    }
+    setLicenseNo(formatted)
+  }
+
   // License File Upload — runs real Tesseract OCR via shared util
   const handleLicenseUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -580,12 +594,20 @@ export default function DriverAuth() {
                       type="text"
                       required
                       value={licenseNo}
-                      onChange={(e) => setLicenseNo(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''))}
+                      onChange={handleLicenseChange}
                       placeholder="TS09 2024 0087654"
-                      maxLength={20}
+                      maxLength={17}
                       className="input-field text-sm uppercase"
                     />
-                    <p className="text-[10px] text-slate-400 mt-0.5">Format: SS00 YYYY 0000000 (e.g. TS09 2024 0087654)</p>
+                    <div className="flex justify-between items-center text-[10px] mt-0.5">
+                      <span className="text-slate-400">Format: SS00 YYYY 0000000 (e.g. TS09 2024 0087654)</span>
+                      <span className={licenseNo.replace(/[^A-Z0-9]/g, '').length === 15 ? 'text-emerald-600 font-bold' : 'text-red-500 font-semibold'}>
+                        {licenseNo.replace(/[^A-Z0-9]/g, '').length}/15
+                      </span>
+                    </div>
+                    {licenseNo.replace(/[^A-Z0-9]/g, '').length > 0 && licenseNo.replace(/[^A-Z0-9]/g, '').length < 15 && (
+                      <p className="text-[10px] text-red-500 mt-0.5">Must be exactly 15 characters</p>
+                    )}
                   </div>
 
                   <div className="flex gap-2 pt-2">
@@ -595,16 +617,17 @@ export default function DriverAuth() {
                     <Button
                       size="md"
                       variant="primary"
-                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={licenseNo.replace(/[^A-Z0-9]/g, '').length !== 15}
                       onClick={() => {
                         const regClean = vehicleReg.replace(/\s/g, '')
                         if (!/^[A-Z]{2}[0-9]{2}[A-Z]{1,2}[0-9]{4}$/.test(regClean)) {
                           toast.error('Invalid registration number. Use format: TS 09 AB 1234')
                           return
                         }
-                        const dlClean = licenseNo.replace(/\s/g, '')
+                        const dlClean = licenseNo.replace(/[\s\-]/g, '')
                         if (!/^[A-Z]{2}[0-9]{2}[0-9]{4}[0-9]{7}$/.test(dlClean)) {
-                          toast.error('Invalid license number. Use format: TS09 2024 0087654')
+                          toast.error('Invalid license number. Must be exactly 15 characters (e.g. TS09 2024 0087654)')
                           return
                         }
                         setStep(3)
