@@ -44,7 +44,7 @@ export default function StudentFacultyAuth() {
   const [collegeEmail, setCollegeEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
-  const [gender, setGender] = useState<'Female' | 'Male' | 'Other' | 'Prefer not to say'>('Female')
+  const [gender, setGender] = useState<'' | 'Female' | 'Male' | 'Other' | 'Prefer not to say'>('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -208,7 +208,7 @@ export default function StudentFacultyAuth() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!fullName || !collegeEmail || !password) {
+    if (!fullName || !collegeEmail || !password || (userType === 'student' && !gender)) {
       toast.error('Please complete all required fields.')
       return
     }
@@ -283,6 +283,34 @@ export default function StudentFacultyAuth() {
     }
   }
 
+  // Reset all signup form state
+  const resetSignupForm = () => {
+    setStep(1)
+    setFullName('')
+    setRollNumber('')
+    setCollegeId('')
+    setCollegeName('')
+    setCollegeEmail('')
+    setPhone('')
+    setPassword('')
+    setGender('')
+    setConfirmPassword('')
+    setShowPassword(false)
+    setEmailChecked(false)
+    setEmailValid(false)
+    setEmailExists(false)
+    setDomainMessage('')
+    setDemoCode('')
+    setInputCode('')
+    setIsCodeVerified(false)
+    setIdCardFile(null)
+    setIdCardPreview(null)
+    setDetectedName('')
+    setDetectedCollege('')
+    setDetectedRoll('')
+    setOcrResult(null)
+  }
+
   // Quick Demo Login Handler
   const handleDemoStudentLogin = async (studentId: string) => {
     setLoading(true)
@@ -343,18 +371,20 @@ export default function StudentFacultyAuth() {
             <div className="flex bg-slate-100 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => setUserType('student')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${userType === 'student' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
+                onClick={() => { if (userType !== 'student') { setUserType('student'); resetSignupForm() } }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  userType === 'student' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                }`}
               >
                 <User size={13} />
                 Student
               </button>
               <button
                 type="button"
-                onClick={() => setUserType('faculty')}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${userType === 'faculty' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-                  }`}
+                onClick={() => { if (userType !== 'faculty') { setUserType('faculty'); resetSignupForm() } }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                  userType === 'faculty' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                }`}
               >
                 <GraduationCap size={13} />
                 Faculty
@@ -592,6 +622,7 @@ export default function StudentFacultyAuth() {
                       onChange={(e) => setGender(e.target.value as any)}
                       className="input-field text-sm font-medium text-slate-800"
                     >
+                      <option value="">Choose your gender</option>
                       <option value="Female">Female</option>
                       <option value="Male">Male</option>
                       <option value="Other">Other</option>
@@ -609,6 +640,7 @@ export default function StudentFacultyAuth() {
                       if (!collegeName.trim()) { toast.error('Please enter your college name.'); return }
                       const digits = phone.replace(/^\+91/, '')
                       if (digits.length !== 10) { toast.error('Enter a valid 10-digit mobile number.'); return }
+                      if (!gender) { toast.error('Please choose your gender.'); return }
                       setStep(2)
                     }}
                   >

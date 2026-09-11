@@ -548,6 +548,81 @@ export const extractStudentFields = async (
   }
 }
 
+// ─── Faculty ID Extraction ──────────────────────────────────────────────────
+
+export interface FacultyFields {
+  name: string
+  facultyId: string
+  college: string
+}
+
+const extractFacultyFromText = (text: string): FacultyFields => {
+  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+
+  // Name
+  let name = ''
+  for (const line of lines) {
+    const m = line.match(/(?:name|faculty\s*name|staff\s*name|dr\.|prof\.)\s*[:\-]\s*([A-Za-z][A-Za-z\s]{2,39})/i)
+    if (m) { name = m[1].trim(); break }
+  }
+  if (!name) name = lines.find(l => /^[A-Z][a-z]+(?:\s[A-Z][a-z]+)+$/.test(l) && !SKIP.test(l)) ?? ''
+  if (!name) name = lines.find(l => /^[A-Z]{2,}(?:\s[A-Z]{2,})+$/.test(l) && !SKIP.test(l)) ?? ''
+
+  // Faculty ID
+  let facultyId = ''
+  for (const line of lines) {
+    const m = line.match(/(?:faculty\s*id|staff\s*id|employee\s*(?:id|no)|emp(?:\s*no|\.?\s*id)?|fac(?:ulty)?[\s\-#]*(?:id|no))[.:\s#]*([A-Z0-9\-]{3,20})/i)
+    if (m) { facultyId = m[1].trim().toUpperCase(); break }
+  }
+  if (!facultyId) {
+    const fl = lines.find(l => /^FAC[-\s]?[0-9]{3,6}$|^EMP[-\s]?[0-9]{3,6}$|^[A-Z]{2,4}[-\s]?[0-9]{3,6}$/.test(l.replace(/\s/g, '').toUpperCase()))
+    if (fl) facultyId = fl.replace(/\s/g, '').toUpperCase()
+  }
+
+  // College
+  let college = ''
+  for (const line of lines) {
+    if (/college|university|institute|indu|engineering|technology|management|polytechnic/i.test(line) && line.length > 6) {
+      college = line.replace(/[^A-Za-z0-9\s&]/g, ' ').replace(/\s+/g, ' ').trim()
+      break
+    }
+  }
+
+  return { name, facultyId, college }
+}
+
+export const extractFacultyFields = async (processedUri: string): Promise<FacultyFields> => {
+  try {
+    const [nameRegionUri, idRegionUri] = await Promise.all([
+      cropROI(processedUri, 0, 0.2, 1, 0.35),
+      cropROI(processedUri, 0, 0.45, 1, 0.35),
+    ])
+    const [nameText, idText, fullText] = await Promise.all([
+      ocrRegion(nameRegionUri),
+      ocrRegion(idRegionUri),
+      ocrFull(processedUri),
+    ])
+
+    const fromFull = extractFacultyFromText(fullText)
+
+    const nameLines = nameText.split('\n').map(l => l.trim()).filter(l => l.length > 2 && !SKIP.test(l))
+    const roiName = nameLines.find(l => /^[A-Za-z][A-Za-z\s]{2,39}$/.test(l)) ?? ''
+
+    const idTokens = idText.replace(/\n/g, ' ').split(/\s+/)
+    const roiId = idTokens.find(t => /^FAC[-]?[0-9]{3,6}$|^EMP[-]?[0-9]{3,6}$|^[A-Z]{2,4}[-]?[0-9]{3,6}$/.test(t))?.toUpperCase() ?? ''
+    const idLabelMatch = idText.match(/(?:FAC|EMP|STAFF|FACULTY)[:\s#-]*([A-Z0-9\-]{3,15})/i)
+    const roiIdFinal = roiId || idLabelMatch?.[1]?.toUpperCase() || ''
+
+    return {
+      name: roiName || fromFull.name,
+      facultyId: roiIdFinal || fromFull.facultyId,
+      college: fromFull.college,
+    }
+  } catch {
+    return { name: '', facultyId: '', college: '' }
+  }
+}
+
 // ─── Driving License Extraction ─────────────────────────────────────────────
 
 export interface LicenseFields {
