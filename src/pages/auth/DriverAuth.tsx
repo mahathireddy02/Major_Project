@@ -10,6 +10,7 @@ import {
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
+import Badge from '../../components/ui/Badge'
 import toast from 'react-hot-toast'
 import { compressImage } from '../../lib/utils'
 
@@ -205,15 +206,19 @@ export default function DriverAuth() {
     }
   }
 
-  // Demo Driver Login
-  const handleDemoDriverLogin = async (driverId: string) => {
+  // Demo Driver Login (Uses real database credentials)
+  const handleDemoDriverLogin = async () => {
     setLoading(true)
     try {
-      await login({ userId: driverId, role: 'driver' })
-      toast.success('Logged in with demo driver profile')
+      const res = await login({
+        email: 'driver.demo@gmail.com',
+        password: 'campus2026',
+        role: 'driver',
+      })
+      toast.success(`Welcome back, Driver ${res.user?.name || 'Rahul'}!`)
       navigate('/driver/dashboard')
-    } catch {
-      toast.error('Driver login failed')
+    } catch (err: any) {
+      toast.error(err.message || 'Driver demo login failed')
     } finally {
       setLoading(false)
     }
@@ -354,24 +359,30 @@ export default function DriverAuth() {
                 <ArrowRight size={16} />
               </Button>
 
-              {/* Demo Drivers Selector */}
+              {/* Demo Driver 1-Click Button */}
               <div className="pt-4 mt-4 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick Demo Drivers (1-Click Test)
+                  ⚡ Quick 1-Click Demo Login (Real Database Account)
                 </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {drivers.slice(0, 4).map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => handleDemoDriverLogin(d.id)}
-                      className="p-2 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition-all text-xs"
-                    >
-                      <p className="font-bold text-slate-800 truncate">{d.name}</p>
-                      <p className="text-[10px] text-slate-400">{d.phone}</p>
-                    </button>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleDemoDriverLogin}
+                  disabled={loading}
+                  className="w-full p-3 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100 hover:border-emerald-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                      🚗
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-xs">Rahul Kumar (Demo Driver)</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">driver.demo@gmail.com</p>
+                    </div>
+                  </div>
+                  <Badge variant="green" size="sm" className="font-semibold">
+                    1-Click Sign In →
+                  </Badge>
+                </button>
               </div>
             </form>
           )}
@@ -861,6 +872,32 @@ export default function DriverAuth() {
                   </div>
                 </form>
               )}
+
+              {/* Demo Driver 1-Click Button (Sign Up Mode) */}
+              <div className="pt-5 mt-6 border-t border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                  ⚡ Quick 1-Click Demo Login (Skip Registration)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDemoDriverLogin}
+                  disabled={loading}
+                  className="w-full p-3 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100 hover:border-emerald-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                      🚗
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-xs">Rahul Kumar (Demo Driver)</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">driver.demo@gmail.com</p>
+                    </div>
+                  </div>
+                  <Badge variant="green" size="sm" className="font-semibold">
+                    1-Click Sign In →
+                  </Badge>
+                </button>
+              </div>
             </div>
           )}
         </Card>

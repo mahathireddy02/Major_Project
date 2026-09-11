@@ -322,15 +322,17 @@ export default function StudentFacultyAuth() {
     setOcrResult(null)
   }
 
-  // Quick Demo Login Handler
-  const handleDemoStudentLogin = async (studentId: string) => {
+  // Quick Demo Login Handler (Uses real database credentials)
+  const handleQuickDemoLogin = async (role: 'student' | 'faculty') => {
     setLoading(true)
+    const email = role === 'student' ? 'student.demo@sriindu.ac.in' : 'faculty.demo@sriindu.ac.in'
+    const password = 'campus2026'
     try {
-      await login({ userId: studentId })
-      toast.success('Logged in with demo student profile')
+      const res = await login({ email, password, role })
+      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Demo Student' : 'Demo Faculty')}!`)
       navigate('/student/home')
-    } catch {
-      toast.error('Login failed')
+    } catch (err: any) {
+      toast.error(err.message || 'Demo login failed')
     } finally {
       setLoading(false)
     }
@@ -486,24 +488,52 @@ export default function StudentFacultyAuth() {
                 <ArrowRight size={16} />
               </Button>
 
-              {/* Quick Demo Selector for Judges */}
+              {/* Quick 1-Click Demo Account for Evaluators */}
               <div className="pt-4 mt-4 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick Demo Student Accounts (1-Click Test)
+                  ⚡ Quick 1-Click Demo Login (Real Database Account)
                 </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {students.slice(0, 4).map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => handleDemoStudentLogin(s.id)}
-                      className="p-2 rounded-xl border border-slate-200 hover:border-primary-400 hover:bg-primary-50/40 text-left transition-all text-xs"
-                    >
-                      <p className="font-bold text-slate-800 truncate">{s.name}</p>
-                      <p className="text-[10px] text-slate-400">{s.studentId}</p>
-                    </button>
-                  ))}
-                </div>
+                {userType === 'student' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDemoLogin('student')}
+                    disabled={loading}
+                    className="w-full p-3 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/70 hover:bg-primary-100 hover:border-primary-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        🎓
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
+                        <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
+                      </div>
+                    </div>
+                    <Badge variant="blue" size="sm" className="font-semibold">
+                      1-Click Sign In →
+                    </Badge>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDemoLogin('faculty')}
+                    disabled={loading}
+                    className="w-full p-3 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/70 hover:bg-primary-100 hover:border-primary-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        👨‍🏫
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
+                        <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                      </div>
+                    </div>
+                    <Badge variant="blue" size="sm" className="font-semibold">
+                      1-Click Sign In →
+                    </Badge>
+                  </button>
+                )}
               </div>
             </form>
           )}
@@ -1030,6 +1060,54 @@ export default function StudentFacultyAuth() {
                   </div>
                 </form>
               )}
+
+              {/* Quick 1-Click Demo Login for Evaluators (Sign Up Mode) */}
+              <div className="pt-5 mt-6 border-t border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                  ⚡ Quick 1-Click Demo Login (Skip Registration)
+                </span>
+                {userType === 'student' ? (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDemoLogin('student')}
+                    disabled={loading}
+                    className="w-full p-3 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/70 hover:bg-primary-100 hover:border-primary-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        🎓
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
+                        <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
+                      </div>
+                    </div>
+                    <Badge variant="blue" size="sm" className="font-semibold">
+                      1-Click Sign In →
+                    </Badge>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickDemoLogin('faculty')}
+                    disabled={loading}
+                    className="w-full p-3 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/70 hover:bg-primary-100 hover:border-primary-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-primary-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                        👨‍🏫
+                      </div>
+                      <div>
+                        <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
+                        <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                      </div>
+                    </div>
+                    <Badge variant="blue" size="sm" className="font-semibold">
+                      1-Click Sign In →
+                    </Badge>
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </Card>
