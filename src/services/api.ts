@@ -757,11 +757,13 @@ class ApiClient {
     destinationLng: number
     seats?: number
     rideId?: string
-  }): Promise<{ success: boolean; data: FareEstimateResult }> {
-    return this.request('/pricing/estimate', {
+  }): Promise<FareEstimateResult & { success: boolean; data: FareEstimateResult }> {
+    const res: any = await this.request('/pricing/estimate', {
       method: 'POST',
       body: JSON.stringify(params),
     })
+    const payload = (res?.data || res) as FareEstimateResult
+    return Object.assign(payload, { success: true, data: payload })
   }
 
   async calculateFare(params: {
@@ -775,10 +777,12 @@ class ApiClient {
     seats?: number
     rideId: string
   }): Promise<{ success: boolean; data: any }> {
-    return this.request('/pricing/calculate', {
+    const res: any = await this.request('/pricing/calculate', {
       method: 'POST',
       body: JSON.stringify(params),
     })
+    const payload = res?.data || res
+    return Object.assign(payload, { success: true, data: payload })
   }
 
   async recalculateFare(params: {
@@ -786,46 +790,24 @@ class ApiClient {
     reason?: string
     forceAdjustAmount?: number
   }): Promise<{ success: boolean; data: any }> {
-    return this.request('/pricing/recalculate', {
+    const res: any = await this.request('/pricing/recalculate', {
       method: 'POST',
       body: JSON.stringify(params),
     })
+    const payload = res?.data || res
+    return Object.assign(payload, { success: true, data: payload })
   }
 
-  async getBookingFare(bookingId: string): Promise<{ success: boolean; data: RideFare }> {
-    return this.request(`/pricing/booking/${bookingId}`)
+  async getBookingFare(bookingId: string): Promise<any> {
+    const res: any = await this.request(`/pricing/booking/${bookingId}`)
+    const payload = res?.data || res
+    return Object.assign(payload, { success: true, data: payload })
   }
 
-  async getRideFares(rideId: string): Promise<{
-    success: boolean
-    data: {
-      rideId: string
-      routeName: string
-      vehicleId: string
-      capacity: number
-      bookedSeats: number
-      totalRevenue: number
-      averageFare: number
-      totalSharedSavings: number
-      passengers: Array<{
-        bookingId: string
-        studentId: string
-        studentName: string
-        pickup: string
-        destination: string
-        seats: number
-        fare: number
-        fareBreakdown?: any
-        isLocked: boolean
-        calculationStatus: string
-        distanceKm?: number
-        durationMinutes?: number
-        sharedSavings: number
-        routeOverlapPercent: number
-      }>
-    }
-  }> {
-    return this.request(`/pricing/ride/${rideId}`)
+  async getRideFares(rideId: string): Promise<any> {
+    const res: any = await this.request(`/pricing/ride/${rideId}`)
+    const payload = res?.data || res
+    return Object.assign(payload, { success: true, data: payload })
   }
 
   async getRidePricingEvents(rideId: string): Promise<{ success: boolean; data: PricingEvent[] }> {
