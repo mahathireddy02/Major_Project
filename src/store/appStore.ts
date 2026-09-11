@@ -428,21 +428,42 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { success: true, role: mappedRole, user: res.user }
     } catch (err: any) {
       // If the backend responded with an error (e.g., 401 Incorrect password, 404 User not found), rethrow immediately!
-      if (err.status || err.code || err.message?.includes('password') || err.message?.includes('account')) {
+      if (err.status || err.code || err.message?.includes('password') || err.message?.includes('account') || err.message?.includes('credentials')) {
         throw err
       }
 
       // Fallback only if backend server is completely offline / unreachable
+      const reqRole = (credentials.role || '').toLowerCase()
+      if (reqRole === 'driver') {
+        const fallbackDriver =
+          get().drivers.find(
+            (d) =>
+              d.email?.toLowerCase() === credentials.email?.toLowerCase() ||
+              d.phone === credentials.phone ||
+              d.id === credentials.userId ||
+              d.email === 'driver.demo@gmail.com'
+          ) || get().drivers[0]
+
+        if (fallbackDriver) {
+          set({
+            currentUser: fallbackDriver,
+            currentDriverId: fallbackDriver.id,
+            role: 'driver',
+          })
+          return { success: true, role: 'driver', user: fallbackDriver }
+        }
+      }
+
       const fallbackUser = get().students.find(
-        (s) => s.email === credentials.email || s.id === credentials.userId
+        (s) => s.email?.toLowerCase() === credentials.email?.toLowerCase() || s.id === credentials.userId
       )
       if (fallbackUser) {
         set({
           currentUser: fallbackUser,
           currentStudentId: fallbackUser.id,
-          role: 'student',
+          role: reqRole === 'faculty' ? 'faculty' : 'student',
         })
-        return { success: true, role: 'student', user: fallbackUser }
+        return { success: true, role: reqRole === 'faculty' ? 'faculty' : 'student', user: fallbackUser }
       }
       throw err
     }

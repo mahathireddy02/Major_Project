@@ -63,7 +63,7 @@ export default function DriverAuth() {
   const [isScanning, setIsScanning] = useState(false)
 
   // Sign In Fields
-  const [signInPhone, setSignInPhone] = useState('')
+  const [signInCredential, setSignInCredential] = useState('')
   const [signInPassword, setSignInPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -181,8 +181,9 @@ export default function DriverAuth() {
   // Sign In Driver
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!signInPhone || signInPhone.length !== 10) {
-      toast.error('Please enter a valid 10-digit mobile number.')
+    const credential = signInCredential.trim()
+    if (!credential) {
+      toast.error('Please enter your registered email or mobile number.')
       return
     }
     if (!signInPassword) {
@@ -191,9 +192,12 @@ export default function DriverAuth() {
     }
     setLoading(true)
     try {
+      const isEmail = credential.includes('@')
+      const digits = credential.replace(/\D/g, '')
       const res = await login({
-        phone: '+91' + signInPhone,
-        email: '+91' + signInPhone,
+        email: isEmail ? credential.toLowerCase() : undefined,
+        phone: !isEmail ? (digits.length === 10 ? `+91 ${digits.slice(0, 5)} ${digits.slice(5)}` : credential) : undefined,
+        username: credential,
         password: signInPassword,
         role: 'driver',
       })
@@ -303,25 +307,19 @@ export default function DriverAuth() {
             <form onSubmit={handleSignIn} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Registered Phone Number
+                  Registered Email or Mobile Number
                 </label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 bg-slate-100 border border-r-0 border-slate-300 rounded-l-xl text-sm font-semibold text-slate-600 select-none">
-                    🇮🇳 +91
-                  </span>
+                <div className="relative">
+                  <User size={16} className="absolute left-3 top-3 text-slate-400" />
                   <input
-                    type="tel"
+                    type="text"
                     required
-                    maxLength={10}
-                    value={signInPhone}
-                    onChange={(e) => setSignInPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="9988776655"
-                    className="input-field rounded-l-none text-sm flex-1"
+                    value={signInCredential}
+                    onChange={(e) => setSignInCredential(e.target.value)}
+                    placeholder="driver.demo@gmail.com or 9988776655"
+                    className="input-field pl-9 text-sm"
                   />
                 </div>
-                {signInPhone.length > 0 && signInPhone.length < 10 && (
-                  <p className="text-[10px] text-red-500 mt-0.5">Must be exactly 10 digits</p>
-                )}
               </div>
 
               <div>

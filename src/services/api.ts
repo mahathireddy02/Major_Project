@@ -20,8 +20,29 @@ import type {
 } from '../types'
 
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || 'http://localhost:5000/api'
-const WS_BASE = ((import.meta as any).env?.VITE_WS_BASE_URL as string) || 'ws://localhost:5000/realtime'
+const getApiBase = () => {
+  if ((import.meta as any).env?.VITE_API_BASE_URL) {
+    return (import.meta as any).env.VITE_API_BASE_URL
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return '/api'
+  }
+  return 'http://127.0.0.1:5000/api'
+}
+
+const getWsBase = () => {
+  if ((import.meta as any).env?.VITE_WS_BASE_URL) {
+    return (import.meta as any).env.VITE_WS_BASE_URL
+  }
+  if (typeof window !== 'undefined' && window.location?.host) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}/realtime`
+  }
+  return 'ws://127.0.0.1:5000/realtime'
+}
+
+const API_BASE = getApiBase()
+const WS_BASE = getWsBase()
 
 class ApiClient {
   private userId: string = 's1'
