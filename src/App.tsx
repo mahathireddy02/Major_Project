@@ -52,6 +52,7 @@ import StudentsManagement from './pages/admin/StudentsManagement'
 import FacultyManagement from './pages/admin/FacultyManagement'
 import DriversManagement from './pages/admin/DriversManagement'
 import ChatBot from './components/chat/ChatBot'
+import { EmergencyAlarmBanner } from './components/safety/EmergencyAlarmBanner'
 
 function RoleSwitcher() {
   const navigate = useNavigate()
@@ -129,6 +130,7 @@ export default function App() {
         }}
       />
       <RoleSwitcher />
+      <EmergencyAlarmBanner />
       <ChatBot />
 
       <Routes>
