@@ -25,6 +25,7 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'server/tests/notificationLifecycle.test.ts', 'server/tests/pricingEngine.test.ts'],
+    exclude: ['server/tests/e2e.test.ts', 'node_modules/**'],
   },
 })

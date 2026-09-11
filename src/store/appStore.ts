@@ -173,8 +173,14 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       // Listen to real-time events from Fastify backend
       api.onRealtimeEvent((event, payload) => {
-        console.log('[Store] Realtime event received:', event, payload)
-        if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
+        if (event === 'NOTIFICATION_ADDED' && payload) {
+          const notif = payload.notification || payload
+          if (notif && notif.id) {
+            set((state) => ({
+              notifications: [notif, ...state.notifications.filter((n) => n.id !== notif.id)],
+            }))
+          }
+        } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
           const isCompleted = event === 'RIDE_COMPLETED' || payload.ride.status === 'completed'
           set((state) => ({
             rides: state.rides.some((r) => r.id === payload.ride.id)

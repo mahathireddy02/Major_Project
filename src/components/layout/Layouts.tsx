@@ -19,6 +19,7 @@ function DriverTopNavBar() {
   const currentDriver = useAppStore((s) => s.currentDriver())
   const notifications = useAppStore((s) => s.notifications)
   const currentDriverId = useAppStore((s) => s.currentDriverId)
+  const markNotificationRead = useAppStore((s) => s.markNotificationRead)
   const markAllRead = useAppStore((s) => s.markAllRead)
   const userName = currentDriver?.name ?? 'Driver'
   const [open, setOpen] = useState(false)
@@ -29,9 +30,10 @@ function DriverTopNavBar() {
   // Driver-relevant notifications
   const driverNotifs = notifications.filter((n) =>
     n.driverId === currentDriverId ||
+    n.userId === currentDriverId ||
     (n as any).role === 'driver' ||
-    ['ride_request', 'passenger_joined', 'passenger_cancelled', 'ride_assigned', 'sos', 'deviation', 'trip_update'].includes(n.type)
-  ).slice(0, 20)
+    (n as any).targetRole === 'DRIVER'
+  ).slice(0, 30)
   const unread = driverNotifs.filter((n) => !n.read).length
 
   useEffect(() => {
@@ -96,22 +98,46 @@ function DriverTopNavBar() {
         </button>
 
         {notifOpen && (
-          <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-              <p className="text-xs font-bold text-slate-900">Notifications</p>
+          <div className="absolute right-0 top-full mt-2 w-84 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+              <p className="text-xs font-bold text-slate-900">Driver Notifications ({driverNotifs.length})</p>
               {unread > 0 && (
                 <button onClick={() => markAllRead()} className="text-[10px] text-emerald-600 font-semibold hover:underline">Mark all read</button>
               )}
             </div>
-            <div className="max-h-80 overflow-y-auto">
+            <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
               {driverNotifs.length === 0 ? (
                 <div className="px-4 py-6 text-center text-xs text-slate-400">No notifications yet</div>
               ) : (
                 driverNotifs.map((n) => (
-                  <div key={n.id} className={`px-4 py-3 border-b border-slate-50 last:border-0 ${!n.read ? 'bg-emerald-50/40' : ''}` }>
-                    <p className={`text-xs font-semibold ${!n.read ? 'text-slate-900' : 'text-slate-600'}`}>{n.title}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{n.message}</p>
-                    <p className="text-[10px] text-slate-300 mt-1">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  <div
+                    key={n.id}
+                    onClick={() => {
+                      markNotificationRead(n.id)
+                      if (n.rideId) navigate('/driver/trip')
+                    }}
+                    className={cn(
+                      'px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50',
+                      !n.read ? (n.priority === 'CRITICAL' ? 'bg-rose-50/70' : 'bg-emerald-50/40') : ''
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={cn('text-xs font-semibold truncate', !n.read ? 'text-slate-900' : 'text-slate-600')}>
+                        {n.title}
+                      </p>
+                      {n.priority === 'CRITICAL' && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-red-100 text-red-700 border border-red-200 flex-shrink-0 animate-pulse">
+                          CRITICAL
+                        </span>
+                      )}
+                      {n.priority === 'IMPORTANT' && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0">
+                          ALERT
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{n.message}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 ))
               )}
@@ -143,7 +169,6 @@ function DriverTopNavBar() {
               { icon: Clock,       label: 'Trip History',   to: '/driver/profile?tab=history' },
               { icon: Users,       label: 'Passengers',     to: '/driver/passengers' },
               { icon: DollarSign,  label: 'My Earnings',    to: '/driver/dashboard' },
-              { icon: Settings,    label: 'Settings',       to: '/driver/profile' },
             ].map(({ icon: Icon, label, to }) => (
               <button
                 key={label}
@@ -177,6 +202,7 @@ function StudentTopNavBar() {
   const currentStudent = useAppStore((s) => s.currentStudent())
   const notifications = useAppStore((s) => s.notifications)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
+  const markNotificationRead = useAppStore((s) => s.markNotificationRead)
   const markAllRead = useAppStore((s) => s.markAllRead)
   const userName = currentStudent?.name ?? 'Student'
   const [open, setOpen] = useState(false)
@@ -184,7 +210,13 @@ function StudentTopNavBar() {
   const ref = useRef<HTMLDivElement>(null)
   const notifRef = useRef<HTMLDivElement>(null)
 
-  const studentNotifs = notifications.filter((n) => n.studentId === currentStudentId).slice(0, 20)
+  const studentNotifs = notifications.filter((n) =>
+    n.studentId === currentStudentId ||
+    n.userId === currentStudentId ||
+    (n as any).role === 'student' ||
+    (n as any).role === 'faculty' ||
+    (n as any).targetRole === 'STUDENT'
+  ).slice(0, 30)
   const unread = studentNotifs.filter((n) => !n.read).length
 
   useEffect(() => {
@@ -254,22 +286,46 @@ function StudentTopNavBar() {
           )}
         </button>
         {notifOpen && (
-          <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
-              <p className="text-xs font-bold text-slate-900">Notifications</p>
+          <div className="absolute right-0 top-full mt-2 w-84 bg-white rounded-2xl shadow-xl border border-slate-200 z-50 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/50">
+              <p className="text-xs font-bold text-slate-900">Notifications ({studentNotifs.length})</p>
               {unread > 0 && (
                 <button onClick={() => markAllRead()} className="text-[10px] text-primary-600 font-semibold hover:underline">Mark all read</button>
               )}
             </div>
-            <div className="max-h-80 overflow-y-auto">
+            <div className="max-h-80 overflow-y-auto divide-y divide-slate-50">
               {studentNotifs.length === 0 ? (
                 <div className="px-4 py-6 text-center text-xs text-slate-400">No notifications yet</div>
               ) : (
                 studentNotifs.map((n) => (
-                  <div key={n.id} className={`px-4 py-3 border-b border-slate-50 last:border-0 ${!n.read ? 'bg-primary-50/40' : ''}`}>
-                    <p className={`text-xs font-semibold ${!n.read ? 'text-slate-900' : 'text-slate-600'}`}>{n.title}</p>
-                    <p className="text-[11px] text-slate-400 mt-0.5">{n.message}</p>
-                    <p className="text-[10px] text-slate-300 mt-1">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  <div
+                    key={n.id}
+                    onClick={() => {
+                      markNotificationRead(n.id)
+                      if (n.rideId) navigate(`/student/rides`)
+                    }}
+                    className={cn(
+                      'px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50',
+                      !n.read ? (n.priority === 'CRITICAL' ? 'bg-rose-50/70' : 'bg-primary-50/40') : ''
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className={cn('text-xs font-semibold truncate', !n.read ? 'text-slate-900' : 'text-slate-600')}>
+                        {n.title}
+                      </p>
+                      {n.priority === 'CRITICAL' && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-red-100 text-red-700 border border-red-200 flex-shrink-0 animate-pulse">
+                          CRITICAL
+                        </span>
+                      )}
+                      {n.priority === 'IMPORTANT' && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0">
+                          ALERT
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{n.message}</p>
+                    <p className="text-[10px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                   </div>
                 ))
               )}

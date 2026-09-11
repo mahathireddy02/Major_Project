@@ -11,6 +11,7 @@ import type { FareEstimateResult } from '../../types';
 import LocationSearchInput from '../../components/booking/LocationSearchInput';
 import { MapLocationPickerModal } from '../../components/booking/MapLocationPickerModal';
 import { DepartureTimeSelector, getCurrentRealTime } from '../../components/booking/DepartureTimeSelector';
+import SeatsSelector from '../../components/booking/SeatsSelector';
 import { PlaceResult, geocodingService } from '../../services/geocoding';
 import toast from 'react-hot-toast';
 
@@ -458,32 +459,11 @@ const BookRide: React.FC = () => {
           />
 
           {/* Seats */}
-          <div>
-            <label className="block text-sm font-semibold text-slate-700 mb-1.5">
-              <span className="flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-purple-500" />
-                Number of Seats
-              </span>
-            </label>
-            <div className="grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setSeats(n)}
-                  className={`py-3 rounded-xl text-sm font-bold border-2 transition-all ${
-                    seats === n
-                      ? 'bg-purple-600 border-purple-600 text-white shadow-md'
-                      : 'bg-white border-slate-200 text-slate-600 hover:border-purple-300 hover:text-purple-600'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
-            <p className="text-xs text-slate-400 mt-1.5">
-              {seats === 1 ? 'Seat for yourself' : `${seats} seats needed`}
-            </p>
-          </div>
+          <SeatsSelector
+            value={seats}
+            onChange={(val) => setSeats(val)}
+            label="Number of Seats"
+          />
 
           {/* Notes */}
           <div>

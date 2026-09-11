@@ -1,7 +1,9 @@
 import { useAppStore } from '../../store/appStore'
-import { Bell, CheckCheck, MapPin, Car, Shield, Zap, Gift } from 'lucide-react'
+import {
+  Bell, CheckCheck, MapPin, Car, Shield, Zap, Gift,
+  Navigation, Clock, XCircle, RefreshCw, AlertTriangle, Route
+} from 'lucide-react'
 import { cn, formatDate } from '../../lib/utils'
-import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import { useNavigate } from 'react-router-dom'
 
@@ -12,6 +14,16 @@ const iconMap: Record<string, any> = {
   safety: Shield,
   system: Bell,
   promo: Gift,
+  trip: Navigation,
+  request: Clock,
+  boarding: CheckCheck,
+  dropped: CheckCheck,
+  cancelled: XCircle,
+  route: Route,
+  sos: AlertTriangle,
+  emergency: AlertTriangle,
+  alert: AlertTriangle,
+  reassigned: RefreshCw,
 }
 
 const variantMap: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'slate' | 'purple'> = {
@@ -21,6 +33,16 @@ const variantMap: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'slate' |
   safety:  'red',
   system:  'slate',
   promo:   'purple',
+  trip:    'blue',
+  request: 'yellow',
+  boarding:'green',
+  dropped: 'green',
+  cancelled:'red',
+  route:   'blue',
+  sos:     'red',
+  emergency:'red',
+  alert:   'red',
+  reassigned:'yellow',
 }
 
 export default function Notifications() {
@@ -30,7 +52,13 @@ export default function Notifications() {
   const markNotificationRead = useAppStore((s) => s.markNotificationRead)
   const markAllRead = useAppStore((s) => s.markAllRead)
 
-  const myNotifs = notifications.filter((n) => n.studentId === currentStudentId)
+  const myNotifs = notifications.filter((n) =>
+    n.studentId === currentStudentId ||
+    n.userId === currentStudentId ||
+    (n as any).role === 'student' ||
+    (n as any).role === 'faculty' ||
+    (n as any).targetRole === 'STUDENT'
+  )
   const unread = myNotifs.filter((n) => !n.read).length
 
   return (
@@ -63,31 +91,52 @@ export default function Notifications() {
           {myNotifs.map((notif) => {
             const Icon = iconMap[notif.type] ?? Bell
             const variant = variantMap[notif.type] ?? 'slate'
+            const isCritical = notif.priority === 'CRITICAL' || notif.type === 'emergency' || notif.type === 'sos'
+            const isImportant = notif.priority === 'IMPORTANT'
+
             return (
               <div
                 key={notif.id}
                 onClick={() => {
                   markNotificationRead(notif.id)
-                  if (notif.rideId) navigate(`/student/ride/${notif.rideId}`)
+                  if (notif.rideId) navigate(`/student/rides`)
                 }}
                 className={cn(
                   'flex gap-3 p-4 rounded-xl border cursor-pointer transition-all duration-150',
-                  notif.read
+                  isCritical
+                    ? 'bg-rose-50/80 border-rose-300 hover:border-rose-400 shadow-xs'
+                    : notif.read
                     ? 'bg-white border-slate-200 hover:border-slate-300'
                     : 'bg-primary-50 border-primary-200 hover:border-primary-300'
                 )}
               >
                 <div className={cn(
                   'w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5',
-                  notif.read ? 'bg-slate-100' : 'bg-primary-100'
+                  isCritical
+                    ? 'bg-rose-100 text-rose-700'
+                    : notif.read
+                    ? 'bg-slate-100 text-slate-500'
+                    : 'bg-primary-100 text-primary-600'
                 )}>
-                  <Icon size={16} className={notif.read ? 'text-slate-500' : 'text-primary-600'} />
+                  <Icon size={16} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-start justify-between gap-2">
-                    <p className={cn('text-sm font-semibold', notif.read ? 'text-slate-700' : 'text-slate-900')}>
-                      {notif.title}
-                    </p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className={cn('text-sm font-semibold', notif.read ? 'text-slate-700' : 'text-slate-900')}>
+                        {notif.title}
+                      </p>
+                      {isCritical && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-red-100 text-red-700 border border-red-200 flex-shrink-0 animate-pulse">
+                          CRITICAL
+                        </span>
+                      )}
+                      {isImportant && (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0">
+                          ALERT
+                        </span>
+                      )}
+                    </div>
                     {!notif.read && <div className="w-2 h-2 rounded-full bg-primary-500 flex-shrink-0 mt-1.5" />}
                   </div>
                   <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{notif.message}</p>

@@ -251,15 +251,19 @@ export interface Booking {
 
 export interface Notification {
   id: string
-  studentId: string
+  studentId?: string
   driverId?: string
   userId?: string
-  type: 'match' | 'full' | 'arriving' | 'safety' | 'system' | 'promo' | string
+  role?: string
+  priority?: 'NORMAL' | 'IMPORTANT' | 'CRITICAL'
+  type: 'match' | 'full' | 'arriving' | 'safety' | 'system' | 'promo' | 'trip' | 'request' | 'boarding' | 'dropped' | 'cancelled' | 'route' | 'sos' | 'alert' | 'emergency' | 'delay' | 'reassigned' | string
   title: string
   message: string
   read: boolean
   createdAt: string
   rideId?: string
+  eventType?: string
+  metadata?: Record<string, any>
 }
 
 export interface SafetyEvent {

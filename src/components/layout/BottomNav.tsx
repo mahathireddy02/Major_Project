@@ -6,14 +6,18 @@ import { useAppStore } from '../../store/appStore'
 const navItems = [
   { to: '/student/home',          icon: Home,       label: 'Home' },
   { to: '/student/rides',         icon: BookOpen,   label: 'My Rides' },
-  { to: '/student/notifications', icon: Bell,       label: '' },
+  { to: '/student/notifications', icon: Bell,       label: 'Alerts' },
   { to: '/student/profile',       icon: User,       label: 'Profile' },
 ]
 
 export default function BottomNav() {
   const notifications = useAppStore((s) => s.notifications)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
-  const unread = notifications.filter((n) => n.studentId === currentStudentId && !n.read).length
+  const unread = notifications.filter(
+    (n) =>
+      (n.studentId === currentStudentId || n.userId === currentStudentId || (n as any).targetRole === 'STUDENT') &&
+      !n.read
+  ).length
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-slate-200 safe-area-bottom">

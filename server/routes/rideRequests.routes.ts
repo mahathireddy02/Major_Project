@@ -1,7 +1,9 @@
 import { FastifyPluginAsync } from 'fastify'
 import { RideRequestModel } from '../models/RideRequest.js'
 import { RideModel } from '../models/Ride.js'
+import { UserModel } from '../models/User.js'
 import { matchingService } from '../services/matchingService.js'
+import { notificationService } from '../services/notificationService.js'
 
 export const rideRequestRoutes: FastifyPluginAsync = async (fastify) => {
   // Create ride request and evaluate matches
@@ -19,6 +21,8 @@ export const rideRequestRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const userId = body.userId || (request.headers['x-user-id'] as string) || 's1'
+    const student = await UserModel.findOne({ id: userId })
+    const studentName = student?.name || 'Student'
 
     // Extract pickup details cleanly without dummy fallbacks
     let pName = typeof body.pickup === 'string' ? body.pickup : body.pickup?.name || 'Selected Location'
@@ -60,6 +64,17 @@ export const rideRequestRoutes: FastifyPluginAsync = async (fastify) => {
       status: 'SEARCHING',
     })
 
+    // Central Notification: Ride Request Created
+    await notificationService.notifyRideEvent('RIDE_REQUEST_CREATED', {
+      studentId: userId,
+      studentName,
+      pickup: pName,
+      destination: dName,
+      time: body.time,
+      seats: seatsRequested,
+      metadata: { requestId: reqId },
+    })
+
     // Query active rides from MongoDB
     const activeRides = await RideModel.find({
       status: { $in: ['waiting', 'boarding', 'active'] },
@@ -84,6 +99,20 @@ export const rideRequestRoutes: FastifyPluginAsync = async (fastify) => {
       rideRequest.status = 'MATCHED'
       rideRequest.matchedRideId = matches[0].rideId
       await rideRequest.save()
+
+      const matchedRide = activeRides.find((r) => r.id === matches[0].rideId)
+      if (matchedRide) {
+        await notificationService.notifyRideEvent('RIDE_MATCHED', {
+          rideId: matchedRide.id,
+          routeName: matchedRide.routeName,
+          driverId: matchedRide.driverId,
+          studentId: userId,
+          studentName,
+          pickup: pName,
+          destination: dName,
+          departureTime: matchedRide.departureTime,
+        })
+      }
     }
 
     return {

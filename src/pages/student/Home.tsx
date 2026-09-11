@@ -12,6 +12,7 @@ import { routingService } from '../../services/routing/routingService'
 import LocationSearchInput from '../../components/booking/LocationSearchInput'
 import { MapLocationPickerModal } from '../../components/booking/MapLocationPickerModal'
 import { DepartureTimeSelector, getCurrentRealTime } from '../../components/booking/DepartureTimeSelector'
+import SeatsSelector from '../../components/booking/SeatsSelector'
 import { PlaceResult, geocodingService } from '../../services/geocoding'
 import toast from 'react-hot-toast'
 
@@ -80,9 +81,7 @@ export default function Home() {
   const [pickupPlace, setPickupPlace] = useState<PlaceResult | null>(DEFAULT_PICKUP)
   const [destinationPlace, setDestinationPlace] = useState<PlaceResult | null>(null)
   const [time, setTime] = useState<string>(() => getCurrentRealTime())
-  const [seats, setSeats] = useState(1)
-  const [customSeats, setCustomSeats] = useState(false)
-  const [customSeatsInput, setCustomSeatsInput] = useState('')
+  const [seats, setSeats] = useState<number>(1)
   const [genderPreference, setGenderPreference] = useState<'ANYONE' | 'FEMALE_ONLY'>('ANYONE')
   const [routeMetrics, setRouteMetrics] = useState<{ distance: string; duration: string } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -414,45 +413,10 @@ export default function Home() {
               error={errors.time}
             />
 
-            <div>
-              <label className="text-xs font-semibold text-slate-600 block mb-1.5 flex items-center gap-1">
-                <Users size={13} className="text-slate-400" />
-                Seats Needed
-              </label>
-              {!customSeats ? (
-                <select
-                  value={seats}
-                  onChange={(e) => {
-                    if (e.target.value === 'CUSTOM') { setCustomSeats(true); return }
-                    setSeats(Number(e.target.value))
-                  }}
-                  className="input-field cursor-pointer text-sm py-2 w-full"
-                >
-                  {[1,2,3,4].map((n) => (
-                    <option key={n} value={n}>{n} seat{n > 1 ? 's' : ''}</option>
-                  ))}
-                  <option value="CUSTOM">✏️ Enter custom number...</option>
-                </select>
-              ) : (
-                <div className="flex items-center gap-2 bg-blue-50/50 p-2.5 rounded-xl border border-blue-200">
-                  <input
-                    type="number"
-                    min={1}
-                    max={20}
-                    autoFocus
-                    value={customSeatsInput}
-                    onChange={(e) => {
-                      setCustomSeatsInput(e.target.value)
-                      const val = parseInt(e.target.value)
-                      if (!isNaN(val) && val >= 1) setSeats(val)
-                    }}
-                    className="input-field text-sm py-2 flex-1 text-center"
-                    placeholder="Enter seats (1–20)"
-                  />
-                  <button type="button" onClick={() => { setCustomSeats(false); setCustomSeatsInput('') }} className="text-[11px] text-slate-500 underline hover:text-slate-800 cursor-pointer whitespace-nowrap">Back</button>
-                </div>
-              )}
-            </div>
+            <SeatsSelector
+              value={seats}
+              onChange={(val) => setSeats(val)}
+            />
           </div>
 
           {/* Passenger Preference */}

@@ -7,6 +7,7 @@ import {
 import { useAppStore } from '../../store/appStore'
 import Avatar from '../ui/Avatar'
 import Badge from '../ui/Badge'
+import { cn } from '../../lib/utils'
 
 interface DispatcherHeaderProps {
   title: string
@@ -30,14 +31,24 @@ export default function DispatcherHeader({
   const rides = useAppStore((s) => s.rides)
   const bookings = useAppStore((s) => s.bookings)
   const safetyEvents = useAppStore((s) => s.safetyEvents)
+  const notifications = useAppStore((s) => s.notifications)
+  const markNotificationRead = useAppStore((s) => s.markNotificationRead)
+  const markAllRead = useAppStore((s) => s.markAllRead)
   const currentUser = useAppStore((s) => s.currentUser)
   const adminUser = useAppStore((s) => s.adminUser)
 
   const [globalSearch, setGlobalSearch] = useState('')
   const [searchFocused, setSearchFocused] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
   const searchRef = useRef<HTMLDivElement>(null)
+  const notifRef = useRef<HTMLDivElement>(null)
 
   const activeAlertsCount = safetyEvents.filter((e) => !e.resolved).length
+
+  // Dispatcher-relevant operational notifications across entire CampusFlow network
+  const dispatcherNotifs = notifications.slice(0, 50)
+
+  const unreadNotifsCount = dispatcherNotifs.filter((n) => !n.read).length
 
   // Global search filtering across all entities
   const searchResults = useMemo(() => {
@@ -90,11 +101,14 @@ export default function DispatcherHeader({
     }
   }, [globalSearch, students, drivers, vehicles, rides])
 
-  // Click outside to close search popover
+  // Click outside to close search or notification popover
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
         setSearchFocused(false)
+      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setNotifOpen(false)
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
@@ -267,6 +281,100 @@ export default function DispatcherHeader({
           <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-emerald-800 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
             <span className="font-mono text-[11px]">Telematics Live</span>
+          </div>
+
+          {/* Operational Notifications Bell */}
+          <div className="relative" ref={notifRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setNotifOpen((v) => !v)
+                setSearchFocused(false)
+              }}
+              className="relative p-2 rounded-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800 transition-colors border border-slate-200 bg-white cursor-pointer"
+              title="Operational Notifications"
+            >
+              <Bell size={16} />
+              {unreadNotifsCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[9px] font-bold animate-pulse">
+                  {unreadNotifsCount > 9 ? '9+' : unreadNotifsCount}
+                </span>
+              )}
+            </button>
+
+            {notifOpen && (
+              <div className="absolute right-0 top-full mt-2 w-88 bg-white rounded-2xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-slate-900">Network Alerts ({dispatcherNotifs.length})</p>
+                    {unreadNotifsCount > 0 && (
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary-100 text-primary-800">
+                        {unreadNotifsCount} new
+                      </span>
+                    )}
+                  </div>
+                  {unreadNotifsCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => markAllRead()}
+                      className="text-[10px] text-primary-600 font-semibold hover:underline cursor-pointer"
+                    >
+                      Mark all read
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-84 overflow-y-auto divide-y divide-slate-50">
+                  {dispatcherNotifs.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-xs text-slate-400">
+                      No operational notifications yet
+                    </div>
+                  ) : (
+                    dispatcherNotifs.map((n) => (
+                      <div
+                        key={n.id}
+                        onClick={() => {
+                          markNotificationRead(n.id)
+                          setNotifOpen(false)
+                          if (n.priority === 'CRITICAL' || n.type === 'safety' || n.type === 'emergency') {
+                            navigate('/admin/safety')
+                          } else if (n.type === 'request') {
+                            navigate('/admin/requests')
+                          } else if (n.rideId) {
+                            navigate('/admin/rides')
+                          }
+                        }}
+                        className={cn(
+                          'px-4 py-3 cursor-pointer transition-colors hover:bg-slate-50',
+                          !n.read ? (n.priority === 'CRITICAL' ? 'bg-rose-50/70' : 'bg-primary-50/40') : ''
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className={cn('text-xs font-semibold truncate', !n.read ? 'text-slate-900' : 'text-slate-600')}>
+                            {n.title}
+                          </p>
+                          {n.priority === 'CRITICAL' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-red-100 text-red-700 border border-red-200 flex-shrink-0 animate-pulse">
+                              CRITICAL
+                            </span>
+                          )}
+                          {n.priority === 'IMPORTANT' && (
+                            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-100 text-amber-700 border border-amber-200 flex-shrink-0">
+                              ALERT
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{n.message}</p>
+                        <p className="text-[10px] text-slate-400 mt-1 flex items-center justify-between">
+                          <span>{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {n.rideId && <span className="font-mono text-[9px] text-slate-400">#{n.rideId}</span>}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Active Safety Alerts Indicator */}
