@@ -11,6 +11,8 @@ import type {
 } from '../types'
 import { api } from '../services/api'
 
+import { showNotificationToast } from '../components/notifications/NotificationToast'
+
 export interface RideMessage {
   id: string
   rideId: string
@@ -194,9 +196,46 @@ export const useAppStore = create<AppState>((set, get) => ({
         if (event === 'NOTIFICATION_ADDED' && payload) {
           const notif = payload.notification || payload
           if (notif && notif.id) {
+            // 1. Save notification to persist in notification history & update unread badges
             set((state) => ({
               notifications: [notif, ...state.notifications.filter((n) => n.id !== notif.id)],
             }))
+
+            // 2. Determine if the active user should receive a real-time toast popup
+            const currentState = get()
+            const activeRole = (currentState.role || 'student').toLowerCase()
+            const currentStudentId = currentState.currentStudentId || currentState.currentUser?.id
+            const currentDriverId = currentState.currentDriverId || currentState.currentUser?.id
+
+            const targetUserId = notif.userId
+            const targetStudentId = notif.studentId
+            const targetDriverId = notif.driverId
+            const notifRole = (notif.role || '').toLowerCase()
+
+            let isRelevant = false
+            if (activeRole === 'admin' || activeRole === 'dispatcher') {
+              // Dispatcher is the global operations center — receives all operational events
+              isRelevant = true
+            } else if (activeRole === 'driver') {
+              // Driver receives events for their assigned vehicle/rides/passengers
+              isRelevant =
+                Boolean(targetDriverId && targetDriverId === currentDriverId) ||
+                Boolean(targetUserId && targetUserId === currentDriverId) ||
+                notifRole === 'driver' ||
+                notifRole === 'all'
+            } else if (activeRole === 'student' || activeRole === 'faculty') {
+              // Student/Faculty receives events strictly for their own rides
+              isRelevant =
+                Boolean(targetStudentId && targetStudentId === currentStudentId) ||
+                Boolean(targetUserId && targetUserId === currentStudentId) ||
+                notifRole === 'student' ||
+                notifRole === 'faculty' ||
+                notifRole === 'all'
+            }
+
+            if (isRelevant) {
+              showNotificationToast(notif)
+            }
           }
         } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
           const isCompleted = event === 'RIDE_COMPLETED' || payload.ride.status === 'completed'
