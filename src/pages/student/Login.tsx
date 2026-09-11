@@ -53,11 +53,13 @@ export default function Login() {
 
   const handleDemoLogin = async (role: 'student' | 'faculty') => {
     setLoading(true)
-    const email = role === 'student' ? 'student.demo@sriindu.ac.in' : 'faculty.demo@sriindu.ac.in'
-    const password = 'campus2026'
+    const demoEmail = role === 'student' ? 'uday.kiran@sriindu.ac.in' : 'ramesh.sharma@sriindu.ac.in'
+    const demoPassword = 'campus2026'
+    setEmail(demoEmail)
+    setPassword(demoPassword)
     try {
-      const res = await login({ email, password, role })
-      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Demo Student' : 'Demo Faculty')}!`)
+      const res = await login({ email: demoEmail, password: demoPassword, role })
+      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Uday Kiran' : 'Dr. Ramesh Sharma')}!`)
       navigate('/student/home')
     } catch (err: any) {
       toast.error(err.message || 'Demo login failed')
@@ -148,7 +150,7 @@ export default function Login() {
             </form>
           ) : (
             <div className="space-y-3">
-              <p className="text-xs text-slate-500 mb-2 font-medium">1-Click Demo Login (Real Database Accounts):</p>
+              <p className="text-xs text-slate-500 mb-2 font-medium">Sandbox Demo Credentials (Existing Record):</p>
               
               {/* Student Demo */}
               <button
@@ -162,12 +164,13 @@ export default function Login() {
                     🎓
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
-                    <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
+                    <p className="font-bold text-slate-900 text-xs">Student Demo • Uday Kiran</p>
+                    <p className="text-[11px] text-primary-700 font-mono">Email: uday.kiran@sriindu.ac.in</p>
+                    <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                   </div>
                 </div>
                 <span className="text-xs font-bold text-primary-600 group-hover:translate-x-0.5 transition-transform">
-                  1-Click →
+                  Use Demo Credentials →
                 </span>
               </button>
 
@@ -183,12 +186,13 @@ export default function Login() {
                     👨‍🏫
                   </div>
                   <div>
-                    <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
-                    <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                    <p className="font-bold text-slate-900 text-xs">Faculty Demo • Dr. Ramesh Sharma</p>
+                    <p className="text-[11px] text-primary-700 font-mono">Email: ramesh.sharma@sriindu.ac.in</p>
+                    <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                   </div>
                 </div>
                 <span className="text-xs font-bold text-primary-600 group-hover:translate-x-0.5 transition-transform">
-                  1-Click →
+                  Use Demo Credentials →
                 </span>
               </button>
             </div>

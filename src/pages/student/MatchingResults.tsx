@@ -32,10 +32,10 @@ export default function MatchingResults() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
 
-  const pickup = searchParams.get('pickup') || 'Charminar'
+  const pickup = searchParams.get('pickup') || ''
   const pickupAddress = searchParams.get('pickupAddress') || ''
-  const pickupLat = Number(searchParams.get('pickupLat')) || 17.3616
-  const pickupLng = Number(searchParams.get('pickupLng')) || 78.4747
+  const pickupLat = searchParams.get('pickupLat') ? Number(searchParams.get('pickupLat')) : 0
+  const pickupLng = searchParams.get('pickupLng') ? Number(searchParams.get('pickupLng')) : 0
 
   const destination = searchParams.get('destination') || 'Destination Hub'
   const destinationAddress = searchParams.get('destinationAddress') || ''

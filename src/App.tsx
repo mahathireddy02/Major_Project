@@ -119,7 +119,15 @@ export default function App() {
 
   return (
     <HashRouter>
-      <Toaster position="top-center" />
+      <Toaster
+        position="top-right"
+        containerClassName="pointer-events-none"
+        toastOptions={{
+          style: {
+            pointerEvents: 'auto',
+          },
+        }}
+      />
       <RoleSwitcher />
       <ChatBot />
 

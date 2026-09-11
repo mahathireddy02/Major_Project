@@ -16,15 +16,6 @@ import SeatsSelector from '../../components/booking/SeatsSelector'
 import { PlaceResult, geocodingService } from '../../services/geocoding'
 import toast from 'react-hot-toast'
 
-const DEFAULT_PICKUP: PlaceResult = {
-  id: 'loc-charminar',
-  name: 'Charminar',
-  address: 'Charminar Rd, Char Kaman, Ghansi Bazaar, Hyderabad, Telangana',
-  lat: 17.3616,
-  lng: 78.4747,
-  type: 'historic',
-}
-
 const POPULAR_DESTINATIONS: PlaceResult[] = [
   {
     id: 'loc-sri-indu',
@@ -78,7 +69,7 @@ export default function Home() {
   const vehicles = useAppStore((s) => s.vehicles)
 
   // Real place search states
-  const [pickupPlace, setPickupPlace] = useState<PlaceResult | null>(DEFAULT_PICKUP)
+  const [pickupPlace, setPickupPlace] = useState<PlaceResult | null>(null)
   const [destinationPlace, setDestinationPlace] = useState<PlaceResult | null>(null)
   const [time, setTime] = useState<string>(() => getCurrentRealTime())
   const [seats, setSeats] = useState<number>(1)
@@ -220,20 +211,34 @@ export default function Home() {
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const { latitude, longitude } = pos.coords
-        const place = await geocodingService.reverseGeocode(latitude, longitude)
-        const userLoc: PlaceResult = {
-          ...place,
-          name: 'Current Location (GPS)',
-          lat: latitude,
-          lng: longitude,
+        try {
+          const place = await geocodingService.reverseGeocode(latitude, longitude)
+          const userLoc: PlaceResult = {
+            ...place,
+            name: place.name || 'Current Location (GPS)',
+            lat: latitude,
+            lng: longitude,
+          }
+          setPickupPlace(userLoc)
+          setErrors((prev) => ({ ...prev, pickup: '' }))
+          toast.success('Pickup set to your current GPS position!', { icon: '🎯' })
+        } catch {
+          const userLoc: PlaceResult = {
+            id: `loc-gps-${latitude.toFixed(4)}-${longitude.toFixed(4)}`,
+            name: 'Current Location (GPS)',
+            address: `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`,
+            lat: latitude,
+            lng: longitude,
+            type: 'pin',
+          }
+          setPickupPlace(userLoc)
+          setErrors((prev) => ({ ...prev, pickup: '' }))
+          toast.success('Pickup set to your current GPS position!', { icon: '🎯' })
         }
-        setPickupPlace(userLoc)
-        setErrors((prev) => ({ ...prev, pickup: '' }))
-        toast.success('Pickup set to your current GPS position!', { icon: '🎯' })
       },
       (err) => {
         console.warn('Geolocation error:', err.message)
-        toast.error('Location permission denied. You can select on the map.', { duration: 4000 })
+        toast.error('Location permission denied. Please enter a pickup location or select on the map.', { duration: 4000 })
       },
       { timeout: 8000, enableHighAccuracy: true }
     )
@@ -244,11 +249,11 @@ export default function Home() {
 
   const handleFind = () => {
     if (!pickupPlace) {
-      setErrors((prev) => ({ ...prev, pickup: 'Please select a pickup place' }))
+      setErrors((prev) => ({ ...prev, pickup: 'Please enter a pickup location.' }))
       return
     }
     if (!destinationPlace) {
-      setErrors((prev) => ({ ...prev, destination: 'Please select a destination' }))
+      setErrors((prev) => ({ ...prev, destination: 'Please select a destination.' }))
       return
     }
 
@@ -342,7 +347,7 @@ export default function Home() {
           {/* Pickup Search */}
           <LocationSearchInput
             label="Pickup Location"
-            placeholder="Search pickup: e.g. Charminar, KPHB, Hostel..."
+            placeholder="Enter pickup address"
             value={pickupPlace ? pickupPlace.name : ''}
             selectedPlace={pickupPlace}
             onSelectPlace={(place) => {

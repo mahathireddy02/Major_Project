@@ -567,12 +567,6 @@ class ApiClient {
     })
   }
 
-  async resolveSafetyEvent(eventId: string): Promise<{ event: SafetyEvent; auditLog: any }> {
-    return this.request<any>(`/dispatcher/safety-events/${eventId}/resolve`, {
-      method: 'POST',
-    })
-  }
-
   async getDispatcherAuditLog(): Promise<any[]> {
     return this.request<any[]>('/dispatcher/audit-log')
   }
@@ -583,24 +577,12 @@ class ApiClient {
     })
   }
 
-
   // --- Safety ---
-  async triggerSOS(rideId: string, userId: string): Promise<SafetyEvent> {
-    return this.request<SafetyEvent>('/safety/sos', {
-      method: 'POST',
-      body: JSON.stringify({ rideId, userId }),
-    })
-  }
-
   async triggerDeviation(rideId: string): Promise<any> {
     return this.request<any>('/safety/route-deviation', {
       method: 'POST',
       body: JSON.stringify({ rideId }),
     })
-  }
-
-  async getSafetyEvents(): Promise<SafetyEvent[]> {
-    return this.request<SafetyEvent[]>('/safety/events')
   }
 
   // --- Notifications ---
@@ -876,6 +858,40 @@ class ApiClient {
 
   async getFleetPricingMetrics(): Promise<{ success: boolean; data: FleetPricingMetrics }> {
     return this.request('/pricing/fleet-metrics')
+  }
+
+  // --- Safety & Emergency SOS ---
+  async triggerSOS(params: {
+    rideId?: string
+    userId?: string
+    lat?: number
+    lng?: number
+  }): Promise<any> {
+    return this.request('/safety/sos', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
+
+  async acknowledgeSafetyEvent(eventId: string): Promise<any> {
+    return this.request(`/safety/events/${eventId}/acknowledge`, {
+      method: 'POST',
+    })
+  }
+
+  async resolveSafetyEvent(eventId: string): Promise<any> {
+    return this.request(`/safety/events/${eventId}/resolve`, {
+      method: 'POST',
+    })
+  }
+
+  async getSafetyEvents(params?: { resolved?: boolean; status?: string; rideId?: string }): Promise<any[]> {
+    const searchParams = new URLSearchParams()
+    if (params?.resolved !== undefined) searchParams.set('resolved', String(params.resolved))
+    if (params?.status) searchParams.set('status', params.status)
+    if (params?.rideId) searchParams.set('rideId', params.rideId)
+    const queryString = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    return this.request(`/safety/events${queryString}`)
   }
 }
 

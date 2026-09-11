@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { Shield, Phone, AlertTriangle, CheckCircle, ChevronLeft, Navigation, HeartHandshake } from 'lucide-react'
+import { Shield, Phone, AlertTriangle, CheckCircle, ChevronLeft, Navigation, HeartHandshake, ShieldAlert } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
@@ -7,80 +7,34 @@ import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import { api } from '../../services/api'
 import type { EmergencyContact } from '../../types'
+import { GlobalSosModal } from '../../components/safety/GlobalSosModal'
 
 export default function Safety() {
   const navigate = useNavigate()
-  const [sosActivated, setSosActivated] = useState(false)
-  const [confirmSos, setConfirmSos] = useState(false)
+  const [sosModalOpen, setSosModalOpen] = useState(false)
   const [contact, setContact] = useState<EmergencyContact | null>(null)
   const rides = useAppStore((s) => s.rides)
-  const triggerSOS = useAppStore((s) => s.triggerSOS)
+  const safetyEvents = useAppStore((s) => s.safetyEvents)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
+  const currentUser = useAppStore((s) => s.currentUser)
+
+  const activeUserId = currentUser?.id || currentStudentId
 
   useEffect(() => {
-    if (currentStudentId) {
-      api.getEmergencyContact(currentStudentId).then((ec) => {
+    if (activeUserId) {
+      api.getEmergencyContact(activeUserId).then((ec) => {
         if (ec) setContact(ec)
       }).catch(() => {})
     }
-  }, [currentStudentId])
+  }, [activeUserId])
 
   const activeRide = rides.find(
     (r) =>
       (r.status === 'active' || r.status === 'boarding') &&
-      r.passengers.some((p) => p.studentId === currentStudentId)
+      r.passengers.some((p) => p.studentId === activeUserId)
   )
 
-  const handleSOS = async () => {
-    if (!confirmSos) { setConfirmSos(true); return }
-    if (activeRide) await triggerSOS(activeRide.id, currentStudentId)
-    else await triggerSOS('ride-102', currentStudentId)
-    setSosActivated(true)
-    setConfirmSos(false)
-  }
-
-  if (sosActivated) {
-    return (
-      <div className="min-h-screen bg-red-600 flex flex-col items-center justify-center px-6 text-center">
-        <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 animate-pulse shadow-xl">
-          <AlertTriangle size={36} className="text-red-600" />
-        </div>
-        <h1 className="font-heading font-bold text-3xl text-white mb-2">SOS Broadcast Live</h1>
-        <p className="text-red-100 mb-8 max-w-xs">
-          Campus security command center & your emergency contacts have been dispatched telemetry and live coordinates.
-        </p>
-
-        <div className="w-full max-w-sm space-y-3 text-left mb-8">
-          {[
-            'Campus Security Control Room alerted',
-            contact
-              ? `Emergency contact: ${contact.name} (${contact.relationship}, ${contact.phone}) notified`
-              : 'Primary emergency contact notified',
-            'Real-time GPS coordinates broadcasting',
-            'Driver & Vehicle telemetry locked for investigation',
-          ].map((item) => (
-            <div key={item} className="flex items-center gap-3 bg-white/10 rounded-xl px-4 py-3">
-              <CheckCircle size={18} className="text-white shrink-0" />
-              <p className="text-white text-xs font-medium">{item}</p>
-            </div>
-          ))}
-        </div>
-
-
-        <p className="text-red-200 text-xs mb-6">
-          This is a prototype simulation. No real emergency services contacted.
-        </p>
-
-        <Button
-          variant="secondary"
-          className="bg-white text-red-600 hover:bg-red-50"
-          onClick={() => { setSosActivated(false) }}
-        >
-          Mark as Resolved
-        </Button>
-      </div>
-    )
-  }
+  const hasActiveSos = safetyEvents.some((e) => e.userId === activeUserId && !e.resolved)
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-6 pb-6">
@@ -125,29 +79,26 @@ export default function Safety() {
 
       {/* SOS Button */}
       <div className="text-center mb-6">
-        {confirmSos ? (
-          <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
-            <AlertTriangle size={32} className="text-red-500 mx-auto mb-3" />
-            <h3 className="font-heading font-bold text-lg text-red-700 mb-2">Confirm Emergency?</h3>
-            <p className="text-sm text-red-600 mb-4">This will alert campus security and your emergency contacts.</p>
-            <div className="flex gap-3">
-              <Button variant="secondary" className="flex-1" onClick={() => setConfirmSos(false)}>Cancel</Button>
-              <Button variant="danger" className="flex-1" onClick={handleSOS}>
-                Yes, Send SOS
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <button
-            onClick={handleSOS}
-            className="w-36 h-36 bg-red-600 hover:bg-red-700 rounded-full border-8 border-red-200 text-white font-heading font-bold text-xl transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl active:scale-95 mx-auto flex items-center justify-center flex-col gap-1"
-          >
-            <AlertTriangle size={28} />
-            SOS
-          </button>
-        )}
-        <p className="text-xs text-slate-400 mt-4">Press and hold in a real emergency</p>
+        <button
+          type="button"
+          onClick={() => setSosModalOpen(true)}
+          className={`w-36 h-36 rounded-full border-8 text-white font-heading font-bold text-xl transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl active:scale-95 mx-auto flex items-center justify-center flex-col gap-1 ${
+            hasActiveSos
+              ? 'bg-rose-700 border-rose-300 ring-8 ring-rose-500/30 animate-pulse'
+              : 'bg-rose-600 hover:bg-rose-700 border-rose-200'
+          }`}
+        >
+          <AlertTriangle size={28} className={hasActiveSos ? 'animate-bounce' : ''} />
+          <span>{hasActiveSos ? 'SOS ACTIVE' : 'SOS'}</span>
+        </button>
+        <p className="text-xs text-slate-400 mt-4">
+          {hasActiveSos
+            ? 'Distress beacon is active — tap to view responder status'
+            : 'Tap to trigger immediate emergency broadcast'}
+        </p>
       </div>
+
+      <GlobalSosModal isOpen={sosModalOpen} onClose={() => setSosModalOpen(false)} />
 
       {/* Emergency contacts */}
       <Card padding="md">

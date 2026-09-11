@@ -844,6 +844,7 @@ class NotificationService {
         break
       }
 
+      case 'STUDENT_SOS_TRIGGERED':
       case 'SOS_TRIGGERED': {
         if (payload.studentId) {
           notificationsToCreate.push({
@@ -865,7 +866,7 @@ class NotificationService {
             type: 'emergency',
             priority: 'CRITICAL',
             title: '🚨 CRITICAL SOS ALERT',
-            message: `Emergency SOS triggered on your active trip ${routeName}! Stop safely and await response.`,
+            message: `Emergency SOS triggered by passenger ${studentName} on your active trip ${routeName}! Stop safely and await response.`,
             rideId,
           })
         }
@@ -875,7 +876,45 @@ class NotificationService {
           type: 'emergency',
           priority: 'CRITICAL',
           title: '🚨 CRITICAL SOS ALERT',
-          message: `CRITICAL SOS: ${studentName} triggered emergency alarm on ${routeName}. Driver: ${driverName}.`,
+          message: `CRITICAL SOS: Passenger ${studentName} triggered emergency alarm on ${routeName}. Driver: ${driverName}. Location: ${payload.metadata?.locationStr || 'Live GPS'}.`,
+          rideId,
+        })
+        break
+      }
+
+      case 'DRIVER_SOS_TRIGGERED': {
+        if (payload.driverId) {
+          notificationsToCreate.push({
+            userId: payload.driverId,
+            driverId: payload.driverId,
+            role: 'DRIVER',
+            type: 'emergency',
+            priority: 'CRITICAL',
+            title: '🚨 Emergency Driver SOS Broadcast',
+            message: `Campus Dispatch and emergency contacts alerted with vehicle telematics. Stay calm.`,
+            rideId,
+          })
+        }
+        const pIds = payload.passengerIds || []
+        for (const pid of pIds) {
+          notificationsToCreate.push({
+            userId: pid,
+            studentId: pid,
+            role: 'STUDENT',
+            type: 'safety',
+            priority: 'IMPORTANT',
+            title: '🚨 Safety Alert',
+            message: `Driver safety alert issued on ${routeName}. Campus Dispatch is actively monitoring.`,
+            rideId,
+          })
+        }
+        notificationsToCreate.push({
+          userId: 'dispatcher',
+          role: 'DISPATCHER',
+          type: 'emergency',
+          priority: 'CRITICAL',
+          title: '🚨 CRITICAL DRIVER SOS',
+          message: `CRITICAL DRIVER SOS: Driver ${driverName} triggered emergency alarm on ${routeName} (Vehicle: ${payload.vehiclePlate || payload.vehicleId || 'Assigned'}, Passengers: ${payload.metadata?.passengerCount || pIds.length}).`,
           rideId,
         })
         break
