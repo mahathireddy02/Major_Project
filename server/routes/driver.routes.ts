@@ -37,9 +37,9 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
   // Accept a ride request
   fastify.post('/rides/:id/accept', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const ride = await RideModel.findOne({ id, status: 'waiting' })
+    const ride = await RideModel.findOne({ id })
     if (!ride) {
-      return reply.status(404).send({ success: false, error: { message: 'Ride not found or not waiting' } })
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
     }
 
     ride.status = 'boarding'
@@ -231,6 +231,8 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
 
     const driverUser = await UserModel.findOne({ id: ride.driverId })
     const vehicle = await VehicleModel.findOne({ id: ride.vehicleId })
+    const matchedPassenger = (ride.passengers || []).find((p: any) => p.studentId === stop.studentId || p.pickup === stop.name || p.pickupStopId === stop.id) || (ride.passengers || [])[0]
+    const targetStudentId = stop.studentId || matchedPassenger?.studentId
 
     await notificationService.notifyRideEvent('DRIVER_REACHED_PICKUP', {
       rideId: id,
@@ -242,7 +244,7 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       vehiclePlate: vehicle?.registrationNumber,
       stopId: stop.id,
       stopName: stop.name,
-      studentId: stop.studentId,
+      studentId: targetStudentId,
     })
 
     realtimeService.broadcast('DRIVER_ARRIVED', { rideId: id, stopId, stopName: stop.name })
@@ -268,21 +270,11 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     stop.status = 'BOARDED'
 
     // Update corresponding passenger in ride.passengers
-    let boardedPassengerStudentId = stop.studentId
-    let boardedPassengerName = 'Passenger'
-    if (stop.studentId) {
-      const p = (ride.passengers || []).find((item: any) => item.studentId === stop.studentId)
-      if (p) {
-        p.status = 'boarded'
-        boardedPassengerName = p.name
-      }
-    } else {
-      const p = (ride.passengers || []).find((item: any) => item.pickup === stop.name)
-      if (p) {
-        p.status = 'boarded'
-        boardedPassengerStudentId = p.studentId
-        boardedPassengerName = p.name
-      }
+    const matchedPassenger = (ride.passengers || []).find((item: any) => item.studentId === stop.studentId || item.pickup === stop.name || item.pickupStopId === stop.id) || (ride.passengers || [])[0]
+    let boardedPassengerStudentId = stop.studentId || matchedPassenger?.studentId
+    let boardedPassengerName = matchedPassenger?.name || 'Passenger'
+    if (matchedPassenger) {
+      matchedPassenger.status = 'boarded'
     }
 
     // Advance currentStopIndex

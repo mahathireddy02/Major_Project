@@ -104,15 +104,37 @@ class ApiClient {
       reqOptions.body = JSON.stringify({})
     }
 
-    const res = await fetch(url, reqOptions)
-    const json = await res.json()
+    let res: Response
+    try {
+      res = await fetch(url, reqOptions)
+    } catch (networkErr: any) {
+      const error = new Error('Cannot connect to backend server. Please ensure the server is running on port 5000.') as any
+      error.code = 'NETWORK_ERROR'
+      error.original = networkErr
+      throw error
+    }
+
+    let json: any = null
+    const text = await res.text()
+    if (text && text.trim().length > 0) {
+      try {
+        json = JSON.parse(text)
+      } catch {
+        json = { error: { message: text } }
+      }
+    } else {
+      json = {}
+    }
 
     if (!res.ok || json.success === false) {
+      if (res.status === 502 || res.status === 504 || res.status === 503) {
+        throw new Error(`Backend server unavailable (HTTP ${res.status}). Please run 'npm run server' in root.`)
+      }
       const messageFromDetail =
         typeof json.error === 'string'
           ? (json.message || json.error)
           : json.error?.message || json.message
-      const errorMsg = messageFromDetail || (res.statusText ? `API Error: ${res.statusText}` : 'API Error')
+      const errorMsg = messageFromDetail || (res.statusText ? `API Error: ${res.statusText}` : `API Error (${res.status})`)
       const error = new Error(errorMsg) as any
       error.code = json.error?.code || (typeof json.error === 'string' ? json.error : 'API_ERROR')
       error.status = res.status

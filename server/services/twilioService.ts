@@ -1,4 +1,3 @@
-import twilio from 'twilio'
 import { ENV } from '../config/env.js'
 import { normalizePhoneNumber, isValidPhoneNumber } from '../utils/phone.js'
 
@@ -59,7 +58,7 @@ interface LocalOtpEntry {
 }
 
 export class TwilioService {
-  private client: twilio.Twilio | null = null
+  private client: any = null
   private isConfigured: boolean = false
   private verifyServiceSid: string = ''
   private fromNumber: string = ''
@@ -70,7 +69,7 @@ export class TwilioService {
   }
 
   /** Centralized Twilio initialization */
-  public initClient() {
+  public async initClient() {
     const accountSid = ENV.TWILIO_ACCOUNT_SID?.trim()
     const authToken = ENV.TWILIO_AUTH_TOKEN?.trim()
     this.fromNumber = ENV.TWILIO_PHONE_NUMBER?.trim()
@@ -78,10 +77,26 @@ export class TwilioService {
 
     if (accountSid && authToken && (this.fromNumber || this.verifyServiceSid)) {
       try {
-        this.client = twilio(accountSid, authToken)
-        this.isConfigured = true
-        const maskedSid = accountSid.length > 8 ? accountSid.slice(0, 4) + '...' + accountSid.slice(-4) : 'Configured'
-        console.log('[TwilioService] Initialized official Twilio client with Account SID: ' + maskedSid)
+        let twilioLib: any = null
+        try {
+          const modName = 'twilio'
+          // @ts-ignore
+          const imported = await import(/* @vite-ignore */ modName)
+          twilioLib = imported.default || imported
+        } catch {
+          twilioLib = null
+        }
+
+        if (twilioLib) {
+          this.client = twilioLib(accountSid, authToken)
+          this.isConfigured = true
+          const maskedSid = accountSid.length > 8 ? accountSid.slice(0, 4) + '...' + accountSid.slice(-4) : 'Configured'
+          console.log('[TwilioService] Initialized official Twilio client with Account SID: ' + maskedSid)
+        } else {
+          this.isConfigured = false
+          this.client = null
+          console.log('[TwilioService] Optional "twilio" module not found. Running in DEV mode (OTP & SMS logged safely to console).')
+        }
       } catch (err: any) {
         this.isConfigured = false
         this.client = null
