@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle, Clock, MapPin, Users, ChevronLeft, RefreshCw, MessageCircle, Send, X } from 'lucide-react'
+import { CheckCircle, MapPin, Users, ChevronLeft, RefreshCw, MessageCircle, Send } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { api } from '../../services/api'
 import Card from '../../components/ui/Card'
@@ -23,14 +23,13 @@ export default function PassengerList() {
   const markMessagesRead = useAppStore((s) => s.markMessagesRead)
 
   const [activeTab, setActiveTab] = useState<'roster' | 'messages'>('roster')
-  const [replyDrafts, setReplyDrafts] = useState<Record<string, string>>({})
+  const [replyDraft, setReplyDraft] = useState('')
   const chatEndRef = useRef<HTMLDivElement>(null)
 
   const [backendBookings, setBackendBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingStudentId, setUpdatingStudentId] = useState<string | null>(null)
 
-  // Scope rides to this driver
   const driverRides = rides.filter(
     (r) => r.driverId === currentDriverId || r.driverId === currentUser?.id || r.driverId === 'd1'
   )
@@ -61,13 +60,14 @@ export default function PassengerList() {
     }
   }, [activeTab, rideMessages.length])
 
-  const handleReply = (studentId: string) => {
-    const text = replyDrafts[studentId]?.trim()
-    if (!text || !activeRide) return
-    replyToMessage(activeRide.id, text)
-    setReplyDrafts((d) => ({ ...d, [studentId]: '' }))
+  const handleReply = () => {
+    if (!replyDraft.trim() || !activeRide) return
+    replyToMessage(activeRide.id, replyDraft)
+    setReplyDraft('')
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
   }
+
+  const loadBookings = async () => {
     if (!activeRide) {
       setLoading(false)
       return
@@ -90,7 +90,6 @@ export default function PassengerList() {
     loadBookings()
   }, [activeRide?.id])
 
-  // Realtime listeners
   useEffect(() => {
     const unsub = api.onRealtimeEvent((event, payload) => {
       if (
@@ -109,7 +108,6 @@ export default function PassengerList() {
     return unsub
   }, [activeRide?.id])
 
-  // Boarding action
   const handleBoard = async (studentId: string) => {
     if (!activeRide) return
     setUpdatingStudentId(studentId)
@@ -124,7 +122,6 @@ export default function PassengerList() {
     }
   }
 
-  // Dropping action
   const handleDrop = async (studentId: string) => {
     if (!activeRide) return
     setUpdatingStudentId(studentId)
@@ -139,23 +136,20 @@ export default function PassengerList() {
     }
   }
 
-  // Build unified passenger list: merge backend bookings with embedded ride.passengers
+  // Build unified passenger list
   const studentIdsSeen = new Set<string>()
   const passengers: any[] = []
 
-  // 1. Process backend bookings
   if (backendBookings.length > 0) {
     backendBookings.forEach((b: any) => {
       studentIdsSeen.add(b.studentId)
       const embeddedP = (activeRide?.passengers || []).find((p: any) => p.studentId === b.studentId)
       let status: 'waiting' | 'boarded' | 'dropped' = 'waiting'
-
       if (embeddedP?.status === 'dropped' || b.status === 'completed' || activeRide?.status === 'completed') {
         status = 'dropped'
       } else if (embeddedP?.status === 'boarded' || b.status === 'boarded') {
         status = 'boarded'
       }
-
       passengers.push({
         studentId: b.studentId,
         name: b.passengerName || b.studentName || embeddedP?.name || (b.studentId === currentUser?.id ? currentUser?.name : b.studentId),
@@ -167,9 +161,8 @@ export default function PassengerList() {
     })
   }
 
-  // 2. Add any embedded passengers not in bookings
   if (activeRide?.passengers && activeRide.passengers.length > 0) {
-    (activeRide.passengers as any[]).forEach((p) => {
+    ;(activeRide.passengers as any[]).forEach((p) => {
       if (p.name === 'Dispatch Control' || p.studentId === 'admin1') return
       if (!studentIdsSeen.has(p.studentId)) {
         studentIdsSeen.add(p.studentId)
@@ -211,7 +204,7 @@ export default function PassengerList() {
         </div>
       </div>
 
-      <div className="mb-6">
+      <div className="mb-4">
         <div className="flex items-center justify-between">
           <h1 className="font-heading font-bold text-2xl text-slate-900">Passenger Roster</h1>
           {activeRide && (
@@ -241,78 +234,80 @@ export default function PassengerList() {
         >
           Messages
           {unreadFromStudents > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unreadFromStudents}</span>
+            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">
+              {unreadFromStudents}
+            </span>
           )}
         </button>
       </div>
 
+      {/* Roster Tab */}
       {activeTab === 'roster' && (
         loading ? (
-        <Card padding="lg" className="text-center text-slate-400 py-12">
-          <RefreshCw size={24} className="mx-auto mb-2 animate-spin opacity-40 text-primary-600" />
-          <p className="text-sm">Loading passengers...</p>
-        </Card>
-      ) : passengers.length === 0 ? (
-        <Card padding="lg" className="text-center text-slate-400 py-12">
-          <Users size={36} className="mx-auto mb-2 opacity-30" />
-          <p className="text-sm font-medium text-slate-600">No passengers booked on this trip yet.</p>
-          <p className="text-xs mt-1 text-slate-400">Passengers will appear here once they join or book this ride.</p>
-        </Card>
-      ) : (
-        <div className="space-y-3">
-          {passengers.map((passenger, idx) => {
-            const isUpdating = updatingStudentId === passenger.studentId
-            const isBoarded = passenger.status === 'boarded'
-            const isDropped = passenger.status === 'dropped'
-            const isWaiting = passenger.status === 'waiting'
-
-            return (
-              <Card key={passenger.studentId + idx} padding="md" className="border border-slate-200 shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <Avatar name={passenger.name || '?'} size="md" />
-                    <div>
-                      <div className="flex items-center gap-1.5">
-                        <p className="font-semibold text-slate-900 text-sm">{passenger.name || passenger.studentId}</p>
-                        <Badge variant="blue" size="sm">Seat #{passenger.seatNo}</Badge>
+          <Card padding="lg" className="text-center text-slate-400 py-12">
+            <RefreshCw size={24} className="mx-auto mb-2 animate-spin opacity-40 text-primary-600" />
+            <p className="text-sm">Loading passengers...</p>
+          </Card>
+        ) : passengers.length === 0 ? (
+          <Card padding="lg" className="text-center text-slate-400 py-12">
+            <Users size={36} className="mx-auto mb-2 opacity-30" />
+            <p className="text-sm font-medium text-slate-600">No passengers booked on this trip yet.</p>
+            <p className="text-xs mt-1 text-slate-400">Passengers will appear here once they join or book this ride.</p>
+          </Card>
+        ) : (
+          <div className="space-y-3">
+            {passengers.map((passenger, idx) => {
+              const isUpdating = updatingStudentId === passenger.studentId
+              const isBoarded = passenger.status === 'boarded'
+              const isDropped = passenger.status === 'dropped'
+              const isWaiting = passenger.status === 'waiting'
+              return (
+                <Card key={passenger.studentId + idx} padding="md" className="border border-slate-200 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Avatar name={passenger.name || '?'} size="md" />
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <p className="font-semibold text-slate-900 text-sm">{passenger.name || passenger.studentId}</p>
+                          <Badge variant="blue" size="sm">Seat #{passenger.seatNo}</Badge>
+                        </div>
+                        {passenger.pickup && (
+                          <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                            <MapPin size={11} className="text-primary-600 flex-shrink-0" />
+                            <span>{passenger.pickup}</span>
+                            <span className="text-slate-400 font-bold">→</span>
+                            <span className="font-medium text-slate-700">{passenger.destination || activeRide?.destination}</span>
+                          </p>
+                        )}
                       </div>
-                      {passenger.pickup && (
-                        <p className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
-                          <MapPin size={11} className="text-primary-600 flex-shrink-0" />
-                          <span>{passenger.pickup}</span>
-                          <span className="text-slate-400 font-bold">→</span>
-                          <span className="font-medium text-slate-700">{passenger.destination || activeRide?.destination}</span>
-                        </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant={isBoarded ? 'green' : isDropped ? 'slate' : 'yellow'}>
+                        {isBoarded ? 'Boarded' : isDropped ? 'Dropped off' : 'Waiting'}
+                      </Badge>
+                      {isWaiting && activeRide && (
+                        <Button size="sm" variant="green" disabled={isUpdating} onClick={() => handleBoard(passenger.studentId)} className="text-xs gap-1 cursor-pointer">
+                          <CheckCircle size={14} className={isUpdating ? 'animate-spin' : ''} />
+                          <span>{isUpdating ? 'Boarding...' : 'Board'}</span>
+                        </Button>
+                      )}
+                      {isBoarded && activeRide && (
+                        <Button size="sm" variant="secondary" disabled={isUpdating} onClick={() => handleDrop(passenger.studentId)} className="text-xs cursor-pointer">
+                          {isUpdating ? 'Dropping...' : 'Drop'}
+                        </Button>
                       )}
                     </div>
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <Badge variant={isBoarded ? 'green' : isDropped ? 'slate' : 'yellow'}>
-                      {isBoarded ? 'Boarded' : isDropped ? 'Dropped off' : 'Waiting'}
-                    </Badge>
-                    {isWaiting && activeRide && (
-                      <Button size="sm" variant="green" disabled={isUpdating} onClick={() => handleBoard(passenger.studentId)} className="text-xs gap-1 cursor-pointer">
-                        <CheckCircle size={14} className={isUpdating ? 'animate-spin' : ''} />
-                        <span>{isUpdating ? 'Boarding...' : 'Board'}</span>
-                      </Button>
-                    )}
-                    {isBoarded && activeRide && (
-                      <Button size="sm" variant="secondary" disabled={isUpdating} onClick={() => handleDrop(passenger.studentId)} className="text-xs cursor-pointer">
-                        {isUpdating ? 'Dropping...' : 'Drop'}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </Card>
-            )
-          })}
-        </div>
-      ))}
+                </Card>
+              )
+            })}
+          </div>
+        )
+      )}
 
       {/* Messages Tab */}
       {activeTab === 'messages' && (
-        <div className="flex flex-col" style={{ minHeight: '60vh' }}>
+        <div className="flex flex-col" style={{ minHeight: '55vh' }}>
           {rideMessages.length === 0 ? (
             <Card padding="lg" className="text-center text-slate-400 py-12">
               <MessageCircle size={36} className="mx-auto mb-2 opacity-30" />
@@ -320,7 +315,7 @@ export default function PassengerList() {
               <p className="text-xs mt-1 text-slate-400">Passengers can message you from their booking screen.</p>
             </Card>
           ) : (
-            <div className="space-y-2 mb-4 flex-1 overflow-y-auto">
+            <div className="space-y-2 mb-4 overflow-y-auto flex-1">
               {rideMessages.map((msg) => {
                 const isDriver = msg.fromRole === 'driver'
                 return (
@@ -341,19 +336,18 @@ export default function PassengerList() {
             </div>
           )}
 
-          {/* Reply input — driver replies to all passengers in this ride */}
           <div className="mt-auto pt-3 border-t border-slate-100 flex gap-2">
             <input
               type="text"
-              value={replyDrafts['__all__'] || ''}
-              onChange={(e) => setReplyDrafts((d) => ({ ...d, '__all__': e.target.value }))}
-              onKeyDown={(e) => e.key === 'Enter' && handleReply('__all__')}
+              value={replyDraft}
+              onChange={(e) => setReplyDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleReply()}
               placeholder="Reply to passengers..."
               className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
             />
             <button
-              onClick={() => handleReply('__all__')}
-              disabled={!replyDrafts['__all__']?.trim()}
+              onClick={handleReply}
+              disabled={!replyDraft.trim()}
               className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
             >
               <Send size={15} />
