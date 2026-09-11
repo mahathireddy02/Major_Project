@@ -26,6 +26,8 @@ export interface IPassenger {
   fare?: number
   fareId?: string
   bookingId?: string
+  gender?: string
+  genderPreference?: string
 }
 
 export type StopType = 'PICKUP' | 'DROPOFF'
@@ -108,6 +110,11 @@ export interface IRide extends Document {
   durationSeconds?: number
   hasDeviation: boolean
   hasSosAlert: boolean
+  isFemaleOnly?: boolean
+  genderPreference?: 'ANYONE' | 'FEMALE_ONLY'
+  startLocation?: string
+  startLocationLat?: number
+  startLocationLng?: number
   date: string
   createdAt: Date
   updatedAt: Date
@@ -148,6 +155,8 @@ const RideSchema = new Schema<IRide>(
         fare: { type: Number },
         fareId: { type: String },
         bookingId: { type: String },
+        gender: { type: String },
+        genderPreference: { type: String },
       },
     ],
     status: {
@@ -156,6 +165,8 @@ const RideSchema = new Schema<IRide>(
       default: 'waiting',
       index: true,
     },
+    isFemaleOnly: { type: Boolean, default: false, index: true },
+    genderPreference: { type: String, enum: ['ANYONE', 'FEMALE_ONLY'], default: 'ANYONE' },
     stops: [
       {
         id: { type: String, required: true },
@@ -202,6 +213,9 @@ const RideSchema = new Schema<IRide>(
     routeCoordinates: { type: [[Number]], default: [] },
     currentLat: { type: Number, default: 17.398 },
     currentLng: { type: Number, default: 78.479 },
+    startLocation: { type: String },
+    startLocationLat: { type: Number },
+    startLocationLng: { type: Number },
     distanceKm: { type: Number, default: 4.2 },
     distanceMeters: { type: Number },
     durationSeconds: { type: Number },

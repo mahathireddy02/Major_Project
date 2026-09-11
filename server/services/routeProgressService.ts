@@ -44,11 +44,26 @@ function projectPointToSegment(
 export class RouteProgressService {
   /**
    * Build or initialize complete TripRoute and RouteStop[] from scratch using OSRM
-   * Supports multiple individual pickups and multiple individual dropoffs
    */
-  async buildTripRoute(ride: IRide): Promise<ITripRoute> {
-    const originLat = ride.currentLat || (ride.pickupPoints?.[0]?.lat ?? 17.4934)
-    const originLng = ride.currentLng || (ride.pickupPoints?.[0]?.lng ?? 78.3995)
+  async buildTripRoute(
+    ride: IRide,
+    customStartLat?: number,
+    customStartLng?: number,
+    customStartName?: string
+  ): Promise<ITripRoute> {
+    const originLat = customStartLat !== undefined ? customStartLat : (ride.startLocationLat ?? ride.currentLat ?? (ride.pickupPoints?.[0]?.lat ?? 17.4934))
+    const originLng = customStartLng !== undefined ? customStartLng : (ride.startLocationLng ?? ride.currentLng ?? (ride.pickupPoints?.[0]?.lng ?? 78.3995))
+    const originName = customStartName || ride.startLocation || ride.pickupPoints?.[0]?.name || 'Driver Starting Point'
+
+    if (customStartLat !== undefined && customStartLng !== undefined) {
+      ride.currentLat = customStartLat
+      ride.currentLng = customStartLng
+      ride.startLocationLat = customStartLat
+      ride.startLocationLng = customStartLng
+      if (customStartName) {
+        ride.startLocation = customStartName
+      }
+    }
 
     // 1. Fetch all active bookings for this ride to get per-passenger destinations & pickups
     const bookings = await BookingModel.find({
@@ -229,7 +244,7 @@ export class RouteProgressService {
 
     const tripRoute: ITripRoute = {
       version: (ride.tripRoute?.version || 0) + 1,
-      origin: { lat: originLat, lng: originLng, name: ride.pickupPoints?.[0]?.name || 'Start Hub' },
+      origin: { lat: originLat, lng: originLng, name: originName },
       destination: { lat: ride.destinationLat, lng: ride.destinationLng, name: ride.destination },
       geometry: routeResult.geometry,
       distanceMeters: routeResult.distanceMeters,

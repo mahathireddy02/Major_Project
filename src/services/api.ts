@@ -20,8 +20,29 @@ import type {
 } from '../types'
 
 
-const API_BASE = ((import.meta as any).env?.VITE_API_BASE_URL as string) || 'http://localhost:5000/api'
-const WS_BASE = ((import.meta as any).env?.VITE_WS_BASE_URL as string) || 'ws://localhost:5000/realtime'
+const getApiBase = () => {
+  if ((import.meta as any).env?.VITE_API_BASE_URL) {
+    return (import.meta as any).env.VITE_API_BASE_URL
+  }
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return '/api'
+  }
+  return 'http://127.0.0.1:5000/api'
+}
+
+const getWsBase = () => {
+  if ((import.meta as any).env?.VITE_WS_BASE_URL) {
+    return (import.meta as any).env.VITE_WS_BASE_URL
+  }
+  if (typeof window !== 'undefined' && window.location?.host) {
+    const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    return `${proto}//${window.location.host}/realtime`
+  }
+  return 'ws://127.0.0.1:5000/realtime'
+}
+
+const API_BASE = getApiBase()
+const WS_BASE = getWsBase()
 
 class ApiClient {
   private userId: string = 's1'
@@ -308,7 +329,8 @@ class ApiClient {
     pickupCoords?: { lat: number; lng: number },
     destinationCoords?: { lat: number; lng: number },
     pickupAddress?: string,
-    destinationAddress?: string
+    destinationAddress?: string,
+    genderPreference?: string
   ): Promise<{ booking: Booking; ride: Ride }> {
     return this.request<{ booking: Booking; ride: Ride }>(`/rides/${rideId}/join`, {
       method: 'POST',
@@ -323,6 +345,7 @@ class ApiClient {
         destinationName: destination,
         destinationAddress: destinationAddress || destination,
         destinationCoords: destinationCoords ? [destinationCoords.lat, destinationCoords.lng] : undefined,
+        genderPreference,
       }),
     })
   }
@@ -334,8 +357,20 @@ class ApiClient {
     })
   }
 
-  async startRide(rideId: string): Promise<Ride> {
-    return this.request<Ride>(`/rides/${rideId}/start`, { method: 'POST' })
+  async startRide(
+    rideId: string,
+    startLocation?: { name?: string; lat: number; lng: number }
+  ): Promise<Ride> {
+    return this.request<Ride>(`/rides/${rideId}/start`, {
+      method: 'POST',
+      body: startLocation
+        ? JSON.stringify({
+            startLat: startLocation.lat,
+            startLng: startLocation.lng,
+            startLocation: startLocation.name,
+          })
+        : undefined,
+    })
   }
 
   async completeRide(rideId: string): Promise<Ride> {
@@ -425,9 +460,19 @@ class ApiClient {
     })
   }
 
-  async startDriverTrip(rideId: string): Promise<any> {
+  async startDriverTrip(
+    rideId: string,
+    startLocation?: { name?: string; lat: number; lng: number }
+  ): Promise<any> {
     return this.request(`/driver/rides/${rideId}/start`, {
       method: 'POST',
+      body: startLocation
+        ? JSON.stringify({
+            startLat: startLocation.lat,
+            startLng: startLocation.lng,
+            startLocation: startLocation.name,
+          })
+        : undefined,
     })
   }
 

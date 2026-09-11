@@ -26,6 +26,7 @@ import Button from '../../components/ui/Button'
 import CampusMap from '../../components/map/CampusMap'
 import Avatar from '../../components/ui/Avatar'
 import toast from 'react-hot-toast'
+import { StartPointSelectorModal } from '../../components/driver/StartPointSelectorModal'
 function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
   const R = 6371000
   const dLat = ((lat2 - lat1) * Math.PI) / 180
@@ -114,6 +115,7 @@ export default function CurrentTrip() {
 
   // Submitting state
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+  const [showStartPointModal, setShowStartPointModal] = useState<boolean>(false)
 
   // Stop simulation on unmount
   useEffect(() => {
@@ -258,11 +260,16 @@ export default function CurrentTrip() {
     )
   }
 
-  const handleStartTripAction = async () => {
+  const handleStartTripAction = async (startPoint?: { name: string; lat: number; lng: number; address?: string }) => {
+    if (!startPoint) {
+      setShowStartPointModal(true)
+      return
+    }
     setIsSubmitting(true)
     try {
-      await startTrip()
-      toast.success('Trip started! Navigation HUD engaged.')
+      await startTrip(startPoint)
+      toast.success(`Trip started from ${startPoint.name}! Navigation HUD engaged.`, { icon: '🚀' })
+      setShowStartPointModal(false)
     } catch (err: any) {
       toast.error(err?.message || 'Failed to start trip')
     } finally {
@@ -331,6 +338,31 @@ export default function CurrentTrip() {
               : `${activeRide.distanceKm} km`}
           </div>
         </div>
+      </div>
+
+      {/* Starting Location Info Banner */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-2 text-xs">
+          <div className="w-7 h-7 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs flex-shrink-0">
+            📍
+          </div>
+          <div>
+            <span className="text-[10px] text-slate-400 font-bold uppercase block">Vehicle Start Point</span>
+            <span className="font-bold text-slate-800">
+              {activeRide.startLocation || tripState?.route?.origin?.name || activeRide.pickupPoints[0]?.name || 'Origin'}
+            </span>
+          </div>
+        </div>
+        {activeRide.status !== 'completed' && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="text-xs h-7 px-2.5 border-emerald-300 text-emerald-800 bg-emerald-50/60 hover:bg-emerald-100"
+            onClick={() => setShowStartPointModal(true)}
+          >
+            Change Start Point
+          </Button>
+        )}
       </div>
 
       {/* Off-Route Alert Banner */}
@@ -523,7 +555,7 @@ export default function CurrentTrip() {
                 size="sm"
                 className="flex-1"
                 disabled={isSubmitting}
-                onClick={handleStartTripAction}
+                onClick={() => setShowStartPointModal(true)}
               >
                 <Play className="w-4 h-4 mr-1.5 fill-current" />
                 {isSubmitting ? 'Starting...' : 'Start Trip'}
@@ -698,6 +730,17 @@ export default function CurrentTrip() {
           )}
         </div>
       </Card>
+
+      {/* Driver Start Point Selector Modal */}
+      {showStartPointModal && activeRide && (
+        <StartPointSelectorModal
+          isOpen={showStartPointModal}
+          ride={activeRide}
+          isStarting={isSubmitting}
+          onClose={() => setShowStartPointModal(false)}
+          onConfirm={(startPoint) => handleStartTripAction(startPoint)}
+        />
+      )}
     </div>
   )
 }

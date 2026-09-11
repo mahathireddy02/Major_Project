@@ -241,13 +241,14 @@ export function useLiveTrip({
     [rideId]
   )
 
-  const startTrip = useCallback(async () => {
+  const startTrip = useCallback(async (startLocation?: { name?: string; lat: number; lng: number }) => {
     if (!rideId) return
     try {
-      await api.startDriverTrip(rideId)
+      await api.startDriverTrip(rideId, startLocation)
       fetchTrip()
     } catch (err) {
       console.warn('[useLiveTrip] Failed to start trip:', err)
+      throw err
     }
   }, [rideId, fetchTrip])
 

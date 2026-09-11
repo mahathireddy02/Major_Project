@@ -51,14 +51,19 @@ export default function Login() {
     }
   }
 
-  const handleQuickLogin = (studentId: string) => {
+  const handleDemoLogin = async (role: 'student' | 'faculty') => {
     setLoading(true)
-    setSelectedId(studentId)
-    setTimeout(() => {
-      loginAsStudent(studentId)
-      toast.success('Logged in as demo student')
+    const email = role === 'student' ? 'student.demo@sriindu.ac.in' : 'faculty.demo@sriindu.ac.in'
+    const password = 'campus2026'
+    try {
+      const res = await login({ email, password, role })
+      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Demo Student' : 'Demo Faculty')}!`)
       navigate('/student/home')
-    }, 400)
+    } catch (err: any) {
+      toast.error(err.message || 'Demo login failed')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -142,30 +147,50 @@ export default function Login() {
               </div>
             </form>
           ) : (
-            <div className="space-y-2">
-              <p className="text-xs text-slate-500 mb-2 font-medium">Select a student profile to login instantly:</p>
-              {realStudents.slice(0, 5).map((student) => (
-                <button
-                  key={student.id}
-                  type="button"
-                  onClick={() => handleQuickLogin(student.id)}
-                  disabled={loading}
-                  className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl border transition-all cursor-pointer text-left ${
-                    selectedId === student.id
-                      ? 'border-primary-500 bg-primary-50/60'
-                      : 'border-slate-200 bg-white hover:border-slate-300'
-                  }`}
-                >
-                  <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center font-heading font-semibold text-primary-700 text-xs shrink-0">
-                    {student.avatar}
+            <div className="space-y-3">
+              <p className="text-xs text-slate-500 mb-2 font-medium">1-Click Demo Login (Real Database Accounts):</p>
+              
+              {/* Student Demo */}
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('student')}
+                disabled={loading}
+                className="w-full flex items-center justify-between p-3 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/70 hover:bg-primary-100 hover:border-primary-500 text-left transition-all cursor-pointer shadow-sm group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
+                    🎓
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-slate-800 text-xs truncate">{student.name}</p>
-                    <p className="text-[11px] text-slate-400 truncate">{student.studentId} · {student.department}</p>
+                  <div>
+                    <p className="font-bold text-slate-900 text-xs">Uday Kiran (Demo Student)</p>
+                    <p className="text-[11px] text-primary-700 font-mono">student.demo@sriindu.ac.in</p>
                   </div>
-                  <ChevronRight size={14} className="text-slate-400" />
-                </button>
-              ))}
+                </div>
+                <span className="text-xs font-bold text-primary-600 group-hover:translate-x-0.5 transition-transform">
+                  1-Click →
+                </span>
+              </button>
+
+              {/* Faculty Demo */}
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('faculty')}
+                disabled={loading}
+                className="w-full flex items-center justify-between p-3 rounded-xl border-2 border-dashed border-primary-300 bg-primary-50/70 hover:bg-primary-100 hover:border-primary-500 text-left transition-all cursor-pointer shadow-sm group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-primary-600 flex items-center justify-center text-white text-sm font-bold shadow-sm">
+                    👨‍🏫
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 text-xs">Dr. Ramesh Sharma (Demo Faculty)</p>
+                    <p className="text-[11px] text-primary-700 font-mono">faculty.demo@sriindu.ac.in</p>
+                  </div>
+                </div>
+                <span className="text-xs font-bold text-primary-600 group-hover:translate-x-0.5 transition-transform">
+                  1-Click →
+                </span>
+              </button>
             </div>
           )}
 
