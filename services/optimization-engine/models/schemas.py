@@ -66,11 +66,13 @@ class ClusterResponse(BaseModel):
 # --- Matching Schemas ---
 
 class MatchScoreBreakdown(BaseModel):
-    destination_similarity: float = Field(..., description="0-30 points")
-    route_overlap: float = Field(..., description="0-30 points")
-    time_compatibility: float = Field(..., description="0-20 points")
-    pickup_proximity: float = Field(..., description="0-10 points")
+    destination_similarity: float = Field(..., description="0-15 points")
+    route_overlap: float = Field(..., description="0-15 points")
+    time_compatibility: float = Field(..., description="0-5 points")
+    pickup_proximity: float = Field(..., description="0-40 points")
     detour_penalty: float = Field(..., description="0-10 points")
+    active_ride_bonus: Optional[float] = Field(default=0.0, description="0-15 points")
+    driver_distance_km: Optional[float] = Field(default=0.0, description="Driver distance in km")
     total_score: float = Field(..., description="0-100 total match score")
 
 class RideMatch(BaseModel):
@@ -82,6 +84,7 @@ class RideMatch(BaseModel):
     insertion_pickup_index: int
     insertion_dropoff_index: int
     recommendation_reason: str
+    driver_distance_km: Optional[float] = 0.0
 
 class MatchRequest(BaseModel):
     request: RideRequest

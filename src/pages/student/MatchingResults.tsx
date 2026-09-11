@@ -98,7 +98,14 @@ export default function MatchingResults() {
       if (resp && resp.matches && resp.matches.length > 0) {
         const mapped: RideMatch[] = resp.matches.map((m: any) => ({
           ride: m.ride,
-          score: m.score,
+          score: {
+            ...m.score,
+            driverDistanceKm: typeof m.driverDistanceMeters === 'number'
+              ? Math.round(m.driverDistanceMeters / 100) / 10
+              : typeof m.score?.driverDistanceMeters === 'number'
+              ? Math.round(m.score.driverDistanceMeters / 100) / 10
+              : undefined,
+          },
           availableSeats: m.availableSeats,
           addedPickupPoint: pickup,
         }))
@@ -237,6 +244,11 @@ export default function MatchingResults() {
                   <span className="px-2 py-0.5 rounded-full bg-white/20 text-xs font-bold">
                     {getRideStatusLabel(topMatch.ride.status)}
                   </span>
+                  {topMatch.score.driverDistanceKm !== undefined && (
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-400/25 border border-emerald-300/40 text-emerald-100 text-xs font-bold flex items-center gap-1 shadow-xs">
+                      <MapPin size={11} /> Driver: {topMatch.score.driverDistanceKm} km away
+                    </span>
+                  )}
                   {(topMatch.ride.isFemaleOnly || topMatch.ride.genderPreference === 'FEMALE_ONLY') && (
                     <span className="px-2 py-0.5 rounded-full bg-pink-500 text-white text-xs font-bold flex items-center gap-1 shadow-xs">
                       <Shield size={11} /> ♀ Female Only
@@ -415,6 +427,11 @@ export default function MatchingResults() {
                           <span className="text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-full border border-primary-200">
                             {m.score.total}% Match
                           </span>
+                          {m.score.driverDistanceKm !== undefined && (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                              <MapPin size={10} className="text-emerald-600" /> Driver: {m.score.driverDistanceKm} km
+                            </span>
+                          )}
                           {(m.ride.isFemaleOnly || m.ride.genderPreference === 'FEMALE_ONLY') && (
                             <span className="text-[10px] font-bold text-pink-700 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200 flex items-center gap-1">
                               <Shield size={10} className="text-pink-600" /> ♀ Female Only

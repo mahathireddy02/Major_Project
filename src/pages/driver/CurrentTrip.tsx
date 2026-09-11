@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   MapPin,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { useLiveTrip } from '../../hooks/useLiveTrip'
+import { api } from '../../services/api'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
@@ -58,28 +59,155 @@ export default function CurrentTrip() {
   const students = useAppStore((s) => s.students)
   const currentUser = useAppStore((s) => s.currentUser)
   const currentDriverId = useAppStore((s) => s.currentDriverId)
+  const currentDriver = useAppStore((s) => s.currentDriver())
   const completeRideInStore = useAppStore((s) => s.completeRide)
   const refreshRides = useAppStore((s) => s.refreshRides)
 
-  // Find active ride
-  const filteredRides = rides.filter(
-    (r) => r.driverId === currentDriverId || r.driverId === currentUser?.id || r.driverId === 'd1'
-  )
-  const sortedRides = [...filteredRides].sort((a, b) => {
+  // Driver-specific rides fetched directly from the authenticated driver endpoint
+  const [driverRides, setDriverRides] = useState<any[]>([])
+
+  const loadDriverRides = useCallback(async () => {
+    try {
+      const fresh = await api.getDriverRides()
+      if (Array.isArray(fresh)) {
+        setDriverRides(fresh)
+      }
+    } catch {
+      // fallback — use global rides store
+    }
+  }, [])
+
+  // Fetch freshest rides from server on mount
+  useEffect(() => {
+    refreshRides()
+    loadDriverRides()
+  }, [refreshRides, loadDriverRides])
+
+  // Real-time synchronization for passenger bookings & ride status updates
+  useEffect(() => {
+    const unsub = api.onRealtimeEvent((event) => {
+      if (
+        event === 'BOOKING_CREATED' ||
+        event === 'BOOKING_UPDATED' ||
+        event === 'BOOKING_CANCELLED' ||
+        event === 'PASSENGER_ADDED' ||
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED' ||
+        event === 'RIDE_UPDATED' ||
+        event === 'RIDE_STARTED' ||
+        event === 'ROUTE_UPDATED'
+      ) {
+        refreshRides()
+        loadDriverRides()
+      }
+    })
+    return unsub
+  }, [refreshRides, loadDriverRides])
+
+  // Merge driverRides (authoritative) with global rides store for ride selection
+  // driverRides takes priority — these are the rides actually assigned to this driver
+  const allDriverRides = useMemo(() => {
+    const driverIds = new Set([
+      currentDriverId,
+      currentDriver?.id,
+      currentUser?.id,
+    ].filter(Boolean))
+
+    // Start with driver-specific rides from the driver endpoint
+    const merged = new Map<string, any>()
+    for (const r of driverRides) {
+      merged.set(r.id, r)
+    }
+
+    // Also include rides from the global store that match this driver
+    for (const r of rides) {
+      if (!merged.has(r.id)) {
+        const isMyRide =
+          (r.driverId && driverIds.has(r.driverId)) ||
+          // fallback for demo rides when no real auth
+          ((!currentDriverId || currentDriverId === 'd1') && (r.driverId === 'd1' || r.driverId === 'driver-1')) ||
+          (currentDriver?.name && (r as any).driverName === currentDriver.name)
+        if (isMyRide) {
+          merged.set(r.id, r)
+        }
+      }
+    }
+
+    return Array.from(merged.values())
+  }, [driverRides, rides, currentDriverId, currentDriver, currentUser])
+
+  const sortedRides = [...allDriverRides].sort((a, b) => {
     const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
     const timeB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0
     if (timeA !== timeB) return timeB - timeA
     return b.id.localeCompare(a.id)
   })
 
-  const activeRide = targetRideId
-    ? sortedRides.find((r) => r.id === targetRideId)
-    : (
-        sortedRides.find((r) => r.status === 'active') ||
-        sortedRides.find((r) => r.status === 'boarding') ||
-        sortedRides.find((r) => (r.status === 'waiting' || r.status === 'full') && (r.bookedSeats > 0 || (r.passengers && r.passengers.length > 0))) ||
-        sortedRides.find((r) => r.status === 'waiting')
-      )
+  // Prioritize rides that actually have booked passengers or active status
+  const activeRide = (targetRideId ? (allDriverRides.find((r) => r.id === targetRideId) || sortedRides.find((r) => r.id === targetRideId)) : null) ||
+    // Priority 1: In-progress ride that has passengers
+    sortedRides.find((r) => (r.status === 'active' || r.status === 'boarding') && ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0))) ||
+    // Priority 2: Waiting/full ride that has passengers
+    sortedRides.find((r) => (r.status === 'waiting' || r.status === 'full') && ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0))) ||
+    // Priority 3: Any ride with passengers regardless of status
+    sortedRides.find((r) => ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0)) && r.status !== 'completed' && r.status !== 'cancelled') ||
+    // Priority 4: Active or boarding ride even if empty
+    sortedRides.find((r) => r.status === 'active' || r.status === 'boarding') ||
+    // Priority 5: Waiting ride
+    sortedRides.find((r) => r.status === 'waiting') ||
+    sortedRides[0]
+
+  // Fetch enriched passenger manifest from the new /rides/:id/passengers endpoint
+  // This merges ride.passengers + BookingModel for complete, authoritative data
+  const [ridePassengers, setRidePassengers] = useState<any[]>([])
+
+  const loadRidePassengers = useCallback(async (rideId?: string) => {
+    const id = rideId || activeRide?.id
+    if (!id) return
+    try {
+      const data = await api.getRidePassengers(id)
+      if (Array.isArray(data)) {
+        setRidePassengers(data)
+      }
+    } catch {
+      // fallback: try the bookings endpoint
+      try {
+        const data = await api.getRideBookings(id)
+        if (Array.isArray(data)) {
+          setRidePassengers(data.filter((b: any) => b.status !== 'cancelled'))
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, [activeRide?.id])
+
+  // Load passengers immediately when activeRide changes
+  useEffect(() => {
+    loadRidePassengers()
+  }, [loadRidePassengers])
+
+  // Keep passengers in sync on all relevant realtime events
+  useEffect(() => {
+    const unsub = api.onRealtimeEvent((event, payload) => {
+      if (
+        event === 'BOOKING_CREATED' ||
+        event === 'BOOKING_UPDATED' ||
+        event === 'BOOKING_CANCELLED' ||
+        event === 'PASSENGER_ADDED' ||
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED' ||
+        event === 'RIDE_UPDATED'
+      ) {
+        // Reload passengers for the affected ride or current active ride
+        const affectedRideId = payload?.rideId || payload?.ride?.id || activeRide?.id
+        if (affectedRideId) {
+          loadRidePassengers(affectedRideId)
+        }
+      }
+    })
+    return unsub
+  }, [activeRide?.id, loadRidePassengers])
 
   // Live Trip Hook
   const {
@@ -103,6 +231,73 @@ export default function CurrentTrip() {
     rideId: activeRide?.id,
     defaultCameraMode: 'FOLLOW',
   })
+
+  // Authoritative synced ride state
+  const effectiveRide = tripState?.ride ? { ...activeRide, ...tripState.ride } : activeRide
+
+  // Complete passenger manifest: use the enriched ridePassengers from /rides/:id/passengers as primary source
+  // Falls back to effectiveRide.passengers if ridePassengers is not yet loaded
+  const manifestPassengers = useMemo(() => {
+    // If we have authoritative data from the new endpoint, use it
+    if (ridePassengers.length > 0) {
+      return ridePassengers
+    }
+    // Fallback: use passengers embedded in the ride document
+    return effectiveRide?.passengers || []
+  }, [ridePassengers, effectiveRide?.passengers])
+
+  // Computed route stops ensuring driver origin is stop 1 and omitting unbooked placeholder stops
+  const routeStops = useMemo(() => {
+    const baseStops = (tripState?.stops && tripState.stops.length > 0)
+      ? tripState.stops
+      : (effectiveRide?.stops || [])
+
+    const originName = effectiveRide?.startLocation || effectiveRide?.pickupPoints?.[0]?.name || 'Driver Start Location'
+    const originLat = effectiveRide?.startLocationLat || effectiveRide?.currentLat || 17.4934
+    const originLng = effectiveRide?.startLocationLng || effectiveRide?.currentLng || 78.3995
+
+    let result = [...baseStops]
+
+    // If driver started at a custom location, filter out any unbooked template "Railway Station" stops
+    if (originName.toLowerCase() !== 'railway station') {
+      result = result.filter((s) => {
+        if (s.name.toLowerCase() === 'railway station' && !s.studentId && !s.bookingId) {
+          return false
+        }
+        return true
+      })
+    }
+
+    const hasOrigin = result.some((s) => s.name.toLowerCase() === originName.toLowerCase() || s.id?.includes('origin'))
+    if (!hasOrigin && originName) {
+      result.unshift({
+        id: `stop-${effectiveRide?.id || 'curr'}-origin`,
+        type: 'PICKUP',
+        name: originName,
+        latitude: originLat,
+        longitude: originLng,
+        sequence: 1,
+        status: effectiveRide?.status === 'active' ? 'COMPLETED' : 'UPCOMING',
+        estimatedArrival: 'Departed',
+      })
+    }
+
+    return result.map((s, i) => ({
+      ...s,
+      sequence: i + 1,
+    }))
+  }, [
+    tripState?.stops,
+    effectiveRide?.stops,
+    effectiveRide?.startLocation,
+    effectiveRide?.startLocationLat,
+    effectiveRide?.startLocationLng,
+    effectiveRide?.currentLat,
+    effectiveRide?.currentLng,
+    effectiveRide?.pickupPoints,
+    effectiveRide?.status,
+    effectiveRide?.id,
+  ])
 
   // Real Browser GPS Tracking state
   const [isGpsActive, setIsGpsActive] = useState<boolean>(false)
@@ -240,7 +435,7 @@ export default function CurrentTrip() {
     }
   }
 
-  if (!activeRide || (!targetRideId && (activeRide.status === 'completed' || activeRide.status === 'cancelled'))) {
+  if (!effectiveRide || (!targetRideId && (effectiveRide.status === 'completed' || effectiveRide.status === 'cancelled'))) {
     return (
       <div className="max-w-md mx-auto px-4 pt-16 pb-20 text-center">
         <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -322,7 +517,7 @@ export default function CurrentTrip() {
               {nextManeuver ? `In ${nextManeuver.distanceMeters}m` : 'Navigation Active'}
             </div>
             <div className="font-bold text-base text-white line-clamp-1">
-              {nextManeuver?.instruction || `Head towards ${currentStop?.name || activeRide.destination}`}
+              {nextManeuver?.instruction || `Head towards ${currentStop?.name || effectiveRide.destination}`}
             </div>
           </div>
         </div>
@@ -330,12 +525,12 @@ export default function CurrentTrip() {
         {/* ETA & Distance Telematics */}
         <div className="text-right flex-shrink-0 border-l border-slate-700/80 pl-4">
           <div className="text-lg font-extrabold text-emerald-400">
-            {progress?.etaString || activeRide.estimatedArrival || '8:35 AM'}
+            {progress?.etaString || effectiveRide.estimatedArrival || '8:35 AM'}
           </div>
           <div className="text-xs text-slate-300 font-medium">
             {progress?.remainingDistanceMeters
               ? `${(progress.remainingDistanceMeters / 1000).toFixed(1)} km · ${Math.round(progress.remainingDurationSeconds / 60)} min`
-              : `${activeRide.distanceKm} km`}
+              : `${effectiveRide.distanceKm} km`}
           </div>
         </div>
       </div>
@@ -349,11 +544,11 @@ export default function CurrentTrip() {
           <div>
             <span className="text-[10px] text-slate-400 font-bold uppercase block">Vehicle Start Point</span>
             <span className="font-bold text-slate-800">
-              {activeRide.startLocation || tripState?.route?.origin?.name || activeRide.pickupPoints[0]?.name || 'Origin'}
+              {effectiveRide.startLocation || tripState?.route?.origin?.name || effectiveRide.pickupPoints?.[0]?.name || 'Origin'}
             </span>
           </div>
         </div>
-        {activeRide.status !== 'completed' && (
+        {effectiveRide.status !== 'completed' && (
           <Button
             size="sm"
             variant="secondary"
@@ -381,17 +576,17 @@ export default function CurrentTrip() {
       {/* Map Card */}
       <div className="relative rounded-2xl overflow-hidden shadow-lg border border-slate-200">
         <CampusMap
-          stops={tripState?.stops || []}
-          routeCoordinates={tripState?.route?.geometry || activeRide.routeCoordinates || []}
-          vehicleLat={vehiclePosition ? vehiclePosition[0] : activeRide.currentLat}
-          vehicleLng={vehiclePosition ? vehiclePosition[1] : activeRide.currentLng}
+          stops={tripState?.stops || effectiveRide.stops || []}
+          routeCoordinates={tripState?.route?.geometry || effectiveRide.routeCoordinates || []}
+          vehicleLat={vehiclePosition ? vehiclePosition[0] : effectiveRide.currentLat}
+          vehicleLng={vehiclePosition ? vehiclePosition[1] : effectiveRide.currentLng}
           vehicleHeading={vehicleHeading}
           cameraMode={cameraMode}
           onCameraModeChange={setCameraMode}
           onRecenter={recenter}
           height="h-72"
           interactive
-          alertMode={progress?.isOffRoute || activeRide.hasDeviation}
+          alertMode={progress?.isOffRoute || effectiveRide.hasDeviation}
           showRecenterButton={isRecenterNeeded}
         />
 
@@ -508,7 +703,7 @@ export default function CurrentTrip() {
               </Button>
             )}
 
-            {currentStop.type === 'DROPOFF' && (tripState?.stops || activeRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length > 1 && (
+            {currentStop.type === 'DROPOFF' && (tripState?.stops || effectiveRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length > 1 && (
               <Button
                 variant="green"
                 size="sm"
@@ -536,7 +731,7 @@ export default function CurrentTrip() {
               </Button>
             )}
 
-            {currentStop.type === 'DROPOFF' && (tripState?.stops || activeRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length <= 1 && (
+            {currentStop.type === 'DROPOFF' && (tripState?.stops || effectiveRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length <= 1 && (
               <Button
                 variant="green"
                 size="sm"
@@ -549,7 +744,7 @@ export default function CurrentTrip() {
               </Button>
             )}
 
-            {activeRide.status !== 'active' && (
+            {effectiveRide.status !== 'active' && (
               <Button
                 variant="primary"
                 size="sm"
@@ -568,7 +763,7 @@ export default function CurrentTrip() {
       {/* Stop Sequence Progression Checklist */}
       <Card padding="md">
         <h3 className="font-heading font-bold text-slate-900 text-sm mb-3 flex items-center justify-between">
-          <span>Route Stops ({tripState?.stops?.length || activeRide.pickupPoints.length + 1})</span>
+          <span>Route Stops ({routeStops.length})</span>
           <span className="text-xs font-semibold text-primary-600">
             {progress?.percent ? `${progress.percent}% Completed` : '0% Completed'}
           </span>
@@ -583,7 +778,7 @@ export default function CurrentTrip() {
         </div>
 
         <div className="space-y-3">
-          {(tripState?.stops || []).map((stop, idx) => {
+          {(routeStops || []).map((stop, idx) => {
             const isDone = stop.status === 'BOARDED' || stop.status === 'COMPLETED'
             const isCurrent = currentStop?.id === stop.id
 
@@ -610,7 +805,13 @@ export default function CurrentTrip() {
                     <p className={`text-xs font-bold ${isDone ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                       {stop.name}
                     </p>
-                    <p className="text-[10px] text-slate-400">{stop.type === 'DROPOFF' ? 'Destination' : 'Pickup Bay'}</p>
+                    <p className="text-[10px] text-slate-400">
+                      {stop.type === 'DROPOFF'
+                        ? 'Destination'
+                        : (stop.id?.includes('origin') || idx === 0)
+                        ? 'Start Location (Origin)'
+                        : 'Pickup Bay'}
+                    </p>
                   </div>
                 </div>
 
@@ -653,19 +854,19 @@ export default function CurrentTrip() {
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-primary-600" />
             <h3 className="font-heading font-bold text-slate-900 text-sm">
-              Pooled Passengers ({activeRide.passengers?.length || 0})
+              Pooled Passengers ({manifestPassengers.length})
             </h3>
           </div>
           <span className="text-xs font-semibold text-slate-500">
-            {activeRide.passengers?.filter((p) => p.status === 'boarded').length || 0} on board
+            {manifestPassengers.filter((p: any) => p.status === 'boarded').length} on board
           </span>
         </div>
 
         <div className="divide-y divide-slate-100">
-          {(activeRide.passengers || []).length === 0 ? (
+          {manifestPassengers.length === 0 ? (
             <p className="text-xs text-slate-400 py-3 text-center">No passengers booked yet.</p>
           ) : (
-            (activeRide.passengers || []).map((passenger) => (
+            manifestPassengers.map((passenger: any) => (
               <div key={passenger.studentId} className="py-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <Avatar name={passenger.name} size="sm" />
@@ -676,7 +877,7 @@ export default function CurrentTrip() {
                     </div>
                     <p className="text-[11px] text-slate-500">
                       <span>Pickup: <strong>{passenger.pickup}</strong></span> →{' '}
-                      <span>Dropoff: <strong className="text-emerald-700">{passenger.destination || activeRide.destination}</strong></span>
+                      <span>Dropoff: <strong className="text-emerald-700">{passenger.destination || effectiveRide.destination}</strong></span>
                     </p>
                   </div>
                 </div>
@@ -702,6 +903,7 @@ export default function CurrentTrip() {
                       className="text-xs h-7 px-2.5"
                       onClick={async () => {
                         await updatePassengerStatus(passenger.studentId, 'boarded')
+                        await loadRidePassengers()
                         await refreshRides()
                         toast.success(`${passenger.name} marked as boarded`)
                       }}
@@ -717,6 +919,7 @@ export default function CurrentTrip() {
                       className="text-xs h-7 px-2.5"
                       onClick={async () => {
                         await updatePassengerStatus(passenger.studentId, 'dropped')
+                        await loadRidePassengers()
                         await refreshRides()
                         toast.success(`${passenger.name} marked as dropped off`)
                       }}
@@ -732,10 +935,10 @@ export default function CurrentTrip() {
       </Card>
 
       {/* Driver Start Point Selector Modal */}
-      {showStartPointModal && activeRide && (
+      {showStartPointModal && effectiveRide && (
         <StartPointSelectorModal
           isOpen={showStartPointModal}
-          ride={activeRide}
+          ride={effectiveRide}
           isStarting={isSubmitting}
           onClose={() => setShowStartPointModal(false)}
           onConfirm={(startPoint) => handleStartTripAction(startPoint)}
