@@ -289,23 +289,6 @@ export const useAppStore = create<AppState>((set, get) => ({
               showNotificationToast(notif)
             }
           }
-        }
-            set((state) => ({
-              notifications: [{ ...notif, id: notifId }, ...state.notifications.filter((n) => n.id !== notifId)],
-            }))
-            // Fetch fresh notifications with authenticated credentials
-            const freshNotifs = await api.getNotifications().catch(() => [])
-            if (Array.isArray(freshNotifs)) {
-              set({ notifications: freshNotifs })
-            }
-            const activeId = profile.id || (isStudent ? get().currentStudentId : get().currentDriverId)
-            if (activeId) {
-              api.getEmergencyContact(activeId).then((ec) => {
-                if (ec) set({ emergencyContact: ec })
-              }).catch(() => {})
-            }
-            }
-          }
         } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
           const isCompleted = event === 'RIDE_COMPLETED' || payload.ride.status === 'completed'
           set((state) => ({
@@ -559,7 +542,6 @@ export const useAppStore = create<AppState>((set, get) => ({
               api.getEmergencyContact(activeId).then((ec) => {
                 if (ec) set({ emergencyContact: ec })
               }).catch(() => {})
-            }
             }
           }
         } catch {
