@@ -11,6 +11,17 @@ import type {
 } from '../types'
 import { api } from '../services/api'
 
+export interface RideMessage {
+  id: string
+  rideId: string
+  fromId: string
+  fromName: string
+  fromRole: 'student' | 'driver'
+  text: string
+  sentAt: string
+  read: boolean
+}
+
 type Role = 'student' | 'faculty' | 'driver' | 'admin'
 
 export function normalizeSafetyEvent(e: any): SafetyEvent {
@@ -65,6 +76,7 @@ interface AppState {
   safetyEvents: SafetyEvent[]
   adminUser: AdminUser
   auditLogs: any[]
+  messages: RideMessage[]
 
   // Simulation
   sim: SimState
@@ -121,6 +133,11 @@ interface AppState {
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
 
+  // Actions — Messaging
+  sendMessage: (rideId: string, text: string) => void
+  replyToMessage: (rideId: string, text: string) => void
+  markMessagesRead: (rideId: string, role: 'student' | 'driver') => void
+
   // Actions — Notifications
   markNotificationRead: (notifId: string) => Promise<void>
   markAllRead: () => Promise<void>
@@ -151,6 +168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   safetyEvents: [],
   adminUser: { id: 'admin1', name: 'Dispatch Control', role: 'admin', avatar: 'DC' },
   auditLogs: [],
+  messages: [],
   sim: { trafficActive: false, demoMessage: null },
 
   // Computed — prefer currentUser (real authenticated user) over store list
@@ -844,6 +862,47 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err: any) {
       console.error('[Store] resolveDeviation error:', err.message)
     }
+  },
+
+  // Messaging
+  sendMessage: (rideId, text) => {
+    const { currentUser, currentStudentId, students } = get()
+    const sender = currentUser || students.find((s) => s.id === currentStudentId)
+    const msg: RideMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      rideId,
+      fromId: sender?.id || currentStudentId,
+      fromName: sender?.name || 'Student',
+      fromRole: 'student',
+      text: text.trim(),
+      sentAt: new Date().toISOString(),
+      read: false,
+    }
+    set((state) => ({ messages: [...state.messages, msg] }))
+  },
+
+  replyToMessage: (rideId, text) => {
+    const { currentUser, currentDriverId, drivers } = get()
+    const driver = currentUser || drivers.find((d) => d.id === currentDriverId)
+    const msg: RideMessage = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      rideId,
+      fromId: driver?.id || currentDriverId,
+      fromName: driver?.name || 'Driver',
+      fromRole: 'driver',
+      text: text.trim(),
+      sentAt: new Date().toISOString(),
+      read: false,
+    }
+    set((state) => ({ messages: [...state.messages, msg] }))
+  },
+
+  markMessagesRead: (rideId, role) => {
+    set((state) => ({
+      messages: state.messages.map((m) =>
+        m.rideId === rideId && m.fromRole !== role ? { ...m, read: true } : m
+      ),
+    }))
   },
 
   // Notifications
