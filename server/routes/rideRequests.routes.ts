@@ -29,10 +29,10 @@ export const rideRequestRoutes: FastifyPluginAsync = async (fastify) => {
     let pAddress = typeof body.pickup === 'object' ? body.pickup.address : undefined
     let pLat = typeof body.pickup === 'object' && body.pickup.latitude
       ? body.pickup.latitude
-      : body.pickupLat ?? 17.3616
+      : (body.pickupLat ?? 0)
     let pLng = typeof body.pickup === 'object' && body.pickup.longitude
       ? body.pickup.longitude
-      : body.pickupLng ?? 78.4747
+      : (body.pickupLng ?? 0)
 
     // Extract destination details cleanly without dummy fallbacks
     let dName = typeof body.destination === 'string' ? body.destination : body.destination?.name || 'Selected Destination'

@@ -371,7 +371,7 @@ export const LocationSearchInput: React.FC<LocationSearchInputProps> = ({
                 <div className="p-5 text-center">
                   <p className="text-xs font-semibold text-slate-700">No exact location found</p>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Try searching: "Charminar", "Kukatpally", "SRI INDU College", or click on the map.
+                    Try searching: "Kukatpally", "SRI INDU College", "Secunderabad", or click on the map.
                   </p>
                 </div>
               )}

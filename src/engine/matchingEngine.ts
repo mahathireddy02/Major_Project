@@ -127,8 +127,8 @@ export function calculateMatchScore(
     const matchedPickup = ride.pickupPoints?.find(
       (p) => p.name.toLowerCase() === request.pickup.toLowerCase()
     )
-    pLat = matchedPickup?.lat ?? 17.3616
-    pLng = matchedPickup?.lng ?? 78.4747
+    pLat = matchedPickup?.lat ?? ride.currentLat ?? 0
+    pLng = matchedPickup?.lng ?? ride.currentLng ?? 0
   }
 
   const dLat = request.destinationCoords?.lat || ride.destinationLat || 17.2063
