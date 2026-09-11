@@ -49,22 +49,36 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
   // Start trip
   fastify.post('/rides/:id/start', async (request, reply) => {
     const { id } = request.params as { id: string }
+    const body = (request.body as any) || {}
+    const { startLat, startLng, startLocation } = body
+
     const ride = await RideModel.findOne({ id })
     if (!ride) {
       return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
     }
 
     ride.status = 'active'
+    if (typeof startLat === 'number' && typeof startLng === 'number') {
+      ride.currentLat = startLat
+      ride.currentLng = startLng
+      ride.startLocationLat = startLat
+      ride.startLocationLng = startLng
+      if (startLocation) {
+        ride.startLocation = startLocation
+      }
+    }
+
+    await routeProgressService.buildTripRoute(ride, startLat, startLng, startLocation)
     if (ride.tripRoute) {
       ride.tripRoute.status = 'NAVIGATING'
-    } else {
-      await routeProgressService.buildTripRoute(ride)
-      ride.tripRoute!.status = 'NAVIGATING'
     }
     await ride.save()
 
     realtimeService.broadcast('RIDE_STARTED', { rideId: id, ride })
     realtimeService.broadcast('RIDE_UPDATED', { ride })
+    if (ride.tripRoute) {
+      realtimeService.broadcast('ROUTE_UPDATED', { rideId: id, route: ride.tripRoute, stops: ride.stops })
+    }
     return { success: true, data: ride }
   })
 

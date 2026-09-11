@@ -9,6 +9,8 @@ import StatCard from '../../components/ui/StatCard'
 import { useState, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import { api } from '../../services/api'
+import { Ride } from '../../types'
+import { StartPointSelectorModal } from '../../components/driver/StartPointSelectorModal'
 
 export default function DriverDashboard() {
   const navigate = useNavigate()
@@ -19,6 +21,7 @@ export default function DriverDashboard() {
   const startRide = useAppStore((s) => s.startRide)
   const refreshRides = useAppStore((s) => s.refreshRides)
   const [startingRideId, setStartingRideId] = useState<string | null>(null)
+  const [startPointModalRide, setStartPointModalRide] = useState<Ride | null>(null)
 
   useEffect(() => {
     refreshRides()
@@ -152,22 +155,13 @@ export default function DriverDashboard() {
                     size="sm"
                     variant="green"
                     disabled={startingRideId === ride.id}
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.stopPropagation()
-                      setStartingRideId(ride.id)
-                      try {
-                        await startRide(ride.id)
-                        toast.success('Trip started!')
-                        navigate(`/driver/trip?rideId=${ride.id}`)
-                      } catch (err: any) {
-                        toast.error(err.message || 'Failed to start trip')
-                      } finally {
-                        setStartingRideId(null)
-                      }
+                      setStartPointModalRide(ride)
                     }}
                   >
                     <Play size={13} />
-                    {startingRideId === ride.id ? 'Starting...' : 'Start'}
+                    Start
                   </Button>
                 )}
               </div>
@@ -175,6 +169,30 @@ export default function DriverDashboard() {
           ))
         )}
       </div>
+
+      {/* Driver Start Point Selector Modal */}
+      {startPointModalRide && (
+        <StartPointSelectorModal
+          isOpen={Boolean(startPointModalRide)}
+          ride={startPointModalRide}
+          isStarting={startingRideId === startPointModalRide.id}
+          onClose={() => setStartPointModalRide(null)}
+          onConfirm={async (startPoint) => {
+            setStartingRideId(startPointModalRide.id)
+            try {
+              await startRide(startPointModalRide.id, startPoint)
+              toast.success(`Trip started from ${startPoint.name}!`, { icon: '🚀' })
+              const rideId = startPointModalRide.id
+              setStartPointModalRide(null)
+              navigate(`/driver/trip?rideId=${rideId}`)
+            } catch (err: any) {
+              toast.error(err.message || 'Failed to start trip')
+            } finally {
+              setStartingRideId(null)
+            }
+          }}
+        />
+      )}
     </div>
   )
 }

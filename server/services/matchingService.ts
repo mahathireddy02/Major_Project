@@ -71,24 +71,45 @@ export class MatchingService {
   ): Promise<RideMatchCandidate> {
     const availableSeats = ride.capacity - ride.bookedSeats
 
-    // 0. Female-Only Strict Group Compatibility Check
+    // 0. Female-Only Strict Safety & Group Compatibility Check
+    const requestingStudent = request.requestingStudentId
+      ? await UserModel.findOne({ id: request.requestingStudentId })
+      : null
+    const requestingGender = requestingStudent?.gender || 'Prefer not to say'
+    const isRideFemaleOnly = Boolean(
+      (ride as any).isFemaleOnly ||
+      (ride as any).genderPreference === 'FEMALE_ONLY' ||
+      ride.passengers.some((p: any) => p.genderPreference === 'FEMALE_ONLY')
+    )
+
+    // Rule 1: If the ride is already female-only, male passengers CANNOT match
+    if (isRideFemaleOnly && requestingGender === 'Male') {
+      return this.buildIncompatibleResponse(ride, availableSeats, 'This ride is reserved for female passengers only. Male passengers cannot join.')
+    }
+
+    // Rule 2: If requesting student requested FEMALE_ONLY:
     if (request.genderPreference === 'FEMALE_ONLY') {
-      if (request.requestingStudentId) {
-        const student = await UserModel.findOne({ id: request.requestingStudentId })
-        if (student && student.gender === 'Male') {
-          // Male student cannot select Female-Only ride
-          return this.buildIncompatibleResponse(ride, availableSeats, 'Female-only preference restricts group to female passengers only.')
-        }
+      // Male student cannot request female-only
+      if (requestingGender === 'Male') {
+        return this.buildIncompatibleResponse(ride, availableSeats, 'Female-only preference is available for female passengers only.')
       }
 
-      // Check existing passengers in the ride
+      // Check existing passengers in the candidate ride: must not contain any male passengers
       const passengerIds = ride.passengers.map((p) => p.studentId)
       if (passengerIds.length > 0) {
         const existingPassengers = await UserModel.find({ id: { $in: passengerIds } })
         const hasMale = existingPassengers.some((p) => p.gender === 'Male')
         if (hasMale) {
-          return this.buildIncompatibleResponse(ride, availableSeats, 'Ride group contains non-female passengers.')
+          return this.buildIncompatibleResponse(ride, availableSeats, 'Ride group contains male passengers.')
         }
+      }
+    }
+
+    // Rule 3: If candidate ride has ANY passenger who booked with FEMALE_ONLY, male passengers CANNOT match
+    if (requestingGender === 'Male') {
+      const hasFemaleOnlyPassenger = ride.passengers.some((p: any) => p.genderPreference === 'FEMALE_ONLY')
+      if (hasFemaleOnlyPassenger) {
+        return this.buildIncompatibleResponse(ride, availableSeats, 'Ride contains passengers who requested female-only commute.')
       }
     }
 

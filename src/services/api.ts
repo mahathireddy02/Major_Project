@@ -308,7 +308,8 @@ class ApiClient {
     pickupCoords?: { lat: number; lng: number },
     destinationCoords?: { lat: number; lng: number },
     pickupAddress?: string,
-    destinationAddress?: string
+    destinationAddress?: string,
+    genderPreference?: string
   ): Promise<{ booking: Booking; ride: Ride }> {
     return this.request<{ booking: Booking; ride: Ride }>(`/rides/${rideId}/join`, {
       method: 'POST',
@@ -323,6 +324,7 @@ class ApiClient {
         destinationName: destination,
         destinationAddress: destinationAddress || destination,
         destinationCoords: destinationCoords ? [destinationCoords.lat, destinationCoords.lng] : undefined,
+        genderPreference,
       }),
     })
   }
@@ -334,8 +336,20 @@ class ApiClient {
     })
   }
 
-  async startRide(rideId: string): Promise<Ride> {
-    return this.request<Ride>(`/rides/${rideId}/start`, { method: 'POST' })
+  async startRide(
+    rideId: string,
+    startLocation?: { name?: string; lat: number; lng: number }
+  ): Promise<Ride> {
+    return this.request<Ride>(`/rides/${rideId}/start`, {
+      method: 'POST',
+      body: startLocation
+        ? JSON.stringify({
+            startLat: startLocation.lat,
+            startLng: startLocation.lng,
+            startLocation: startLocation.name,
+          })
+        : undefined,
+    })
   }
 
   async completeRide(rideId: string): Promise<Ride> {
@@ -425,9 +439,19 @@ class ApiClient {
     })
   }
 
-  async startDriverTrip(rideId: string): Promise<any> {
+  async startDriverTrip(
+    rideId: string,
+    startLocation?: { name?: string; lat: number; lng: number }
+  ): Promise<any> {
     return this.request(`/driver/rides/${rideId}/start`, {
       method: 'POST',
+      body: startLocation
+        ? JSON.stringify({
+            startLat: startLocation.lat,
+            startLng: startLocation.lng,
+            startLocation: startLocation.name,
+          })
+        : undefined,
     })
   }
 

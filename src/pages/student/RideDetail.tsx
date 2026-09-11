@@ -86,6 +86,14 @@ export default function RideDetail() {
   const requestedPickupAddress = searchParams.get('pickupAddress') || requestedPickup
   const requestedDestAddress = searchParams.get('destinationAddress') || requestedDestination
 
+  const isFemaleOnlyRide = Boolean(
+    ride.isFemaleOnly ||
+    ride.genderPreference === 'FEMALE_ONLY' ||
+    ride.passengers?.some((p) => p.genderPreference === 'FEMALE_ONLY')
+  )
+  const isMaleStudent = currentStudent?.gender?.toLowerCase() === 'male'
+  const isGenderRestricted = isFemaleOnlyRide && isMaleStudent
+
   const [fareBreakdown, setFareBreakdown] = useState<FareBreakdown | null>(null)
   const [fareAmount, setFareAmount] = useState<number | null>(null)
   const [isLockedFare, setIsLockedFare] = useState<boolean>(false)
@@ -114,11 +122,11 @@ export default function RideDetail() {
         }
       }).catch((err) => console.warn('[RideDetail] Could not load ride fares:', err))
     } else {
-      // Pre-booking dynamic estimate for this student's pickup and dropoff
-      const pLat = requestedPickupLat || ride.pickupPoints[0]?.lat || 17.4934
-      const pLng = requestedPickupLng || ride.pickupPoints[0]?.lng || 78.3995
-      const dLat = requestedDestLat || ride.destinationLat
-      const dLng = requestedDestLng || ride.destinationLng
+      // Calculate dynamic fare estimate using exact pickup & destination
+      const pLat = requestedPickupLat || ride.pickupPoints[0]?.lat || 17.398
+      const pLng = requestedPickupLng || ride.pickupPoints[0]?.lng || 78.479
+      const dLat = requestedDestLat || ride.destinationLat || 17.2063
+      const dLng = requestedDestLng || ride.destinationLng || 78.6015
 
       api.getFareEstimate({
         pickupName: requestedPickup,
@@ -133,20 +141,21 @@ export default function RideDetail() {
         const fareData = res?.data || res
         if (fareData && typeof fareData.estimatedFare === 'number') {
           setFareAmount(fareData.estimatedFare)
-          setFareBreakdown(fareData.breakdown)
-          setIsLockedFare(false)
+          if (fareData.breakdown) {
+            setFareBreakdown(fareData.breakdown)
+          }
         }
-      }).catch((err) => console.warn('[RideDetail] Fare estimate error:', err))
+      }).catch((err) => console.warn('[RideDetail] Dynamic fare estimate failed:', err))
     }
   }, [ride?.id, currentStudentId, isPassenger, requestedPickupLat, requestedPickupLng, requestedDestLat, requestedDestLng])
 
   const mapPoints = [
-    ...ride.pickupPoints.map((pp) => ({
-      lat: pp.lat,
-      lng: pp.lng,
-      label: pp.name,
+    {
+      lat: requestedPickupLat || ride.pickupPoints[0]?.lat || 17.398,
+      lng: requestedPickupLng || ride.pickupPoints[0]?.lng || 78.479,
+      label: requestedPickup,
       type: 'pickup' as const,
-    })),
+    },
     {
       lat: requestedDestLat || ride.destinationLat,
       lng: requestedDestLng || ride.destinationLng,
@@ -162,6 +171,10 @@ export default function RideDetail() {
   ]
 
   const handleConfirmJoin = async () => {
+    if (isGenderRestricted) {
+      toast.error('This ride is restricted to female passengers only.')
+      return
+    }
     setIsBooking(true)
     try {
       const pickupCoords = requestedPickupLat && requestedPickupLng
@@ -170,7 +183,18 @@ export default function RideDetail() {
       const destinationCoords = requestedDestLat && requestedDestLng
         ? { lat: requestedDestLat, lng: requestedDestLng }
         : undefined
-      await joinRide(ride.id, currentStudentId, requestedPickup, requestedDestination, pickupCoords, destinationCoords, requestedPickupAddress, requestedDestAddress)
+      const genderPref = searchParams.get('genderPreference') || (isFemaleOnlyRide ? 'FEMALE_ONLY' : 'ANYONE')
+      await joinRide(
+        ride.id,
+        currentStudentId,
+        requestedPickup,
+        requestedDestination,
+        pickupCoords,
+        destinationCoords,
+        requestedPickupAddress,
+        requestedDestAddress,
+        genderPref
+      )
       setIsBooking(false)
       setShowConfirm(false)
       toast.success('Successfully joined ride!', { icon: '🎉' })
@@ -196,6 +220,31 @@ export default function RideDetail() {
           {getRideStatusLabel(ride.status)}
         </Badge>
       </div>
+
+      {/* Female-only safety alert banner */}
+      {isFemaleOnlyRide && (
+        <div className="mb-4 p-4 bg-pink-50 border border-pink-200 rounded-2xl flex items-start gap-3 shadow-xs">
+          <div className="w-9 h-9 rounded-full bg-pink-100 flex items-center justify-center flex-shrink-0 text-pink-600 font-bold text-base">
+            ♀
+          </div>
+          <div className="flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h4 className="text-sm font-bold text-pink-900">Female Passengers Only Pool</h4>
+              <span className="bg-pink-200/80 text-pink-800 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                Strict Safety Policy
+              </span>
+            </div>
+            <p className="text-xs text-pink-700 mt-1 leading-relaxed">
+              This shared ride is reserved exclusively for female students and faculty. All male passenger bookings are automatically restricted.
+            </p>
+            {isMaleStudent && (
+              <div className="mt-2 text-xs font-semibold text-rose-700 bg-rose-100/80 p-2 rounded-lg border border-rose-200">
+                ⚠️ Your account is registered as Male ({currentStudent?.name}). You cannot join this female-only ride.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Title & Route summary */}
       <div className="mb-4">
@@ -472,6 +521,13 @@ export default function RideDetail() {
             <Button size="md" disabled variant="secondary">
               Ride Full
             </Button>
+          ) : isGenderRestricted ? (
+            <div className="text-right">
+              <Button size="md" disabled variant="secondary" className="bg-pink-50 text-pink-700 border-pink-200 cursor-not-allowed">
+                <Shield size={15} className="text-pink-600 mr-1" />
+                Female Only Restricted
+              </Button>
+            </div>
           ) : (
             <Button size="md" variant="green" onClick={() => setShowConfirm(true)}>
               Join This Ride

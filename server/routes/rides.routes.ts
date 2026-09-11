@@ -161,6 +161,8 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       distanceKm: body.distanceKm || 4.2,
       hasDeviation: false,
       hasSosAlert: false,
+      isFemaleOnly: Boolean(body.isFemaleOnly || body.genderPreference === 'FEMALE_ONLY'),
+      genderPreference: (body.isFemaleOnly || body.genderPreference === 'FEMALE_ONLY') ? 'FEMALE_ONLY' : (body.genderPreference || 'ANYONE'),
       date: body.date || 'today',
     })
 
@@ -186,6 +188,7 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       destinationAddress?: string
       destinationCoords?: { lat: number; lng: number }
       seats?: number
+      genderPreference?: string
     }
 
     const requestedSeats = body.seats || 1
@@ -194,11 +197,60 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
     // Fetch student info
     const student = await UserModel.findOne({ id: studentId })
     const studentName = student?.name || 'Student'
+    const studentGender = student?.gender || 'Prefer not to say'
 
     // First, inspect the ride
     const currentRide = await RideModel.findOne({ id })
     if (!currentRide) {
       return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    // --- Strict Female Passenger Only Policy Enforcement ---
+    const requestedGenderPref = body.genderPreference || 'ANYONE'
+    const isRideAlreadyFemaleOnly = Boolean(
+      currentRide.isFemaleOnly ||
+      currentRide.genderPreference === 'FEMALE_ONLY' ||
+      currentRide.passengers?.some((p: any) => p.genderPreference === 'FEMALE_ONLY')
+    )
+
+    // Rule 1: If the ride is designated female-only, male passengers CANNOT join
+    if (isRideAlreadyFemaleOnly && studentGender === 'Male') {
+      return reply.status(403).send({
+        success: false,
+        error: {
+          code: 'GENDER_RESTRICTION',
+          message: 'This ride is designated for female passengers only. Male passengers cannot join.',
+        },
+      })
+    }
+
+    // Rule 2: If student explicitly requests Female-Only ride:
+    if (requestedGenderPref === 'FEMALE_ONLY') {
+      if (studentGender === 'Male') {
+        return reply.status(400).send({
+          success: false,
+          error: {
+            code: 'INVALID_PREFERENCE',
+            message: 'Female-only preference is available for female passengers only.',
+          },
+        })
+      }
+
+      // If ride already has existing passengers, verify NONE of them are male
+      if (currentRide.passengers.length > 0) {
+        const passengerIds = currentRide.passengers.map((p) => p.studentId)
+        const existingUsers = await UserModel.find({ id: { $in: passengerIds } })
+        const hasMalePassenger = existingUsers.some((u) => u.gender === 'Male')
+        if (hasMalePassenger) {
+          return reply.status(400).send({
+            success: false,
+            error: {
+              code: 'INCOMPATIBLE_GROUP',
+              message: 'Cannot select female-only: this ride already contains male passengers.',
+            },
+          })
+        }
+      }
     }
 
     if (currentRide.bookedSeats + requestedSeats > currentRide.capacity) {
@@ -217,6 +269,8 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       destination: studentDestination,
       status: 'waiting' as const,
       seatNo: nextSeatNo,
+      gender: studentGender,
+      genderPreference: requestedGenderPref,
     }
 
     // Atomic update to guarantee no race-condition overbooking
@@ -238,6 +292,14 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
         success: false,
         error: { code: 'RIDE_FULL', message: 'Seat was booked by another student concurrently.' },
       })
+    }
+
+    // If ride was or now becomes female-only, lock it into the ride document
+    const shouldBeFemaleOnly = isRideAlreadyFemaleOnly || requestedGenderPref === 'FEMALE_ONLY'
+    if (shouldBeFemaleOnly && (!updatedRide.isFemaleOnly || updatedRide.genderPreference !== 'FEMALE_ONLY')) {
+      updatedRide.isFemaleOnly = true
+      updatedRide.genderPreference = 'FEMALE_ONLY'
+      await updatedRide.save()
     }
 
     // If capacity reached, mark status as full
@@ -447,17 +509,36 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
   // Start ride
   fastify.post('/:id/start', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const ride = await RideModel.findOneAndUpdate(
-      { id },
-      { status: 'active' },
-      { new: true }
-    )
+    const body = (request.body as any) || {}
+    const { startLat, startLng, startLocation } = body
+
+    const ride = await RideModel.findOne({ id })
     if (!ride) {
       return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
     }
 
-    realtimeService.broadcast('RIDE_STARTED', { ride })
+    ride.status = 'active'
+    if (typeof startLat === 'number' && typeof startLng === 'number') {
+      ride.currentLat = startLat
+      ride.currentLng = startLng
+      ride.startLocationLat = startLat
+      ride.startLocationLng = startLng
+      if (startLocation) {
+        ride.startLocation = startLocation
+      }
+    }
+
+    await routeProgressService.buildTripRoute(ride, startLat, startLng, startLocation)
+    if (ride.tripRoute) {
+      ride.tripRoute.status = 'NAVIGATING'
+    }
+    await ride.save()
+
+    realtimeService.broadcast('RIDE_STARTED', { rideId: id, ride })
     realtimeService.broadcast('RIDE_UPDATED', { ride })
+    if (ride.tripRoute) {
+      realtimeService.broadcast('ROUTE_UPDATED', { rideId: id, route: ride.tripRoute, stops: ride.stops })
+    }
 
     return { success: true, data: ride }
   })
