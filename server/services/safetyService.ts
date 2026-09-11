@@ -8,6 +8,7 @@ import { NotificationModel } from '../models/Notification.js'
 import { realtimeService } from './realtimeService.js'
 import { notificationService } from './notificationService.js'
 import { smsService } from './smsService.js'
+import { twilioService } from './twilioService.js'
 import { haversineDistanceMeters } from './routingService.js'
 import { ENV } from '../config/env.js'
 
@@ -165,24 +166,40 @@ export class SafetyService {
     const eventId = `sos-${Date.now()}`
     const eventType = isDriver ? 'DRIVER_SOS_TRIGGERED' : 'STUDENT_SOS_TRIGGERED'
 
-    // Format and trigger Emergency SMS alert to registered contact
+    // Format and trigger Emergency SMS alert via Twilio to registered contact (or SOS_ALERT_PHONE_NUMBER fallback)
+    const targetPhone = emergencyContact?.phone || ENV.SOS_ALERT_PHONE_NUMBER || ''
     let smsResult = { sent: false, status: 'NOT_CONFIGURED' as const, message: '' }
-    if (emergencyContact?.phone) {
-      smsResult = await smsService.sendEmergencySms({
-        recipientName: emergencyContact.name,
-        recipientPhone: emergencyContact.phone,
-        senderName: user?.name || userId,
-        senderRole: userRole,
-        routeName: ride ? routeName : undefined,
-        lat: resolvedLat,
-        lng: resolvedLng,
-        timestamp: new Date(),
-      })
+
+    if (targetPhone) {
+      try {
+        const twilioRes = await twilioService.sendSOSAlert({
+          recipientPhone: targetPhone,
+          recipientName: emergencyContact?.name || 'Emergency Contact',
+          senderName: user?.name || userId,
+          senderRole: userRole,
+          rideId: ride?.id,
+          routeName: ride ? routeName : undefined,
+          lat: resolvedLat,
+          lng: resolvedLng,
+          vehiclePlate: vehicle?.registrationNumber,
+        })
+
+        smsResult = {
+          sent: twilioRes.success,
+          status: (twilioRes.status === 'SENT' ? 'SENT' : twilioRes.status === 'FAILED' ? 'FAILED' : 'NOT_CONFIGURED') as any,
+          message: twilioRes.success ? 'Twilio emergency SMS dispatched.' : (twilioRes.error || 'Failed to dispatch SMS'),
+        }
+      } catch (smsErr: any) {
+        console.warn('[SafetyService] Twilio SOS SMS error (non-fatal):', smsErr?.message)
+        smsResult = { sent: false, status: 'FAILED' as const, message: smsErr?.message || 'Twilio SMS failed' }
+      }
+    } else {
+      console.log('[SafetyService] No emergency contact phone or SOS_ALERT_PHONE_NUMBER configured.')
     }
 
     const contactSummary = emergencyContact
       ? `${emergencyContact.name} (${emergencyContact.relationship}: ${emergencyContact.phone})`
-      : 'None registered'
+      : (ENV.SOS_ALERT_PHONE_NUMBER ? `Campus Security (${ENV.SOS_ALERT_PHONE_NUMBER})` : 'None registered')
 
     const message = isDriver
       ? `CRITICAL DRIVER SOS: Driver ${user?.name || userId} triggered emergency alarm on ${routeName} (Vehicle: ${vehicle?.registrationNumber || vehicle?.name || 'TS 09 AB 1234'}, Passengers: ${passengerCount}). Emergency Contact: ${contactSummary}.`

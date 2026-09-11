@@ -106,7 +106,7 @@ interface AppState {
   setRole: (role: Role) => void
   loginAsStudent: (studentId: string) => void
   loginAsDriver: (driverId: string) => void
-  login: (credentials: { email?: string; username?: string; phone?: string; password?: string; role?: string; userId?: string }) => Promise<{ success: boolean; role: Role; user: any }>
+  login: (credentials: { email?: string; username?: string; phone?: string; password?: string; otp?: string; code?: string; role?: string; userId?: string }) => Promise<{ success: boolean; role: Role; user: any }>
   registerStudent: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   registerFaculty: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   registerDriver: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>

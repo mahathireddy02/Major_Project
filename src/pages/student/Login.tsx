@@ -5,6 +5,7 @@ import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
 import { api } from '../../services/api'
 import toast from 'react-hot-toast'
+import { PhoneOtpModal } from '../../components/auth/PhoneOtpModal'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function Login() {
   const loginAsStudent = useAppStore((s) => s.loginAsStudent)
   const storeStudents = useAppStore((s) => s.students)
   const [realStudents, setRealStudents] = useState(storeStudents)
+  const [showOtpModal, setShowOtpModal] = useState(false)
 
   useEffect(() => {
     api.getStudents().then((res) => {
@@ -143,10 +145,24 @@ export default function Login() {
 
               <div className="pt-2">
                 <Button size="lg" className="w-full" type="submit" loading={loading}>
-                  Sign In
+                  Sign In with Password
                   <ChevronRight size={18} />
                 </Button>
               </div>
+
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-slate-200"></div>
+                <span className="flex-shrink mx-3 text-slate-400 text-xs font-semibold uppercase">Or</span>
+                <div className="flex-grow border-t border-slate-200"></div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowOtpModal(true)}
+                className="w-full py-2.5 px-4 rounded-xl border-2 border-primary-600 bg-primary-50/70 hover:bg-primary-100 text-primary-700 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <span>Sign In via Twilio Phone OTP</span>
+              </button>
             </form>
           ) : (
             <div className="space-y-3">
@@ -211,6 +227,15 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      <PhoneOtpModal
+        isOpen={showOtpModal}
+        onClose={() => setShowOtpModal(false)}
+        role="student"
+        onSuccess={() => {
+          navigate('/student/home')
+        }}
+      />
     </div>
   )
 }

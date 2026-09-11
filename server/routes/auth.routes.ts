@@ -10,6 +10,8 @@ import { ENV } from '../config/env.js'
 import { generateToken, authenticate } from '../middleware/auth.js'
 import { ocrService } from '../services/ocrService.js'
 import { validateInstitutionalEmail } from '../utils/institutionalEmail.js'
+import { twilioService } from '../services/twilioService.js'
+import { normalizePhoneNumber, isValidPhoneNumber } from '../utils/phone.js'
 
 function isAuthorizedDomain(email: string): boolean {
   const result = validateInstitutionalEmail(email, ENV.AUTHORIZED_COLLEGE_DOMAINS)
@@ -57,6 +59,103 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const result = ocrService.evaluateNameConsistency(enteredName, detectedName)
     return { success: true, data: result }
+  })
+
+  // --- Centralized Twilio Phone OTP Endpoints (Student, Faculty, Driver) ---
+  fastify.post('/send-otp', async (request, reply) => {
+    const { phone } = (request.body as { phone?: string }) || {}
+
+    if (!phone || typeof phone !== 'string') {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_INPUT', message: 'Phone number is required.' },
+      })
+    }
+
+    const normalized = normalizePhoneNumber(phone)
+    if (!isValidPhoneNumber(normalized)) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'INVALID_PHONE', message: 'Please enter a valid phone number with country code (e.g. +91 9876543210).' },
+      })
+    }
+
+    const result = await twilioService.sendOTP(normalized)
+    if (!result.success) {
+      return reply.status(result.error === 'RATE_LIMITED' ? 429 : 400).send({
+        success: false,
+        error: { code: result.error || 'OTP_SEND_FAILED', message: result.message },
+      })
+    }
+
+    return {
+      success: true,
+      message: result.message,
+      data: {
+        phone: result.phone,
+        status: result.status,
+        expiresInSeconds: result.expiresInSeconds || 600,
+        // Only provide devOtp in local non-production environment for convenience
+        ...(result.devOtp ? { devOtp: result.devOtp } : {}),
+      },
+    }
+  })
+
+  fastify.post('/verify-otp', async (request, reply) => {
+    const { phone, otp, code } = (request.body as { phone?: string; otp?: string; code?: string }) || {}
+    const otpValue = (otp || code || '').trim()
+
+    if (!phone || !otpValue) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: 'MISSING_FIELDS', message: 'Phone number and OTP code are required.' },
+      })
+    }
+
+    const normalized = normalizePhoneNumber(phone)
+    const result = await twilioService.verifyOTP(normalized, otpValue)
+
+    if (!result.success) {
+      return reply.status(400).send({
+        success: false,
+        error: { code: result.error || 'INVALID_OTP', message: result.message },
+      })
+    }
+
+    // Optional user lookup to immediately authenticate if account exists
+    const digitsOnly = normalized.replace(/\D/g, '')
+    const last10 = digitsOnly.slice(-10)
+    const phoneRegexStr = last10.split('').join('[\\s\\-\\(\\)]*')
+    const user = await UserModel.findOne({
+      $or: [
+        { phone: normalized },
+        { phone: { $regex: new RegExp(phoneRegexStr) } },
+      ],
+    })
+
+    if (user) {
+      const token = generateToken(user)
+      return {
+        success: true,
+        message: 'Phone verified and authenticated successfully.',
+        data: {
+          verified: true,
+          phone: normalized,
+          user,
+          token,
+          role: user.role,
+        },
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Phone verified successfully.',
+      data: {
+        verified: true,
+        phone: normalized,
+      },
+    }
   })
 
   // Student Registration
@@ -335,12 +434,15 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       username?: string
       phone?: string
       password?: string
+      otp?: string
+      code?: string
       role?: string
       userId?: string
     }
 
     const credential = (body.email || body.username || body.phone || '').trim().toLowerCase()
     const password = body.password || ''
+    const otpValue = (body.otp || body.code || '').trim()
 
     const reqRole = (body.role || '').trim().toLowerCase()
 
@@ -415,7 +517,7 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // 2. Demo / Direct Role or userId login (For 1-click test conveniences)
-    if (body.userId && !password) {
+    if (body.userId && !password && !otpValue) {
       const user = await UserModel.findOne({ id: body.userId })
       if (user) {
         const token = generateToken(user)
@@ -434,10 +536,10 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    if (!password) {
+    if (!password && !otpValue) {
       return reply.status(400).send({
         success: false,
-        error: { code: 'MISSING_CREDENTIALS', message: 'Password is required to sign in.' },
+        error: { code: 'MISSING_CREDENTIALS', message: 'Password or OTP is required to sign in.' },
       })
     }
 
@@ -463,22 +565,69 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const user = await UserModel.findOne({ $or: orConditions })
+    let user = await UserModel.findOne({ $or: orConditions })
+
+    // If logging in via OTP and user doesn't exist yet, auto-provision user based on phone & requested role
+    if (otpValue && !user && digitsOnly.length >= 10) {
+      // First verify OTP before creating user
+      const otpVerifyRes = await twilioService.verifyOTP(credential, otpValue)
+      if (!otpVerifyRes.success) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: otpVerifyRes.error || 'INVALID_OTP', message: otpVerifyRes.message },
+        })
+      }
+
+      const roleUpper = (reqRole === 'driver' ? 'DRIVER' : reqRole === 'faculty' ? 'FACULTY' : 'STUDENT') as UserRole
+      const prefix = roleUpper === 'DRIVER' ? 'd-' : roleUpper === 'FACULTY' ? 'fac-' : 's-'
+      const newId = `${prefix}${Date.now().toString().slice(-6)}`
+      const normalizedPhone = normalizePhoneNumber(credential)
+
+      user = await UserModel.create({
+        id: newId,
+        name: `${roleUpper.charAt(0) + roleUpper.slice(1).toLowerCase()} User`,
+        email: `${roleUpper.toLowerCase()}.${digitsOnly.slice(-4)}@campusflow.io`,
+        phone: normalizedPhone,
+        role: roleUpper,
+        avatar: roleUpper.slice(0, 2),
+        rating: 5.0,
+        totalRides: 0,
+        isVerified: true,
+        verificationStatus: 'VERIFIED',
+      })
+    } else if (otpValue) {
+      // User exists, verify OTP
+      const phoneToVerify = user?.phone || credential
+      const otpVerifyRes = await twilioService.verifyOTP(phoneToVerify, otpValue)
+      if (!otpVerifyRes.success) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: otpVerifyRes.error || 'INVALID_OTP', message: otpVerifyRes.message },
+        })
+      }
+    } else {
+      // Password verification
+      if (!user) {
+        return reply.status(404).send({
+          success: false,
+          error: { code: 'USER_NOT_FOUND', message: 'No account found matching this email or phone.' },
+        })
+      }
+
+      const targetHash = user.passwordHash || (await bcrypt.hash('campus2026', 10))
+      const isValid = await bcrypt.compare(password, targetHash)
+      if (!isValid) {
+        return reply.status(401).send({
+          success: false,
+          error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect password.' },
+        })
+      }
+    }
 
     if (!user) {
       return reply.status(404).send({
         success: false,
-        error: { code: 'USER_NOT_FOUND', message: 'No account found matching this email or phone.' },
-      })
-    }
-
-    // Verify password against passwordHash or default fallback password
-    const targetHash = user.passwordHash || (await bcrypt.hash('campus2026', 10))
-    const isValid = await bcrypt.compare(password, targetHash)
-    if (!isValid) {
-      return reply.status(401).send({
-        success: false,
-        error: { code: 'INVALID_CREDENTIALS', message: 'Incorrect password.' },
+        error: { code: 'USER_NOT_FOUND', message: 'Account not found.' },
       })
     }
 

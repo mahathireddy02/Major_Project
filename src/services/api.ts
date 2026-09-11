@@ -219,6 +219,8 @@ class ApiClient {
     username?: string
     phone?: string
     password?: string
+    otp?: string
+    code?: string
     role?: string
     userId?: string
   }): Promise<{ user: any; token: string; role: string }> {
@@ -232,6 +234,35 @@ class ApiClient {
     if (res.token) {
       this.setToken(res.token)
       this.setAuth(res.user.id, res.role === 'DRIVER' ? res.user.id : this.driverId, res.token)
+    }
+    return res
+  }
+
+  // --- Twilio OTP Authentication ---
+  async sendOtp(phone: string): Promise<{ success: boolean; message: string; data?: any }> {
+    return this.request<{ success: boolean; message: string; data?: any }>(
+      '/auth/send-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ phone }),
+      }
+    )
+  }
+
+  async verifyOtp(
+    phone: string,
+    otp: string
+  ): Promise<{ success: boolean; message: string; data?: { verified: boolean; phone: string; user?: any; token?: string; role?: string } }> {
+    const res = await this.request<{ success: boolean; message: string; data?: { verified: boolean; phone: string; user?: any; token?: string; role?: string } }>(
+      '/auth/verify-otp',
+      {
+        method: 'POST',
+        body: JSON.stringify({ phone, otp, code: otp }),
+      }
+    )
+    if (res?.data?.token && res?.data?.user) {
+      this.setToken(res.data.token)
+      this.setAuth(res.data.user.id, res.data.role === 'DRIVER' ? res.data.user.id : this.driverId, res.data.token)
     }
     return res
   }
