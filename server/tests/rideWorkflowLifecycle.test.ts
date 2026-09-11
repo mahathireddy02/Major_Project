@@ -269,9 +269,9 @@ describe('CampusFlow — Full End-to-End Ride Lifecycle & Multi-Stakeholder Noti
     const dNotifs = await fetchNotifications({ driverId: driverA, headers: { 'x-driver-id': driverA, 'x-user-id': driverA } })
     const allNotifs = await fetchNotifications({ all: true, headers: { 'x-user-id': 'admin1' } })
 
-    const sNotif = sANotifs.find((n) => n.rideId === rideId && n.eventType === 'SOS_TRIGGERED')
-    const dNotif = dNotifs.find((n) => n.rideId === rideId && n.eventType === 'SOS_TRIGGERED')
-    const dispNotif = allNotifs.find((n) => n.rideId === rideId && n.eventType === 'SOS_TRIGGERED')
+    const sNotif = sANotifs.find((n) => n.rideId === rideId && (n.eventType === 'SOS_TRIGGERED' || n.eventType === 'STUDENT_SOS_TRIGGERED'))
+    const dNotif = dNotifs.find((n) => n.rideId === rideId && (n.eventType === 'SOS_TRIGGERED' || n.eventType === 'STUDENT_SOS_TRIGGERED'))
+    const dispNotif = allNotifs.find((n) => n.rideId === rideId && (n.eventType === 'SOS_TRIGGERED' || n.eventType === 'STUDENT_SOS_TRIGGERED'))
 
     expect(sNotif?.priority).toBe('CRITICAL')
     expect(dNotif?.priority).toBe('CRITICAL')

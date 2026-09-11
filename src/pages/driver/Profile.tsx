@@ -18,7 +18,15 @@ import {
   Route,
   ArrowRight,
   RefreshCw,
+  HeartHandshake,
+  Edit2,
+  Trash2,
+  Plus,
+  X,
+  AlertCircle,
+  ShieldAlert,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { useAppStore } from '../../store/appStore'
 import { api } from '../../services/api'
 import Card from '../../components/ui/Card'
@@ -26,6 +34,7 @@ import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import Button from '../../components/ui/Button'
 import { getRideStatusLabel } from '../../lib/utils'
+import type { EmergencyContact } from '../../types'
 
 export default function DriverProfile() {
   const navigate = useNavigate()
@@ -75,6 +84,87 @@ export default function DriverProfile() {
 
   // Prefer currentUser (real authenticated driver) over store-derived driver
   const driver = currentUser?.role === 'DRIVER' || currentUser?.role === 'driver' ? currentUser : currentDriver
+
+  // Emergency Contact state
+  const [emergencyContact, setEmergencyContact] = useState<EmergencyContact | null>(null)
+  const [isModalOpen, setIsModalOpen] = useState(false)
+  const [contactName, setContactName] = useState('')
+  const [relationship, setRelationship] = useState('Spouse')
+  const [contactPhone, setContactPhone] = useState('')
+  const [modalErrors, setModalErrors] = useState<Record<string, string>>({})
+  const [savingContact, setSavingContact] = useState(false)
+
+  const activeDriverUserId = currentUser?.id || currentDriverId || driver?.id || 'd1'
+
+  useEffect(() => {
+    if (!activeDriverUserId) return
+    api
+      .getEmergencyContact(activeDriverUserId)
+      .then((ec) => setEmergencyContact(ec))
+      .catch(() => setEmergencyContact(null))
+  }, [activeDriverUserId])
+
+  const openAddEditModal = () => {
+    if (emergencyContact) {
+      setContactName(emergencyContact.name)
+      setRelationship(emergencyContact.relationship || 'Spouse')
+      setContactPhone(emergencyContact.phone)
+    } else {
+      setContactName('')
+      setRelationship('Spouse')
+      setContactPhone('')
+    }
+    setModalErrors({})
+    setIsModalOpen(true)
+  }
+
+  const validateModal = () => {
+    const errors: Record<string, string> = {}
+    if (!contactName.trim() || contactName.trim().length < 2) {
+      errors.name = 'Please enter a valid full name (at least 2 characters)'
+    }
+    if (!relationship.trim()) {
+      errors.relationship = 'Please select or enter a relationship'
+    }
+    const cleanPhone = contactPhone.replace(/^\+91/, '').replace(/\s+/g, '')
+    if (!cleanPhone || cleanPhone.length !== 10) {
+      errors.phone = 'Please enter a valid 10-digit phone number'
+    }
+    setModalErrors(errors)
+    return Object.keys(errors).length === 0
+  }
+
+  const handleSaveContact = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!validateModal()) return
+
+    setSavingContact(true)
+    try {
+      const saved = await api.saveEmergencyContact(activeDriverUserId, {
+        name: contactName.trim(),
+        relationship: relationship.trim(),
+        phone: contactPhone.trim(),
+      })
+      setEmergencyContact(saved)
+      setIsModalOpen(false)
+      toast.success('Emergency contact saved successfully!', { icon: '🛡️' })
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to save emergency contact')
+    } finally {
+      setSavingContact(false)
+    }
+  }
+
+  const handleDeleteContact = async () => {
+    if (!window.confirm('Are you sure you want to remove this emergency contact?')) return
+    try {
+      await api.deleteEmergencyContact(activeDriverUserId)
+      setEmergencyContact(null)
+      toast.success('Emergency contact removed')
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete emergency contact')
+    }
+  }
 
   if (!driver) return null
 
@@ -561,6 +651,175 @@ export default function DriverProfile() {
               ))}
             </div>
           </Card>
+
+          {/* Driver Emergency Contact Card */}
+          <Card padding="md" className="border border-slate-200 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <HeartHandshake className="w-5 h-5 text-rose-500" />
+                <h3 className="font-heading font-semibold text-slate-900 text-sm">Emergency SOS Contact</h3>
+              </div>
+              {emergencyContact ? (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={openAddEditModal}
+                    className="p-1.5 text-slate-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg text-xs font-semibold transition-colors inline-flex items-center gap-1 cursor-pointer"
+                    title="Edit Contact"
+                  >
+                    <Edit2 size={13} />
+                    <span>Edit</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDeleteContact}
+                    className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                    title="Remove Contact"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={openAddEditModal}
+                  className="text-xs h-7 gap-1 text-rose-600 border-rose-200 hover:bg-rose-50"
+                >
+                  <Plus size={12} />
+                  <span>Add Contact</span>
+                </Button>
+              )}
+            </div>
+
+            {emergencyContact ? (
+              <div className="bg-rose-50/50 border border-rose-100 rounded-xl p-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center font-bold text-sm">
+                    {emergencyContact.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="font-bold text-slate-900 text-sm">{emergencyContact.name}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {emergencyContact.relationship} •{' '}
+                      <span className="font-medium text-slate-700">{emergencyContact.phone}</span>
+                    </p>
+                  </div>
+                </div>
+                <Badge variant="green" size="sm">
+                  Active SOS Recipient
+                </Badge>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-4 text-center">
+                <p className="text-xs text-slate-600 font-medium">No emergency contact registered</p>
+                <p className="text-[11px] text-slate-400 mt-0.5 mb-2">
+                  When you press SOS during a trip, your emergency contact will automatically receive an SMS notification.
+                </p>
+                <Button size="sm" variant="secondary" onClick={openAddEditModal} className="text-xs">
+                  Set Up Emergency Contact
+                </Button>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* Emergency Contact Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200 w-full max-w-md overflow-hidden animate-scale-up">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div className="flex items-center gap-2">
+                <HeartHandshake className="w-5 h-5 text-rose-500" />
+                <h3 className="font-heading font-bold text-slate-900 text-base">
+                  {emergencyContact ? 'Edit Emergency Contact' : 'Add Emergency Contact'}
+                </h3>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveContact} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Contact Full Name
+                </label>
+                <input
+                  type="text"
+                  value={contactName}
+                  onChange={(e) => setContactName(e.target.value)}
+                  placeholder="e.g. Anjali Sharma"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                />
+                {modalErrors.name && (
+                  <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} /> {modalErrors.name}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Relationship
+                </label>
+                <select
+                  value={relationship}
+                  onChange={(e) => setRelationship(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500 bg-white"
+                >
+                  <option value="Spouse">Spouse</option>
+                  <option value="Parent">Parent / Guardian</option>
+                  <option value="Sibling">Sibling</option>
+                  <option value="Friend">Colleague / Friend</option>
+                  <option value="Other">Other Family</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Phone Number (10 digits)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-slate-400 font-medium">
+                    +91
+                  </span>
+                  <input
+                    type="tel"
+                    value={contactPhone.replace(/^\+91/, '')}
+                    onChange={(e) => setContactPhone('+91' + e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    placeholder="9876543210"
+                    maxLength={10}
+                    className="w-full pl-12 pr-3.5 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                  />
+                </div>
+                {modalErrors.phone && (
+                  <p className="text-xs text-rose-600 mt-1 flex items-center gap-1">
+                    <AlertCircle size={12} /> {modalErrors.phone}
+                  </p>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setIsModalOpen(false)}
+                  disabled={savingContact}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" disabled={savingContact}>
+                  {savingContact ? 'Saving...' : 'Save Emergency Contact'}
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

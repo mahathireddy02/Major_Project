@@ -29,7 +29,7 @@ type Role = 'student' | 'faculty' | 'driver' | 'admin'
 export function normalizeSafetyEvent(e: any): SafetyEvent {
   if (!e) return e
   const rawType = e.eventType || e.type || 'OTHER'
-  const rawSeverity = e.severity || 'HIGH'
+  const rawSeverity = e.severity || 'CRITICAL'
   const rawMsg = e.message || e.description || 'Safety incident reported'
   const rawCreatedAt = e.createdAt || e.timestamp || new Date().toISOString()
 
@@ -47,7 +47,19 @@ export function normalizeSafetyEvent(e: any): SafetyEvent {
     resolvedAt: e.resolvedAt,
     resolvedBy: e.resolvedBy,
     userId: e.userId,
+    userName: e.userName,
+    userRole: e.userRole,
+    userPhone: e.userPhone,
     vehicleId: e.vehicleId,
+    driverId: e.driverId,
+    driverName: e.driverName,
+    routeName: e.routeName,
+    passengerCount: e.passengerCount,
+    emergencyContact: e.emergencyContact,
+    acknowledgedAt: e.acknowledgedAt,
+    acknowledgedBy: e.acknowledgedBy,
+    smsStatus: e.smsStatus,
+    smsMessage: e.smsMessage,
     lat: e.lat,
     lng: e.lng,
     status: e.status || (e.resolved ? 'RESOLVED' : 'ACTIVE'),
@@ -131,7 +143,8 @@ interface AppState {
   loadAuditLog: () => Promise<void>
 
   // Actions — Safety
-  triggerSOS: (rideId: string, studentId: string) => Promise<void>
+  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => Promise<any>
+  acknowledgeSafetyEvent: (eventId: string) => Promise<void>
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
 
@@ -285,7 +298,14 @@ export const useAppStore = create<AppState>((set, get) => ({
               rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r)),
             }))
           }
-        } else if (event === 'SAFETY_ALERT' || event === 'SAFETY_ALERT_CREATED' || event === 'SOS_CREATED') {
+        } else if (
+          event === 'SAFETY_ALERT' ||
+          event === 'SAFETY_ALERT_CREATED' ||
+          event === 'SOS_CREATED' ||
+          event === 'STUDENT_SOS_TRIGGERED' ||
+          event === 'DRIVER_SOS_TRIGGERED' ||
+          event === 'SOS_TRIGGERED'
+        ) {
           if (payload?.safetyEvent) {
             const normalized = normalizeSafetyEvent(payload.safetyEvent)
             set((state) => ({
@@ -294,14 +314,32 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
           if (payload?.ride) {
             set((state) => ({
-              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r)),
+              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride, hasSosAlert: true } : r)),
             }))
           }
-        } else if (event === 'SAFETY_EVENT_RESOLVED') {
-          if (payload?.event) {
-            const normalized = normalizeSafetyEvent(payload.event)
+        } else if (
+          event === 'SAFETY_EVENT_ACKNOWLEDGED' ||
+          event === 'SOS_ACKNOWLEDGED'
+        ) {
+          const rawEvent = payload?.safetyEvent || payload?.event || payload
+          if (rawEvent?.id) {
+            const normalized = normalizeSafetyEvent(rawEvent)
             set((state) => ({
-              safetyEvents: state.safetyEvents.map((e) => (e.id === normalized.id ? normalized : e)),
+              safetyEvents: state.safetyEvents.map((e) => (e.id === normalized.id ? { ...e, ...normalized, status: 'ACKNOWLEDGED' } : e)),
+            }))
+          }
+        } else if (
+          event === 'SAFETY_EVENT_RESOLVED' ||
+          event === 'SOS_RESOLVED'
+        ) {
+          const rawEvent = payload?.safetyEvent || payload?.event || payload
+          if (rawEvent?.id) {
+            const normalized = normalizeSafetyEvent(rawEvent)
+            set((state) => ({
+              safetyEvents: state.safetyEvents.map((e) => (e.id === normalized.id ? { ...e, ...normalized, resolved: true, status: 'RESOLVED' } : e)),
+              rides: state.rides.map((r) =>
+                normalized.rideId && r.id === normalized.rideId ? { ...r, hasSosAlert: false, hasDeviation: false } : r
+              ),
             }))
           }
         } else if (event === 'VEHICLE_LOCATION_UPDATED') {
@@ -887,9 +925,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   resolveSafetyEvent: async (eventId: string) => {
     try {
       const res = await api.resolveSafetyEvent(eventId)
-      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.event || res)
+      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
-        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? resolvedEvent : e)),
+        rides: state.rides.map((r) =>
+          resolvedEvent.rideId && r.id === resolvedEvent.rideId ? { ...r, hasDeviation: false, hasSosAlert: false } : r
+        ),
+        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...resolvedEvent, resolved: true, status: 'RESOLVED' } : e)),
         auditLogs: (res as any)?.auditLog ? [(res as any).auditLog, ...state.auditLogs] : state.auditLogs,
       }))
     } catch (err: any) {
@@ -927,16 +968,48 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Safety Actions
-  triggerSOS: async (rideId: string, studentId: string) => {
+  triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
     try {
-      const event = await api.triggerSOS(rideId, studentId)
-      const normalized = normalizeSafetyEvent(event)
+      let payload: { rideId?: string; userId?: string; lat?: number; lng?: number } = {}
+      if (typeof params === 'string') {
+        payload = { rideId: params, userId: studentId || get().currentStudentId || get().currentUser?.id }
+      } else if (params && typeof params === 'object') {
+        payload = { ...params }
+        if (!payload.userId) {
+          payload.userId = get().role === 'driver' ? (get().currentDriverId || get().currentUser?.id) : (get().currentStudentId || get().currentUser?.id)
+        }
+      } else {
+        payload = {
+          userId: get().role === 'driver' ? (get().currentDriverId || get().currentUser?.id) : (get().currentStudentId || get().currentUser?.id)
+        }
+      }
+
+      const res = await api.triggerSOS(payload)
+      const eventData = res?.data || res
+      const normalized = normalizeSafetyEvent(eventData)
+
       set((state) => ({
-        rides: state.rides.map((r) => (r.id === rideId ? { ...r, hasSosAlert: true } : r)),
+        rides: state.rides.map((r) => (payload.rideId && r.id === payload.rideId ? { ...r, hasSosAlert: true } : r)),
         safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
       }))
+
+      return eventData
     } catch (err: any) {
       console.error('[Store] triggerSOS error:', err.message)
+      throw err
+    }
+  },
+
+  acknowledgeSafetyEvent: async (eventId: string) => {
+    try {
+      const res = await api.acknowledgeSafetyEvent(eventId)
+      const acknowledged: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
+      set((state) => ({
+        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...acknowledged, status: 'ACKNOWLEDGED' } : e)),
+      }))
+    } catch (err: any) {
+      console.error('[Store] acknowledgeSafetyEvent error:', err.message)
+      throw err
     }
   },
 
@@ -954,7 +1027,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   resolveDeviation: async (rideId: string, eventId: string) => {
     try {
       const res = await api.resolveSafetyEvent(eventId)
-      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.event || res)
+      const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
         rides: state.rides.map((r) => (r.id === rideId ? { ...r, hasDeviation: false, hasSosAlert: false } : r)),
         safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? resolvedEvent : e)),
