@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { ShieldAlert, Volume2, VolumeX, CheckCircle, MapPin, ExternalLink } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { sosAlarmPlayer } from '../../utils/alarmSound'
@@ -7,18 +8,32 @@ import toast from 'react-hot-toast'
 export const EmergencyAlarmBanner: React.FC = () => {
   const safetyEvents = useAppStore((s) => s.safetyEvents)
   const acknowledgeSafetyEvent = useAppStore((s) => s.acknowledgeSafetyEvent)
+  const role = useAppStore((s) => s.role)
+  const currentUser = useAppStore((s) => s.currentUser)
+  const location = useLocation()
   const [isMuted, setIsMuted] = useState(false)
   const [acknowledgedIds, setAcknowledgedIds] = useState<Set<string>>(new Set())
 
+  // STRICT RULE: Alarm sound & banner ONLY in Dispatcher Portal (/admin or role admin/dispatcher).
+  // Strictly blocked in Student Portal and Driver Portal.
+  const isDispatcher =
+    role === 'admin' ||
+    (currentUser?.role && (currentUser.role.toLowerCase() === 'dispatcher' || currentUser.role.toLowerCase() === 'admin')) ||
+    location.pathname.startsWith('/admin')
+
   // Find active, unacknowledged SOS events
   const activeSosEvents = safetyEvents.filter((e) => {
-    const isSos = e.eventType === 'SOS' || e.eventType === 'STUDENT_SOS_TRIGGERED' || e.eventType === 'DRIVER_SOS_TRIGGERED' || (e.type && e.type.includes('SOS'))
+    const isSos =
+      e.eventType === 'SOS' ||
+      e.eventType === 'STUDENT_SOS_TRIGGERED' ||
+      e.eventType === 'DRIVER_SOS_TRIGGERED' ||
+      (e.type && e.type.includes('SOS'))
     const isUnresolved = !e.resolved && e.status !== 'RESOLVED'
     const isLocalAcknowledged = acknowledgedIds.has(e.id)
     return isSos && isUnresolved && !isLocalAcknowledged && e.status !== 'ACKNOWLEDGED'
   })
 
-  const currentSos = activeSosEvents[0]
+  const currentSos = isDispatcher ? activeSosEvents[0] : undefined
 
   useEffect(() => {
     // Only cleanup audio on unmount if any tone was playing
@@ -27,18 +42,23 @@ export const EmergencyAlarmBanner: React.FC = () => {
     }
   }, [])
 
-  if (!currentSos) return null
+  if (!isDispatcher || !currentSos) return null
 
   const handleAcknowledge = async () => {
+    if (!currentSos) return
+    const idToAck = currentSos.id
     try {
+      // 1. Instantly silence siren audio
       sosAlarmPlayer.stop()
-      setAcknowledgedIds((prev) => new Set(prev).add(currentSos.id))
-      await acknowledgeSafetyEvent(currentSos.id)
+      // 2. Mark locally so banner and sound immediately stop
+      setAcknowledgedIds((prev) => new Set(prev).add(idToAck))
+      // 3. Persist to backend and update store
+      await acknowledgeSafetyEvent(idToAck)
       toast.success('Emergency SOS Acknowledged. Loud alarm silenced.', { icon: '🛡️' })
     } catch {
       sosAlarmPlayer.stop()
-      setAcknowledgedIds((prev) => new Set(prev).add(currentSos.id))
-      toast('Loud alarm silenced locally.', { icon: '🔕' })
+      setAcknowledgedIds((prev) => new Set(prev).add(idToAck))
+      toast('Loud alarm silenced.', { icon: '🔕' })
     }
   }
 

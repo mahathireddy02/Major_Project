@@ -73,10 +73,26 @@ export function normalizeRide(r: Ride): Ride {
   let cleanName = r.routeName
   if (typeof cleanName === 'string') {
     cleanName = cleanName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim()
+    cleanName = cleanName
+      .replace(/Hostel A/g, 'Sri Indu Boys Hostel')
+      .replace(/Hostel B/g, 'Sri Indu Girls Hostel')
+      .replace(/Hostel C/g, 'Campus Transit Terminal')
+    const arrowParts = cleanName.split('→').map((s) => s.trim())
+    if (arrowParts.length === 2 && arrowParts[0].toLowerCase() === arrowParts[1].toLowerCase()) {
+      cleanName = `${arrowParts[0]} → SRI INDU College`
+    }
+  }
+  let cleanDest = r.destination
+  if (typeof cleanDest === 'string') {
+    cleanDest = cleanDest
+      .replace(/Hostel A/g, 'Sri Indu Boys Hostel')
+      .replace(/Hostel B/g, 'Sri Indu Girls Hostel')
+      .replace(/Hostel C/g, 'Campus Transit Terminal')
   }
   return {
     ...r,
     routeName: cleanName || 'Campus Shuttle',
+    destination: cleanDest || 'SRI INDU College',
   }
 }
 
@@ -361,6 +377,19 @@ export const useAppStore = create<AppState>((set, get) => ({
           event === 'DRIVER_SOS_TRIGGERED' ||
           event === 'SOS_TRIGGERED'
         ) {
+          const rawEvent = payload?.safetyEvent || payload?.event || payload
+          const eventStatus = payload?.status || rawEvent?.status
+          const isAckOrResolved =
+            eventStatus === 'ACKNOWLEDGED' ||
+            eventStatus === 'RESOLVED' ||
+            rawEvent?.status === 'ACKNOWLEDGED' ||
+            rawEvent?.status === 'RESOLVED' ||
+            rawEvent?.resolved === true
+
+          if (isAckOrResolved) {
+            sosAlarmPlayer.stop()
+          }
+
           if (payload?.safetyEvent) {
             const normalized = normalizeSafetyEvent(payload.safetyEvent)
             set((state) => ({
@@ -375,13 +404,25 @@ export const useAppStore = create<AppState>((set, get) => ({
                 (window.location.pathname.startsWith('/admin') ||
                  window.location.pathname.startsWith('/dispatcher')))
 
-            if (isDispatcher && normalized.id) {
+            const isUnacknowledgedSos =
+              !isAckOrResolved &&
+              normalized.status !== 'ACKNOWLEDGED' &&
+              normalized.status !== 'RESOLVED' &&
+              !normalized.resolved &&
+              (normalized.eventType === 'SOS' ||
+                normalized.eventType === 'STUDENT_SOS_TRIGGERED' ||
+                normalized.eventType === 'DRIVER_SOS_TRIGGERED' ||
+                (normalized.type && normalized.type.includes('SOS')))
+
+            if (isDispatcher && isUnacknowledgedSos && normalized.id) {
               sosAlarmPlayer.playOnceForEvent(normalized.id).catch(() => {})
+            } else if (isAckOrResolved) {
+              sosAlarmPlayer.stop()
             }
           }
           if (payload?.ride) {
             set((state) => ({
-              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride, hasSosAlert: true } : r)),
+              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride, hasSosAlert: !isAckOrResolved } : r)),
             }))
           }
         } else if (
@@ -1112,6 +1153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   resolveSafetyEvent: async (eventId: string) => {
     try {
+      sosAlarmPlayer.stop()
       const res = await api.resolveSafetyEvent(eventId)
       const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
@@ -1121,7 +1163,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...resolvedEvent, resolved: true, status: 'RESOLVED' } : e)),
         auditLogs: (res as any)?.auditLog ? [(res as any).auditLog, ...state.auditLogs] : state.auditLogs,
       }))
+      sosAlarmPlayer.stop()
     } catch (err: any) {
+      sosAlarmPlayer.stop()
       console.error('[Store] resolveSafetyEvent error:', err.message)
       throw err
     }
@@ -1158,6 +1202,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Safety Actions
   triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string; emergencyEmail?: string } | string, studentId?: string) => {
     try {
+      // NOTE: Loud siren alarm is intentionally NOT played on Student or Driver portal devices.
+      // Emergency siren sounds strictly at Dispatcher Command Center upon reception.
       let payload: {
         rideId?: string
         userId?: string
@@ -1228,12 +1274,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   acknowledgeSafetyEvent: async (eventId: string) => {
     try {
+      sosAlarmPlayer.stop()
+      // Optimistically mark as ACKNOWLEDGED immediately so all listeners and UI instantly silence
+      set((state) => ({
+        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, status: 'ACKNOWLEDGED' } : e)),
+      }))
+
       const res = await api.acknowledgeSafetyEvent(eventId)
       const acknowledged: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
         safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...acknowledged, status: 'ACKNOWLEDGED' } : e)),
       }))
+      sosAlarmPlayer.stop()
     } catch (err: any) {
+      sosAlarmPlayer.stop()
       console.error('[Store] acknowledgeSafetyEvent error:', err.message)
       throw err
     }
