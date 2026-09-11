@@ -395,14 +395,18 @@ export const useAppStore = create<AppState>((set, get) => ({
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
-            // Specifically trigger alarm only in Dispatcher portal once per new SOS event
-            const activeRole = (get().role || get().currentUser?.role || '').toLowerCase()
+            // Siren alarm must ONLY sound in Dispatcher Portal for a new,
+            // unacknowledged, unresolved SOS event. Never in Student or Driver Portal.
+            const currentRole = (get().role || '').toLowerCase()
+            const currentUserRole = (get().currentUser?.role || '').toLowerCase()
             const isDispatcher =
-              activeRole === 'dispatcher' ||
-              activeRole === 'admin' ||
+              currentRole === 'admin' ||
+              currentRole === 'dispatcher' ||
+              currentUserRole === 'admin' ||
+              currentUserRole === 'dispatcher' ||
               (typeof window !== 'undefined' &&
                 (window.location.pathname.startsWith('/admin') ||
-                 window.location.pathname.startsWith('/dispatcher')))
+                  window.location.pathname.startsWith('/dispatcher')))
 
             const isUnacknowledgedSos =
               !isAckOrResolved &&
@@ -415,8 +419,9 @@ export const useAppStore = create<AppState>((set, get) => ({
                 (normalized.type && normalized.type.includes('SOS')))
 
             if (isDispatcher && isUnacknowledgedSos && normalized.id) {
+              // Play only once for this event to prevent duplicate sirens from repeated realtime events.
               sosAlarmPlayer.playOnceForEvent(normalized.id).catch(() => {})
-            } else if (isAckOrResolved) {
+            } else if (isAckOrResolved || !isUnacknowledgedSos) {
               sosAlarmPlayer.stop()
             }
           }
