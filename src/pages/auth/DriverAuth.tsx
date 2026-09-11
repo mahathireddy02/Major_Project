@@ -98,6 +98,7 @@ export default function DriverAuth() {
       formatted = `${raw.slice(0, 4)} ${raw.slice(4, 8)} ${raw.slice(8, 15)}`
     }
     setLicenseNo(formatted)
+    setOcrResult(null)
   }
 
   // License File Upload — runs real Tesseract OCR via shared util
@@ -539,7 +540,7 @@ export default function DriverAuth() {
                         type="text"
                         required
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={(e) => { setFullName(e.target.value); setOcrResult(null) }}
                         placeholder="e.g. Rahul Kumar"
                         className="input-field pl-9 text-sm"
                       />
@@ -759,6 +760,8 @@ export default function DriverAuth() {
                           return
                         }
                         setStep(3)
+                        // Re-run OCR with updated details if license photo already uploaded
+                        if (licensePhoto) { setOcrResult(null); runLicenseOcr(licensePhoto) }
                       }}
                     >
                       Next: Document Verification
@@ -844,7 +847,7 @@ export default function DriverAuth() {
                   )}
 
                   <div className="flex gap-2 pt-2">
-                    <Button variant="secondary" size="md" onClick={() => setStep(2)}>
+                    <Button variant="secondary" size="md" onClick={() => { setStep(2); setOcrResult(null) }}>
                       Back
                     </Button>
                     <Button
