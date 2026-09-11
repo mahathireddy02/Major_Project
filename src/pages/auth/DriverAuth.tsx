@@ -5,7 +5,8 @@ import {
 } from '../../lib/ocrUtils'
 import {
   Navigation, Car, User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight,
-  ShieldCheck, Upload, FileText, CheckCircle2, AlertTriangle, RefreshCw
+  ShieldCheck, Upload, FileText, CheckCircle2, AlertTriangle, RefreshCw,
+  GraduationCap, Calendar, MapPin, Hash, Building
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
@@ -22,6 +23,11 @@ export default function DriverAuth() {
   const login = useAppStore((s) => s.login)
   const registerDriver = useAppStore((s) => s.registerDriver)
   const drivers = useAppStore((s) => s.drivers)
+  const currentUser = useAppStore((s) => s.currentUser)
+  const currentStudent = useAppStore((s) => s.currentStudent())
+
+  // Driver portal type: 'regular' | 'student'
+  const [driverType, setDriverType] = useState<'regular' | 'student'>('regular')
 
   // Auth Mode: 'signin' | 'signup'
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode)
@@ -67,6 +73,20 @@ export default function DriverAuth() {
   const [signInPassword, setSignInPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Student-as-Driver specific fields
+  const [sdStep, setSdStep] = useState<number>(1)
+  const [sdSignInEmail, setSdSignInEmail] = useState('')
+  const [sdSignInPassword, setSdSignInPassword] = useState('')
+  const [sdVerified, setSdVerified] = useState(false)
+  const [sdVehicleType, setSdVehicleType] = useState('Car')
+  const [sdVehicleReg, setSdVehicleReg] = useState('')
+  const [sdVehicleCapacity, setSdVehicleCapacity] = useState('4')
+  const [sdLicenseNo, setSdLicenseNo] = useState('')
+  const [sdAvailableDays, setSdAvailableDays] = useState<string[]>([])
+  const [sdAvailableTime, setSdAvailableTime] = useState('')
+  const [sdPreferredRoute, setSdPreferredRoute] = useState('')
+  const [sdLoading, setSdLoading] = useState(false)
+
   // Handle driving license input - exact 15 characters (2 state letters + 13 digits: SS00 YYYY 0000000)
   const handleLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15)
@@ -79,6 +99,7 @@ export default function DriverAuth() {
       formatted = `${raw.slice(0, 4)} ${raw.slice(4, 8)} ${raw.slice(8, 15)}`
     }
     setLicenseNo(formatted)
+    setOcrResult(null)
   }
 
   // License File Upload — runs real Tesseract OCR via shared util
@@ -228,6 +249,82 @@ export default function DriverAuth() {
     }
   }
 
+  // Student-as-Driver: verify student account
+  const handleSdVerify = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!sdSignInEmail || !sdSignInPassword) {
+      toast.error('Please enter your student email and password.')
+      return
+    }
+    setSdLoading(true)
+    try {
+      await login({ email: sdSignInEmail, password: sdSignInPassword })
+      setSdVerified(true)
+      setSdStep(2)
+      toast.success('Student account verified! Now add your vehicle details.')
+    } catch (err: any) {
+      toast.error(err.message || 'Student login failed. Please check your credentials.')
+    } finally {
+      setSdLoading(false)
+    }
+  }
+
+  // Student-as-Driver: register as driver
+  const handleSdRegister = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const student = currentStudent || currentUser
+    if (!student) {
+      toast.error('Student account not found. Please verify first.')
+      return
+    }
+    if (!sdVehicleReg || !sdLicenseNo) {
+      toast.error('Please fill in all required fields.')
+      return
+    }
+    setSdLoading(true)
+    try {
+      await registerDriver({
+        fullName: student.name,
+        collegeName: (student as any).collegeName || '',
+        phone: student.phone,
+        email: student.email || '',
+        password: sdSignInPassword,
+        vehicleRegistration: sdVehicleReg,
+        vehicleType: sdVehicleType,
+        vehicleCapacity: Number(sdVehicleCapacity) || 4,
+        licenseNumber: sdLicenseNo,
+        driverType: 'student',
+        studentId: (student as any).studentId || (student as any).rollNumber || '',
+        rollNumber: (student as any).rollNumber || '',
+        availableDays: sdAvailableDays,
+        availableTime: sdAvailableTime,
+        preferredRoute: sdPreferredRoute,
+      })
+      toast.success('Registered as Student Driver! Welcome to Campus Flow.', { duration: 5000 })
+      navigate('/driver/dashboard')
+    } catch (err: any) {
+      toast.error(err.message || 'Student driver registration failed.')
+    } finally {
+      setSdLoading(false)
+    }
+  }
+
+  const sdHandleLicenseChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15)
+    let formatted = ''
+    if (raw.length <= 4) formatted = raw
+    else if (raw.length <= 8) formatted = `${raw.slice(0, 4)} ${raw.slice(4)}`
+    else formatted = `${raw.slice(0, 4)} ${raw.slice(4, 8)} ${raw.slice(8, 15)}`
+    setSdLicenseNo(formatted)
+  }
+
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+  const toggleDay = (day: string) => {
+    setSdAvailableDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col justify-between selection:bg-emerald-500 selection:text-white">
       {/* Top Navbar */}
@@ -265,23 +362,49 @@ export default function DriverAuth() {
                 Fleet Operations Portal
               </span>
               <h1 className="font-heading font-bold text-xl text-slate-900">
-                Driver {mode === 'signup' ? 'Registration' : 'Sign In'}
+                {driverType === 'student' ? 'Student as Driver' : `Driver ${mode === 'signup' ? 'Registration' : 'Sign In'}`}
               </h1>
             </div>
 
             <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-              <Car size={20} />
+              {driverType === 'student' ? <GraduationCap size={20} /> : <Car size={20} />}
             </div>
           </div>
 
-          {/* Mode Switcher */}
+          {/* Driver Type Selector */}
+          <div className="grid grid-cols-2 gap-2 mb-6">
+            <button
+              type="button"
+              onClick={() => { setDriverType('regular'); setStep(1) }}
+              className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all cursor-pointer ${
+                driverType === 'regular'
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+              }`}
+            >
+              <Car size={22} />
+              <span className="text-xs font-bold">Regular Driver</span>
+              <span className="text-[10px] text-center leading-tight opacity-70">Commercial / Fleet</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => { setDriverType('student'); setSdStep(1) }}
+              className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all cursor-pointer ${
+                driverType === 'student'
+                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                  : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+              }`}
+            >
+              <GraduationCap size={22} />
+              <span className="text-xs font-bold">Student as Driver</span>
+              <span className="text-[10px] text-center leading-tight opacity-70">Use student account</span>
+            </button>
+          </div>
+          {driverType === 'regular' && (
           <div className="grid grid-cols-2 gap-1 bg-slate-100 p-1 rounded-xl mb-6 text-xs font-bold">
             <button
               type="button"
-              onClick={() => {
-                setMode('signin')
-                setStep(1)
-              }}
+              onClick={() => { setMode('signin'); setStep(1) }}
               className={`py-2 rounded-lg transition-all cursor-pointer ${
                 mode === 'signin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
               }`}
@@ -290,10 +413,7 @@ export default function DriverAuth() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setMode('signup')
-                setStep(1)
-              }}
+              onClick={() => { setMode('signup'); setStep(1) }}
               className={`py-2 rounded-lg transition-all cursor-pointer ${
                 mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
               }`}
@@ -301,9 +421,10 @@ export default function DriverAuth() {
               Driver Sign Up
             </button>
           </div>
+          )}
 
-          {/* SIGN IN FORM */}
-          {mode === 'signin' && (
+          {/* SIGN IN FORM — Regular Driver */}
+          {driverType === 'regular' && mode === 'signin' && (
             <form onSubmit={handleSignIn} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -385,8 +506,8 @@ export default function DriverAuth() {
             </form>
           )}
 
-          {/* SIGN UP MULTI-STEP */}
-          {mode === 'signup' && (
+          {/* SIGN UP MULTI-STEP — Regular Driver */}
+          {driverType === 'regular' && mode === 'signup' && (
             <div>
               {/* Step indicator */}
               <div className="flex items-center justify-between mb-6 px-1">
@@ -428,7 +549,7 @@ export default function DriverAuth() {
                         type="text"
                         required
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={(e) => { setFullName(e.target.value); setOcrResult(null) }}
                         placeholder="e.g. Rahul Kumar"
                         className="input-field pl-9 text-sm"
                       />
@@ -648,6 +769,8 @@ export default function DriverAuth() {
                           return
                         }
                         setStep(3)
+                        // Re-run OCR with updated details if license photo already uploaded
+                        if (licensePhoto) { setOcrResult(null); runLicenseOcr(licensePhoto) }
                       }}
                     >
                       Next: Document Verification
@@ -733,7 +856,7 @@ export default function DriverAuth() {
                   )}
 
                   <div className="flex gap-2 pt-2">
-                    <Button variant="secondary" size="md" onClick={() => setStep(2)}>
+                    <Button variant="secondary" size="md" onClick={() => { setStep(2); setOcrResult(null) }}>
                       Back
                     </Button>
                     <Button
@@ -896,6 +1019,379 @@ export default function DriverAuth() {
                   </Badge>
                 </button>
               </div>
+            </div>
+          )}
+          {/* STUDENT AS DRIVER FLOW */}
+          {driverType === 'student' && (
+            <div>
+              {/* Step indicator */}
+              <div className="flex items-center justify-between mb-5 px-1">
+                {[
+                  { num: 1, label: 'Verify Student' },
+                  { num: 2, label: 'Vehicle' },
+                  { num: 3, label: 'Availability' },
+                ].map((s) => (
+                  <div key={s.num} className="flex items-center gap-1.5 text-xs font-semibold">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      sdStep === s.num ? 'bg-emerald-600 text-white'
+                      : sdStep > s.num ? 'bg-green-500 text-white'
+                      : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {sdStep > s.num ? '✓' : s.num}
+                    </div>
+                    <span className={sdStep === s.num ? 'text-slate-900 font-bold' : 'text-slate-400 hidden sm:inline'}>
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* SD Step 1: Verify student account */}
+              {sdStep === 1 && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                    <p className="font-bold flex items-center gap-1.5 mb-1">
+                      <GraduationCap size={14} className="text-emerald-600" />
+                      Student as Driver
+                    </p>
+                    <p className="text-[11px] leading-relaxed">
+                      Use your existing student account to register as a Campus Flow driver. Your student identity will be reused — no duplicate account needed.
+                    </p>
+                  </div>
+
+                  {sdVerified && (currentStudent || currentUser) ? (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs space-y-1.5">
+                      <p className="font-bold text-green-800 flex items-center gap-1.5">
+                        <CheckCircle2 size={14} className="text-green-600" /> Student Verified
+                      </p>
+                      {[['Name', (currentStudent || currentUser)?.name],
+                        ['College', (currentStudent as any)?.collegeName || (currentUser as any)?.collegeName || '—'],
+                        ['Roll No.', (currentStudent as any)?.rollNumber || (currentStudent as any)?.studentId || '—'],
+                        ['Email', (currentStudent || currentUser)?.email || '—'],
+                        ['Phone', (currentStudent || currentUser)?.phone || '—'],
+                      ].map(([label, val]) => (
+                        <div key={label} className="flex justify-between">
+                          <span className="text-slate-500">{label}:</span>
+                          <span className="font-semibold text-slate-800 text-right max-w-[60%] truncate">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSdVerify} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Student Email *</label>
+                        <div className="relative">
+                          <Mail size={16} className="absolute left-3 top-3 text-slate-400" />
+                          <input type="email" required value={sdSignInEmail}
+                            onChange={(e) => setSdSignInEmail(e.target.value)}
+                            placeholder="student@campus.edu"
+                            className="input-field pl-9 text-sm" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Password *</label>
+                        <div className="relative">
+                          <Lock size={16} className="absolute left-3 top-3 text-slate-400" />
+                          <input type={showPassword ? 'text' : 'password'} required value={sdSignInPassword}
+                            onChange={(e) => setSdSignInPassword(e.target.value)}
+                            placeholder="••••••••"
+                            className="input-field pl-9 pr-9 text-sm" />
+                          <button type="button" onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">
+                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                          </button>
+                        </div>
+                      </div>
+                      <Button type="submit" size="lg" variant="primary"
+                        className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-sm"
+                        loading={sdLoading}>
+                        Verify Student Account
+                        <ArrowRight size={16} />
+                      </Button>
+                    </form>
+                  )}
+
+                  {sdVerified && (
+                    <Button size="lg" variant="primary"
+                      className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-sm"
+                      onClick={() => setSdStep(2)}>
+                      Continue: Add Vehicle Details
+                      <ArrowRight size={16} />
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {/* SD Step 2: Vehicle & License */}
+              {sdStep === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Vehicle Type *</label>
+                    <select value={sdVehicleType} onChange={(e) => setSdVehicleType(e.target.value)}
+                      className="input-field text-sm">
+                      <option value="Car">Car</option>
+                      <option value="Bike">Bike / Two-Wheeler</option>
+                      <option value="Auto Rickshaw">Auto Rickshaw</option>
+                      <option value="Mini Van">Mini Van</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Vehicle Registration Number *</label>
+                    <input type="text" required value={sdVehicleReg}
+                      onChange={(e) => setSdVehicleReg(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''))}
+                      placeholder="TS 09 AB 1234" maxLength={13}
+                      className="input-field text-sm uppercase" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Capacity (seats) *</label>
+                      <select value={sdVehicleCapacity} onChange={(e) => setSdVehicleCapacity(e.target.value)}
+                        className="input-field text-sm">
+                        <option value="2">2 seats</option>
+                        <option value="3">3 seats</option>
+                        <option value="4">4 seats</option>
+                        <option value="6">6 seats</option>
+                        <option value="7">7 seats</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Driving Licence No *</label>
+                      <input type="text" required value={sdLicenseNo}
+                        onChange={sdHandleLicenseChange}
+                        placeholder="TS09 2024 0087654" maxLength={17}
+                        className="input-field text-sm uppercase" />
+                      <div className="flex justify-end text-[10px] mt-0.5">
+                        <span className={sdLicenseNo.replace(/[^A-Z0-9]/g, '').length === 15 ? 'text-emerald-600 font-bold' : 'text-red-500 font-semibold'}>
+                          {sdLicenseNo.replace(/[^A-Z0-9]/g, '').length}/15
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="secondary" size="md" onClick={() => setSdStep(1)}>Back</Button>
+                    <Button size="md" variant="primary"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold"
+                      disabled={!sdVehicleReg || sdLicenseNo.replace(/[^A-Z0-9]/g, '').length !== 15}
+                      onClick={() => {
+                        if (!sdVehicleReg.trim()) { toast.error('Enter vehicle registration number.'); return }
+                        if (sdLicenseNo.replace(/[^A-Z0-9]/g, '').length !== 15) { toast.error('License must be exactly 15 characters.'); return }
+                        setSdStep(3)
+                      }}>
+                      Next: Availability
+                      <ArrowRight size={16} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* SD Step 3: Availability & Submit */}
+              {sdStep === 3 && (
+                <form onSubmit={handleSdRegister} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">Available Days *</label>
+                    <div className="flex flex-wrap gap-2">
+                      {DAYS.map((day) => (
+                        <button key={day} type="button"
+                          onClick={() => toggleDay(day)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all cursor-pointer ${
+                            sdAvailableDays.includes(day)
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                              : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                          }`}>
+                          {day}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Available Time Slot</label>
+                    <div className="relative">
+                      <Calendar size={16} className="absolute left-3 top-3 text-slate-400" />
+                      <input type="text" value={sdAvailableTime}
+                        onChange={(e) => setSdAvailableTime(e.target.value)}
+                        placeholder="e.g. 8:00 AM – 10:00 AM"
+                        className="input-field pl-9 text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Preferred Route / Area</label>
+                    <div className="relative">
+                      <MapPin size={16} className="absolute left-3 top-3 text-slate-400" />
+                      <input type="text" value={sdPreferredRoute}
+                        onChange={(e) => setSdPreferredRoute(e.target.value)}
+                        placeholder="e.g. Hostel A → College Gate"
+                        className="input-field pl-9 text-sm" />
+                    </div>
+                  </div>
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                    <p className="font-bold flex items-center gap-1.5">
+                      <ShieldCheck size={14} className="text-emerald-600" />
+                      Route Lock Policy
+                    </p>
+                    <p className="text-[11px] leading-relaxed mt-0.5">
+                      As a Student Driver, your assigned route will be <strong>LOCKED</strong> and will not be re-optimized due to empty seats or passenger changes.
+                    </p>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="secondary" size="md" onClick={() => setSdStep(2)}>Back</Button>
+                    <Button type="submit" size="md" variant="primary"
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold"
+                      loading={sdLoading}>
+                      Register as Student Driver
+                      <CheckCircle2 size={16} />
+                    </Button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
+          {/* STUDENT AS DRIVER FLOW */}
+          {driverType === 'student' && (
+            <div>
+              <div className="flex items-center justify-between mb-5 px-1">
+                {[{ num: 1, label: 'Verify Student' }, { num: 2, label: 'Vehicle' }, { num: 3, label: 'Availability' }].map((s) => (
+                  <div key={s.num} className="flex items-center gap-1.5 text-xs font-semibold">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+                      sdStep === s.num ? 'bg-emerald-600 text-white' : sdStep > s.num ? 'bg-green-500 text-white' : 'bg-slate-200 text-slate-600'
+                    }`}>{sdStep > s.num ? '✓' : s.num}</div>
+                    <span className={sdStep === s.num ? 'text-slate-900 font-bold' : 'text-slate-400 hidden sm:inline'}>{s.label}</span>
+                  </div>
+                ))}
+              </div>
+
+              {sdStep === 1 && (
+                <div className="space-y-4">
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                    <p className="font-bold flex items-center gap-1.5 mb-1"><GraduationCap size={14} className="text-emerald-600" />Student as Driver</p>
+                    <p className="text-[11px] leading-relaxed">Use your existing student account to register as a Campus Flow driver. No duplicate account needed.</p>
+                  </div>
+                  {sdVerified && (currentStudent || currentUser) ? (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-xl text-xs space-y-1.5">
+                      <p className="font-bold text-green-800 flex items-center gap-1.5"><CheckCircle2 size={14} className="text-green-600" />Student Verified</p>
+                      {[['Name', (currentStudent || currentUser)?.name], ['College', (currentStudent as any)?.collegeName || (currentUser as any)?.collegeName || '—'], ['Roll No.', (currentStudent as any)?.rollNumber || (currentStudent as any)?.studentId || '—'], ['Email', (currentStudent || currentUser)?.email || '—'], ['Phone', (currentStudent || currentUser)?.phone || '—']].map(([label, val]) => (
+                        <div key={label} className="flex justify-between">
+                          <span className="text-slate-500">{label}:</span>
+                          <span className="font-semibold text-slate-800 text-right max-w-[60%] truncate">{val}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSdVerify} className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Student Email *</label>
+                        <div className="relative">
+                          <Mail size={16} className="absolute left-3 top-3 text-slate-400" />
+                          <input type="email" required value={sdSignInEmail} onChange={(e) => setSdSignInEmail(e.target.value)} placeholder="student@campus.edu" className="input-field pl-9 text-sm" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">Password *</label>
+                        <div className="relative">
+                          <Lock size={16} className="absolute left-3 top-3 text-slate-400" />
+                          <input type={showPassword ? 'text' : 'password'} required value={sdSignInPassword} onChange={(e) => setSdSignInPassword(e.target.value)} placeholder="••••••••" className="input-field pl-9 pr-9 text-sm" />
+                          <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-3 text-slate-400 hover:text-slate-600">{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button>
+                        </div>
+                      </div>
+                      <Button type="submit" size="lg" variant="primary" className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-sm" loading={sdLoading}>
+                        Verify Student Account <ArrowRight size={16} />
+                      </Button>
+                    </form>
+                  )}
+                  {sdVerified && (
+                    <Button size="lg" variant="primary" className="w-full bg-emerald-600 hover:bg-emerald-500 font-bold text-sm" onClick={() => setSdStep(2)}>
+                      Continue: Add Vehicle Details <ArrowRight size={16} />
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {sdStep === 2 && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Vehicle Type *</label>
+                    <select value={sdVehicleType} onChange={(e) => setSdVehicleType(e.target.value)} className="input-field text-sm">
+                      <option value="Car">Car</option>
+                      <option value="Bike">Bike / Two-Wheeler</option>
+                      <option value="Auto Rickshaw">Auto Rickshaw</option>
+                      <option value="Mini Van">Mini Van</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Vehicle Registration Number *</label>
+                    <input type="text" required value={sdVehicleReg} onChange={(e) => setSdVehicleReg(e.target.value.toUpperCase().replace(/[^A-Z0-9 ]/g, ''))} placeholder="TS 09 AB 1234" maxLength={13} className="input-field text-sm uppercase" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Capacity (seats) *</label>
+                      <select value={sdVehicleCapacity} onChange={(e) => setSdVehicleCapacity(e.target.value)} className="input-field text-sm">
+                        <option value="2">2 seats</option>
+                        <option value="3">3 seats</option>
+                        <option value="4">4 seats</option>
+                        <option value="6">6 seats</option>
+                        <option value="7">7 seats</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">Driving Licence No *</label>
+                      <input type="text" required value={sdLicenseNo} onChange={sdHandleLicenseChange} placeholder="TS09 2024 0087654" maxLength={17} className="input-field text-sm uppercase" />
+                      <div className="flex justify-end text-[10px] mt-0.5">
+                        <span className={sdLicenseNo.replace(/[^A-Z0-9]/g, '').length === 15 ? 'text-emerald-600 font-bold' : 'text-red-500 font-semibold'}>{sdLicenseNo.replace(/[^A-Z0-9]/g, '').length}/15</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="secondary" size="md" onClick={() => setSdStep(1)}>Back</Button>
+                    <Button size="md" variant="primary" className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold" disabled={!sdVehicleReg || sdLicenseNo.replace(/[^A-Z0-9]/g, '').length !== 15}
+                      onClick={() => {
+                        if (!sdVehicleReg.trim()) { toast.error('Enter vehicle registration number.'); return }
+                        if (sdLicenseNo.replace(/[^A-Z0-9]/g, '').length !== 15) { toast.error('License must be exactly 15 characters.'); return }
+                        setSdStep(3)
+                      }}>
+                      Next: Availability <ArrowRight size={16} />
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {sdStep === 3 && (
+                <form onSubmit={handleSdRegister} className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-2">Available Days *</label>
+                    <div className="flex flex-wrap gap-2">
+                      {DAYS.map((day) => (
+                        <button key={day} type="button" onClick={() => toggleDay(day)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-bold border-2 transition-all cursor-pointer ${
+                            sdAvailableDays.includes(day) ? 'border-emerald-500 bg-emerald-50 text-emerald-700' : 'border-slate-200 text-slate-500 hover:border-slate-300'
+                          }`}>{day}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Available Time Slot</label>
+                    <div className="relative">
+                      <Calendar size={16} className="absolute left-3 top-3 text-slate-400" />
+                      <input type="text" value={sdAvailableTime} onChange={(e) => setSdAvailableTime(e.target.value)} placeholder="e.g. 8:00 AM – 10:00 AM" className="input-field pl-9 text-sm" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">Preferred Route / Area</label>
+                    <div className="relative">
+                      <MapPin size={16} className="absolute left-3 top-3 text-slate-400" />
+                      <input type="text" value={sdPreferredRoute} onChange={(e) => setSdPreferredRoute(e.target.value)} placeholder="e.g. Hostel A → College Gate" className="input-field pl-9 text-sm" />
+                    </div>
+                  </div>
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                    <p className="font-bold flex items-center gap-1.5"><ShieldCheck size={14} className="text-emerald-600" />Route Lock Policy</p>
+                    <p className="text-[11px] leading-relaxed mt-0.5">As a Student Driver, your assigned route will be <strong>LOCKED</strong> and will not be re-optimized due to empty seats or passenger changes.</p>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="secondary" size="md" onClick={() => setSdStep(2)}>Back</Button>
+                    <Button type="submit" size="md" variant="primary" className="flex-1 bg-emerald-600 hover:bg-emerald-500 font-bold" loading={sdLoading}>
+                      Register as Student Driver <CheckCircle2 size={16} />
+                    </Button>
+                  </div>
+                </form>
+              )}
             </div>
           )}
         </Card>

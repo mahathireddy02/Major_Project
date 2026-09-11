@@ -62,6 +62,12 @@ export interface Driver extends BaseUser {
   vehicleType?: string
   licensePhoto?: string
   rcPhoto?: string
+  driverType?: 'regular' | 'student'
+  studentId?: string
+  rollNumber?: string
+  availableDays?: string[]
+  availableTime?: string
+  preferredRoute?: string
 }
 
 export interface Vehicle {
@@ -182,6 +188,8 @@ export interface Passenger {
   genderPreference?: 'ANYONE' | 'FEMALE_ONLY' | string
 }
 
+export type RouteStatus = 'assigned' | 'locked' | 'in_progress' | 'completed'
+
 export interface Ride {
   id: string
   routeName: string
@@ -218,6 +226,7 @@ export interface Ride {
   startLocationLat?: number
   startLocationLng?: number
   date: string
+  routeStatus?: RouteStatus
 }
 
 export interface Booking {

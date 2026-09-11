@@ -1,4 +1,39 @@
-import type { Ride } from '../types'
+import type { Ride, Driver } from '../types'
+
+/**
+ * Returns true if a ride's route is locked and must NOT be re-optimized.
+ * A route is locked when the assigned driver is a student driver.
+ * Locked routes can only be changed by admin/safety/vehicle override.
+ */
+export function isRouteLocked(ride: Ride, drivers?: Driver[]): boolean {
+  if ((ride as any).routeStatus === 'locked') return true
+  if (drivers) {
+    const driver = drivers.find((d) => d.id === ride.driverId)
+    if (driver && (driver as any).driverType === 'student') return true
+  }
+  return false
+}
+
+/**
+ * Valid override reasons that allow re-optimization of a locked student driver route.
+ */
+export type RouteOverrideReason =
+  | 'driver_cancelled'
+  | 'driver_unavailable'
+  | 'vehicle_unavailable'
+  | 'insufficient_capacity'
+  | 'safety_emergency'
+  | 'admin_override'
+  | 'route_obstruction'
+
+export function canReoptimizeLockedRoute(reason?: RouteOverrideReason): boolean {
+  if (!reason) return false
+  const validReasons: RouteOverrideReason[] = [
+    'driver_cancelled', 'driver_unavailable', 'vehicle_unavailable',
+    'insufficient_capacity', 'safety_emergency', 'admin_override', 'route_obstruction',
+  ]
+  return validReasons.includes(reason)
+}
 
 export interface MatchScore {
   total: number
@@ -187,6 +222,8 @@ export function calculateMatchScore(
 export interface FindMatchesOptions {
   includeCompleted?: boolean
   minScore?: number
+  drivers?: Driver[]
+  overrideReason?: RouteOverrideReason
 }
 
 export function findMatches(
@@ -201,6 +238,9 @@ export function findMatches(
     if (r.status === 'cancelled') return false
     if (!includeCompleted && r.status === 'completed') return false
     if (r.status !== 'completed' && r.bookedSeats + request.seats > r.capacity) return false
+    // Route lock: student driver routes are excluded from re-optimization
+    // unless a valid override reason is provided
+    if (isRouteLocked(r, options?.drivers) && !canReoptimizeLockedRoute(options?.overrideReason)) return false
     return true
   })
 

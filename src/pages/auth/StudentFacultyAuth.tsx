@@ -582,7 +582,7 @@ export default function StudentFacultyAuth() {
                         type="text"
                         required
                         value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
+                        onChange={(e) => { setFullName(e.target.value); setOcrResult(null) }}
                         placeholder="e.g. Arjun Rao"
                         className="input-field pl-9 text-sm"
                       />
@@ -600,9 +600,10 @@ export default function StudentFacultyAuth() {
                           type="text"
                           required
                           value={userType === 'student' ? rollNumber : collegeId}
-                          onChange={(e) =>
+                          onChange={(e) => {
                             userType === 'student' ? setRollNumber(e.target.value.toUpperCase()) : setCollegeId(e.target.value)
-                          }
+                            setOcrResult(null)
+                          }}
                           placeholder={userType === 'student' ? 'e.g. CSE2022015 or 22A91A0501' : 'FAC-1042'}
                           className="input-field pl-9 text-sm"
                         />
@@ -647,7 +648,7 @@ export default function StudentFacultyAuth() {
                         type="text"
                         required
                         value={collegeName}
-                        onChange={(e) => setCollegeName(e.target.value)}
+                        onChange={(e) => { setCollegeName(e.target.value); setOcrResult(null) }}
                         placeholder="e.g. SRI INDU College of Engineering & Technology"
                         className="input-field pl-9 text-sm"
                       />
@@ -804,6 +805,8 @@ export default function StudentFacultyAuth() {
                         if (!isCodeVerified) { toast.error('Please verify your email with the code first.'); return }
                         if (emailExists) { toast.error('Email already registered. Please sign in.'); return }
                         setStep(3)
+                        // Re-run OCR with updated details if image already uploaded
+                        if (idCardPreview) { setOcrResult(null); runOcrAnalysis(idCardPreview) }
                       }}
                     >
                       Next: ID Card Upload
@@ -919,7 +922,7 @@ export default function StudentFacultyAuth() {
                   )}
 
                   <div className="flex gap-2 pt-2">
-                    <Button variant="secondary" size="md" onClick={() => setStep(2)}>
+                    <Button variant="secondary" size="md" onClick={() => { setStep(2); setOcrResult(null) }}>
                       Back
                     </Button>
                     <Button

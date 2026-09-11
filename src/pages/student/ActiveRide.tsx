@@ -1,7 +1,8 @@
+import React, { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Phone, Shield, Navigation, Clock, MapPin, AlertTriangle, Car,
-  ChevronRight, XCircle, Share2, CheckCircle2
+  Phone, Shield, Navigation, Clock, MapPin, AlertTriangle,
+  XCircle, CheckCircle2, MessageCircle, Send, X,
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import Card from '../../components/ui/Card'
@@ -19,6 +20,13 @@ export default function ActiveRide() {
   const currentStudentId = useAppStore((s) => s.currentStudentId)
   const cancelBooking = useAppStore((s) => s.cancelBooking)
   const bookings = useAppStore((s) => s.bookings)
+  const messages = useAppStore((s) => s.messages)
+  const sendMessage = useAppStore((s) => s.sendMessage)
+  const markMessagesRead = useAppStore((s) => s.markMessagesRead)
+
+  const [chatOpen, setChatOpen] = useState(false)
+  const [draft, setDraft] = useState('')
+  const chatEndRef = useRef<HTMLDivElement>(null)
 
   // Find ride where student has a confirmed active, boarding, waiting, or full ride
   const activeRide = rides.find((r) => {
@@ -46,6 +54,22 @@ export default function ActiveRide() {
   const driver = drivers.find((d) => d.id === activeRide.driverId)
   const vehicle = vehicles.find((v) => v.id === activeRide.vehicleId)
   const myBooking = bookings.find((b) => b.rideId === activeRide.id && b.studentId === currentStudentId && b.status === 'confirmed')
+  const rideMessages = messages.filter((m) => m.rideId === activeRide.id)
+  const unreadFromDriver = rideMessages.filter((m) => m.fromRole === 'driver' && !m.read).length
+
+  useEffect(() => {
+    if (chatOpen) {
+      markMessagesRead(activeRide.id, 'driver')
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    }
+  }, [chatOpen, rideMessages.length])
+
+  const handleSend = () => {
+    if (!draft.trim()) return
+    sendMessage(activeRide.id, draft)
+    setDraft('')
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+  }
 
   const mapPoints = [
     ...activeRide.pickupPoints.map((pp) => ({
@@ -155,16 +179,32 @@ export default function ActiveRide() {
                 </div>
                 <p className="text-xs text-slate-500">{vehicle.name} · {vehicle.registration}</p>
                 <p className="text-[11px] text-amber-600 font-medium mt-0.5">★ {driver.rating} Campus Driver</p>
+                {driver.phone && (
+                  <a href={`tel:${driver.phone}`} className="text-xs text-primary-600 font-medium hover:underline flex items-center gap-1 mt-0.5">
+                    <Phone size={11} /> {driver.phone}
+                  </a>
+                )}
               </div>
             </div>
-
-            <a
-              href={`tel:${driver.phone}`}
-              className="w-10 h-10 rounded-full bg-green-50 text-green-600 border border-green-200 flex items-center justify-center hover:bg-green-100 transition-colors"
-              title="Call Driver"
-            >
-              <Phone size={18} />
-            </a>
+            <div className="flex items-center gap-2">
+              <a
+                href={`tel:${driver.phone}`}
+                className="w-9 h-9 rounded-full bg-green-50 text-green-600 border border-green-200 flex items-center justify-center hover:bg-green-100 transition-colors"
+                title="Call Driver"
+              >
+                <Phone size={16} />
+              </a>
+              <button
+                onClick={() => setChatOpen(true)}
+                className="relative w-9 h-9 rounded-full bg-primary-50 text-primary-600 border border-primary-200 flex items-center justify-center hover:bg-primary-100 transition-colors cursor-pointer"
+                title="Message Driver"
+              >
+                <MessageCircle size={16} />
+                {unreadFromDriver > 0 && (
+                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center">{unreadFromDriver}</span>
+                )}
+              </button>
+            </div>
           </div>
         </Card>
       )}
@@ -207,6 +247,70 @@ export default function ActiveRide() {
           Cancel this booking
         </button>
       </div>
+
+      {/* Chat Drawer */}
+      {chatOpen && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setChatOpen(false)}>
+          <div
+            className="w-full max-w-lg bg-white rounded-t-2xl shadow-2xl flex flex-col"
+            style={{ maxHeight: '70vh' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold text-xs">
+                  {driver?.name.charAt(0) ?? 'D'}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-slate-900">{driver?.name ?? 'Driver'}</p>
+                  <p className="text-[10px] text-slate-400">Ride chat · messages visible to driver</p>
+                </div>
+              </div>
+              <button onClick={() => setChatOpen(false)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 cursor-pointer">
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2 min-h-0">
+              {rideMessages.length === 0 && (
+                <p className="text-center text-xs text-slate-400 py-6">No messages yet. Say hi to your driver!</p>
+              )}
+              {rideMessages.map((msg) => {
+                const isMe = msg.fromRole === 'student'
+                return (
+                  <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] px-3 py-2 rounded-2xl text-sm ${isMe ? 'bg-primary-600 text-white rounded-br-sm' : 'bg-slate-100 text-slate-800 rounded-bl-sm'}`}>
+                      <p>{msg.text}</p>
+                      <p className={`text-[10px] mt-0.5 ${isMe ? 'text-primary-200' : 'text-slate-400'}`}>
+                        {new Date(msg.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                )
+              })}
+              <div ref={chatEndRef} />
+            </div>
+
+            <div className="px-4 py-3 border-t border-slate-100 flex gap-2">
+              <input
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                placeholder="Type a message..."
+                className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-400"
+              />
+              <button
+                onClick={handleSend}
+                disabled={!draft.trim()}
+                className="w-9 h-9 rounded-xl bg-primary-600 text-white flex items-center justify-center hover:bg-primary-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
+              >
+                <Send size={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
