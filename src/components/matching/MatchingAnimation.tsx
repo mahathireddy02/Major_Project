@@ -1,117 +1,152 @@
 import { useEffect, useState } from 'react'
-import { Search, MapPin, Route, Clock, Users, Sparkles } from 'lucide-react'
-import { cn } from '../../lib/utils'
+import { Search, MapPin, Route, Users, Sparkles } from 'lucide-react'
 
 const steps = [
-  { icon: Search,    text: 'Finding nearby rides...',       color: 'text-primary-600' },
-  { icon: Route,     text: 'Checking route compatibility...', color: 'text-violet-600' },
-  { icon: Users,     text: 'Checking available seats...',   color: 'text-green-600' },
-  { icon: MapPin,    text: 'Optimizing pickup sequence...', color: 'text-amber-600' },
-  { icon: Sparkles,  text: 'Calculating match scores...',   color: 'text-primary-600' },
+  { icon: Search,   text: 'Finding nearby rides...',        color: '#4f46e5' },
+  { icon: Route,    text: 'Checking route compatibility...', color: '#7c3aed' },
+  { icon: Users,    text: 'Checking available seats...',    color: '#16a34a' },
+  { icon: MapPin,   text: 'Optimizing pickup sequence...',  color: '#d97706' },
+  { icon: Sparkles, text: 'Calculating match scores...',    color: '#4f46e5' },
 ]
+
+// ms each phase lasts
+const ENTER_MS    = 350   // slide in from right
+const PROGRESS_MS = 700   // progress bar fills 0→100%
+const EXIT_MS     = 350   // slide out to left
 
 interface MatchingAnimationProps {
   onComplete: () => void
   duration?: number
 }
 
-export default function MatchingAnimation({ onComplete, duration = 2800 }: MatchingAnimationProps) {
-  const [currentStep, setCurrentStep] = useState(0)
-  const [done, setDone] = useState<number[]>([])
+type SlidePhase = 'enter' | 'progress' | 'exit' | 'idle'
+
+export default function MatchingAnimation({ onComplete }: MatchingAnimationProps) {
+  const [stepIndex, setStepIndex] = useState(0)
+  const [phase, setPhase]         = useState<SlidePhase>('idle')
+  const [progress, setProgress]   = useState(0)
 
   useEffect(() => {
-    const interval = duration / steps.length
-    const timers: ReturnType<typeof setTimeout>[] = []
+    let cancelled = false
 
-    steps.forEach((_, i) => {
-      timers.push(
-        setTimeout(() => {
-          setCurrentStep(i)
-          if (i > 0) setDone((d) => [...d, i - 1])
-        }, i * interval)
-      )
-    })
+    const run = async (i: number) => {
+      if (cancelled || i >= steps.length) return
 
-    timers.push(
-      setTimeout(() => {
-        setDone([0, 1, 2, 3, 4])
+      setStepIndex(i)
+      setProgress(0)
+
+      // 1. Slide in from right
+      setPhase('enter')
+      await delay(ENTER_MS)
+      if (cancelled) return
+
+      // 2. Progress bar fills to 100%
+      setPhase('progress')
+      // Animate progress 0 → 100 in small ticks
+      const ticks = 20
+      const tickMs = PROGRESS_MS / ticks
+      for (let t = 1; t <= ticks; t++) {
+        await delay(tickMs)
+        if (cancelled) return
+        setProgress(Math.round((t / ticks) * 100))
+      }
+
+      // 3. Slide out to left
+      setPhase('exit')
+      await delay(EXIT_MS)
+      if (cancelled) return
+
+      setPhase('idle')
+      await delay(60)
+      if (cancelled) return
+
+      if (i + 1 < steps.length) {
+        run(i + 1)
+      } else {
         onComplete()
-      }, duration)
-    )
+      }
+    }
 
-    return () => timers.forEach(clearTimeout)
-  }, [onComplete, duration])
+    // tiny mount delay so first enter transition is visible
+    const t = setTimeout(() => run(0), 80)
+    return () => { cancelled = true; clearTimeout(t) }
+  }, [onComplete])
+
+  const step = steps[stepIndex]
+  const Icon = step.icon
+
+  const slideStyle: React.CSSProperties =
+    phase === 'enter' ? { animation: `stepEnter ${ENTER_MS}ms cubic-bezier(0.22,1,0.36,1) forwards` } :
+    phase === 'exit'  ? { animation: `stepExit  ${EXIT_MS}ms  cubic-bezier(0.55,0,1,0.45)    forwards` } :
+    phase === 'progress' ? { transform: 'translateX(0)', opacity: 1 } :
+    { opacity: 0 }
 
   return (
-    <div className="flex flex-col items-center justify-center py-12 px-6">
-      {/* Spinning outer ring */}
-      <div className="relative w-20 h-20 mb-8">
-        <div className="absolute inset-0 rounded-full border-4 border-primary-100" />
-        <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary-600 animate-spin" />
-        <div className="absolute inset-2 rounded-full bg-primary-50 flex items-center justify-center">
-          <Sparkles size={24} className="text-primary-600 animate-pulse" />
+    <>
+      <style>{`
+        @keyframes stepEnter {
+          from { transform: translateX(110%); opacity: 0; }
+          to   { transform: translateX(0);    opacity: 1; }
+        }
+        @keyframes stepExit {
+          from { transform: translateX(0);     opacity: 1; }
+          to   { transform: translateX(-110%); opacity: 0; }
+        }
+      `}</style>
+
+      <div className="flex flex-col items-center justify-center py-12 px-6">
+        {/* Spinning outer ring */}
+        <div className="relative w-20 h-20 mb-8">
+          <div className="absolute inset-0 rounded-full border-4 border-primary-100" />
+          <div className="absolute inset-0 rounded-full border-4 border-transparent border-t-primary-600 animate-spin" />
+          <div className="absolute inset-2 rounded-full bg-primary-50 flex items-center justify-center">
+            <Sparkles size={24} className="text-primary-600 animate-pulse" />
+          </div>
+        </div>
+
+        <h3 className="font-heading font-semibold text-slate-900 mb-1 text-center">
+          Matching Ride
+        </h3>
+        <p className="text-sm text-slate-500 mb-8 text-center">
+          Our engine is analysing{' '}
+          <span className="font-semibold text-primary-600">86 active rides</span>
+        </p>
+
+        {/* Slide stage — overflow hidden clips the entering/exiting card */}
+        <div className="w-full max-w-xs overflow-hidden">
+          <div style={slideStyle}>
+            {phase !== 'idle' && (
+              <div className="bg-primary-50 border border-primary-200 rounded-xl px-4 py-3">
+                {/* Icon + label row */}
+                <div className="flex items-center gap-3 mb-2.5">
+                  <div className="w-7 h-7 rounded-lg bg-primary-100 flex items-center justify-center flex-shrink-0">
+                    <Icon size={15} style={{ color: step.color }} />
+                  </div>
+                  <span className="text-sm font-medium text-slate-800 flex-1">{step.text}</span>
+                  <span className="text-xs font-bold tabular-nums" style={{ color: step.color }}>
+                    {progress}%
+                  </span>
+                </div>
+
+                {/* Progress bar */}
+                <div className="h-1.5 w-full bg-primary-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-75"
+                    style={{
+                      width: `${progress}%`,
+                      backgroundColor: step.color,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
-
-      <h3 className="font-heading font-semibold text-slate-900 mb-1 text-center">
-        Matching Ride
-      </h3>
-      <p className="text-sm text-slate-500 mb-8 text-center">
-        Our engine is analysing {' '}
-        <span className="font-semibold text-primary-600">86 active rides</span>
-      </p>
-
-      <div className="w-full max-w-xs space-y-3">
-        {steps.map((step, i) => {
-          const Icon = step.icon
-          const isDone = done.includes(i)
-          const isActive = currentStep === i && !isDone
-
-          return (
-            <div
-              key={i}
-              className={cn(
-                'flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-300',
-                isDone  ? 'bg-green-50 border border-green-200' :
-                isActive ? 'bg-primary-50 border border-primary-200' :
-                           'bg-slate-50 border border-slate-100 opacity-40'
-              )}
-            >
-              <div className={cn(
-                'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0',
-                isDone   ? 'bg-green-100' :
-                isActive ? 'bg-primary-100' : 'bg-slate-100'
-              )}>
-                {isDone ? (
-                  <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <Icon size={15} className={isActive ? step.color : 'text-slate-400'} />
-                )}
-              </div>
-              <span className={cn(
-                'text-sm font-medium',
-                isDone   ? 'text-green-700' :
-                isActive ? 'text-slate-800' : 'text-slate-400'
-              )}>
-                {step.text}
-              </span>
-              {isActive && (
-                <div className="ml-auto flex gap-1">
-                  {[0, 1, 2].map((d) => (
-                    <div
-                      key={d}
-                      className="w-1 h-1 rounded-full bg-primary-400 animate-bounce"
-                      style={{ animationDelay: `${d * 150}ms` }}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
+    </>
   )
+}
+
+function delay(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
