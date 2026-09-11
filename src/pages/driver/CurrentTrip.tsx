@@ -1,0 +1,703 @@
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import {
+  MapPin,
+  Users,
+  Clock,
+  CheckCircle,
+  XCircle,
+  Navigation,
+  Play,
+  Crosshair,
+  Compass,
+  AlertTriangle,
+  RotateCcw,
+  Radio,
+  Sparkles,
+  ArrowUp,
+  CornerUpRight,
+  CornerUpLeft,
+} from 'lucide-react'
+import { useAppStore } from '../../store/appStore'
+import { useLiveTrip } from '../../hooks/useLiveTrip'
+import Card from '../../components/ui/Card'
+import Badge from '../../components/ui/Badge'
+import Button from '../../components/ui/Button'
+import CampusMap from '../../components/map/CampusMap'
+import Avatar from '../../components/ui/Avatar'
+import toast from 'react-hot-toast'
+function distanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000
+  const dLat = ((lat2 - lat1) * Math.PI) / 180
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  return R * c
+}
+
+function calculateHeading(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const dLon = ((lon2 - lon1) * Math.PI) / 180
+  const y = Math.sin(dLon) * Math.cos((lat2 * Math.PI) / 180)
+  const x =
+    Math.cos((lat1 * Math.PI) / 180) * Math.sin((lat2 * Math.PI) / 180) -
+    Math.sin((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.cos(dLon)
+  let brng = (Math.atan2(y, x) * 180) / Math.PI
+  return (brng + 360) % 360
+}
+
+export default function CurrentTrip() {
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const targetRideId = searchParams.get('rideId')
+
+  const rides = useAppStore((s) => s.rides)
+  const bookings = useAppStore((s) => s.bookings)
+  const students = useAppStore((s) => s.students)
+  const currentUser = useAppStore((s) => s.currentUser)
+  const currentDriverId = useAppStore((s) => s.currentDriverId)
+  const completeRideInStore = useAppStore((s) => s.completeRide)
+  const refreshRides = useAppStore((s) => s.refreshRides)
+
+  // Find active ride
+  const filteredRides = rides.filter(
+    (r) => r.driverId === currentDriverId || r.driverId === currentUser?.id || r.driverId === 'd1'
+  )
+  const sortedRides = [...filteredRides].sort((a, b) => {
+    const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
+    const timeB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0
+    if (timeA !== timeB) return timeB - timeA
+    return b.id.localeCompare(a.id)
+  })
+
+  const activeRide = targetRideId
+    ? sortedRides.find((r) => r.id === targetRideId)
+    : (
+        sortedRides.find((r) => r.status === 'active') ||
+        sortedRides.find((r) => r.status === 'boarding') ||
+        sortedRides.find((r) => (r.status === 'waiting' || r.status === 'full') && (r.bookedSeats > 0 || (r.passengers && r.passengers.length > 0))) ||
+        sortedRides.find((r) => r.status === 'waiting')
+      )
+
+  // Live Trip Hook
+  const {
+    tripState,
+    loading: tripLoading,
+    cameraMode,
+    setCameraMode,
+    isRecenterNeeded,
+    recenter,
+    handleUserPan,
+    vehiclePosition,
+    vehicleHeading,
+    sendDriverLocation,
+    markStopArrived,
+    markStopBoarded,
+    updatePassengerStatus,
+    startTrip,
+    completeTrip,
+    recalculateRoute,
+  } = useLiveTrip({
+    rideId: activeRide?.id,
+    defaultCameraMode: 'FOLLOW',
+  })
+
+  // Real Browser GPS Tracking state
+  const [isGpsActive, setIsGpsActive] = useState<boolean>(false)
+  const watchIdRef = useRef<number | null>(null)
+
+  // Demo Route Simulation state
+  const [isSimulating, setIsSimulating] = useState<boolean>(false)
+  const simIndexRef = useRef<number>(0)
+  const simIntervalRef = useRef<any>(null)
+
+  // Submitting state
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false)
+
+  // Stop simulation on unmount
+  useEffect(() => {
+    return () => {
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current)
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+    }
+  }, [])
+
+  // Handle Real Device GPS Watch
+  const toggleGpsTracking = () => {
+    if (isGpsActive) {
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+      }
+      setIsGpsActive(false)
+      toast('Device GPS tracking paused', { icon: '⏸️' })
+    } else {
+      if (!navigator.geolocation) {
+        toast.error('Geolocation is not supported by your browser')
+        return
+      }
+
+      // Stop simulator if active
+      if (isSimulating) {
+        setIsSimulating(false)
+        if (simIntervalRef.current) clearInterval(simIntervalRef.current)
+      }
+
+      setIsGpsActive(true)
+      toast.success('Live GPS telematics active! Broadcasting coordinates...')
+
+      let prevCoords: { lat: number; lng: number } | null = null
+
+      watchIdRef.current = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude
+          const lng = pos.coords.longitude
+          const speed = pos.coords.speed ? Math.round(pos.coords.speed * 3.6) : 25
+          let heading = pos.coords.heading ?? 0
+
+          if (!heading && prevCoords) {
+            heading = calculateHeading(prevCoords.lat, prevCoords.lng, lat, lng)
+          }
+          prevCoords = { lat, lng }
+
+          sendDriverLocation({ lat, lng, heading, speed })
+        },
+        (err) => {
+          console.warn('[GPS] Error:', err)
+          toast.error(`GPS Error: ${err.message}`)
+          setIsGpsActive(false)
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 }
+      )
+    }
+  }
+
+  // Handle Demo Route Simulation
+  const toggleSimulation = () => {
+    if (isSimulating) {
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current)
+      setIsSimulating(false)
+      toast('Route simulation paused', { icon: '⏸️' })
+    } else {
+      const geometry = tripState?.route?.geometry || activeRide?.routeCoordinates || []
+      if (!geometry || geometry.length < 2) {
+        toast.error('No road route coordinates available to simulate')
+        return
+      }
+
+      // Stop real GPS if active
+      if (isGpsActive && watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current)
+        watchIdRef.current = null
+        setIsGpsActive(false)
+      }
+
+      setIsSimulating(true)
+      toast.success('Starting realistic OSRM route simulation! 🚀')
+
+      // Find closest index to start or continue
+      if (vehiclePosition) {
+        let minD = Infinity
+        let bestIdx = 0
+        for (let i = 0; i < geometry.length; i++) {
+          const d = distanceMeters(vehiclePosition[0], vehiclePosition[1], geometry[i][0], geometry[i][1])
+          if (d < minD) {
+            minD = d
+            bestIdx = i
+          }
+        }
+        simIndexRef.current = bestIdx >= geometry.length - 1 ? 0 : bestIdx
+      } else {
+        simIndexRef.current = 0
+      }
+
+      simIntervalRef.current = setInterval(() => {
+        const geom = tripState?.route?.geometry || activeRide?.routeCoordinates || []
+        if (simIndexRef.current >= geom.length - 1) {
+          clearInterval(simIntervalRef.current)
+          setIsSimulating(false)
+          toast.success('Destination reached! You can now complete the trip.')
+          return
+        }
+
+        const curr = geom[simIndexRef.current]
+        const next = geom[simIndexRef.current + 1]
+        const heading = calculateHeading(curr[0], curr[1], next[0], next[1])
+        const speed = 35 // km/h
+
+        sendDriverLocation({
+          lat: next[0],
+          lng: next[1],
+          heading,
+          speed,
+        })
+
+        simIndexRef.current += 1
+      }, 1500)
+    }
+  }
+
+  if (!activeRide || (!targetRideId && (activeRide.status === 'completed' || activeRide.status === 'cancelled'))) {
+    return (
+      <div className="max-w-md mx-auto px-4 pt-16 pb-20 text-center">
+        <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <Navigation size={32} />
+        </div>
+        <h2 className="font-heading font-bold text-xl text-slate-800 mb-2">No Active Trip in Progress</h2>
+        <p className="text-slate-500 text-sm mb-6">
+          All your trips are completed. Start or accept a new ride from your driver dashboard.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <Button onClick={() => navigate('/driver/dashboard')}>Driver Dashboard</Button>
+          <Button variant="secondary" onClick={() => navigate('/driver/profile?tab=history')}>
+            View Trip History
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  const handleStartTripAction = async () => {
+    setIsSubmitting(true)
+    try {
+      await startTrip()
+      toast.success('Trip started! Navigation HUD engaged.')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to start trip')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handleCompleteTripAction = async () => {
+    setIsSubmitting(true)
+    try {
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current)
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+      await completeTrip()
+      if (activeRide?.id) {
+        await completeRideInStore(activeRide.id).catch(() => {})
+      }
+      await refreshRides()
+      toast.success('Trip completed successfully! All bookings and passengers updated.')
+      navigate('/driver/profile?tab=history')
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to complete trip')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  // Active Stop and Next Maneuver
+  const currentStop = tripState?.currentStop || (tripState?.stops && tripState.stops[0]) || null
+  const progress = tripState?.progress
+  const nextManeuver = tripState?.nextManeuver
+
+  // Turn-by-Turn icon selector
+  const getManeuverIcon = (type?: string) => {
+    if (!type) return <ArrowUp className="w-5 h-5 text-white" />
+    if (type.includes('right')) return <CornerUpRight className="w-5 h-5 text-white" />
+    if (type.includes('left')) return <CornerUpLeft className="w-5 h-5 text-white" />
+    return <ArrowUp className="w-5 h-5 text-white" />
+  }
+
+  return (
+    <div className="max-w-3xl mx-auto px-4 pt-4 pb-8 space-y-4">
+      {/* Turn-by-Turn Navigation HUD (Rapido/Uber style) */}
+      <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl p-4 shadow-xl border border-slate-700/60 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl bg-primary-600 flex items-center justify-center flex-shrink-0 shadow-md">
+            {getManeuverIcon(nextManeuver?.maneuverType)}
+          </div>
+          <div>
+            <div className="text-xs text-primary-300 font-semibold tracking-wider uppercase">
+              {nextManeuver ? `In ${nextManeuver.distanceMeters}m` : 'Navigation Active'}
+            </div>
+            <div className="font-bold text-base text-white line-clamp-1">
+              {nextManeuver?.instruction || `Head towards ${currentStop?.name || activeRide.destination}`}
+            </div>
+          </div>
+        </div>
+
+        {/* ETA & Distance Telematics */}
+        <div className="text-right flex-shrink-0 border-l border-slate-700/80 pl-4">
+          <div className="text-lg font-extrabold text-emerald-400">
+            {progress?.etaString || activeRide.estimatedArrival || '8:35 AM'}
+          </div>
+          <div className="text-xs text-slate-300 font-medium">
+            {progress?.remainingDistanceMeters
+              ? `${(progress.remainingDistanceMeters / 1000).toFixed(1)} km · ${Math.round(progress.remainingDurationSeconds / 60)} min`
+              : `${activeRide.distanceKm} km`}
+          </div>
+        </div>
+      </div>
+
+      {/* Off-Route Alert Banner */}
+      {progress?.isOffRoute && (
+        <div className="bg-amber-500/15 border border-amber-500/30 text-amber-900 rounded-xl p-3 flex items-center justify-between animate-pulse">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+            <span>Off-route deviation detected ({progress.deviationMeters}m). Road rerouting in progress.</span>
+          </div>
+          <Button size="sm" variant="secondary" className="text-xs h-7 px-2.5" onClick={() => recalculateRoute()}>
+            Reroute Now
+          </Button>
+        </div>
+      )}
+
+      {/* Map Card */}
+      <div className="relative rounded-2xl overflow-hidden shadow-lg border border-slate-200">
+        <CampusMap
+          stops={tripState?.stops || []}
+          routeCoordinates={tripState?.route?.geometry || activeRide.routeCoordinates || []}
+          vehicleLat={vehiclePosition ? vehiclePosition[0] : activeRide.currentLat}
+          vehicleLng={vehiclePosition ? vehiclePosition[1] : activeRide.currentLng}
+          vehicleHeading={vehicleHeading}
+          cameraMode={cameraMode}
+          onCameraModeChange={setCameraMode}
+          onRecenter={recenter}
+          height="h-72"
+          interactive
+          alertMode={progress?.isOffRoute || activeRide.hasDeviation}
+          showRecenterButton={isRecenterNeeded}
+        />
+
+        {/* Floating Telematics Simulation & GPS Controls */}
+        <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+          {/* Real Device GPS Toggle */}
+          <button
+            onClick={toggleGpsTracking}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer ${
+              isGpsActive
+                ? 'bg-emerald-600 text-white border border-emerald-400'
+                : 'bg-white/95 text-slate-700 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            <Radio className={`w-3.5 h-3.5 ${isGpsActive ? 'animate-pulse' : ''}`} />
+            <span>{isGpsActive ? 'Phone GPS: ON' : 'Phone GPS'}</span>
+          </button>
+
+          {/* OSRM Route Demo Simulator Toggle */}
+          <button
+            onClick={toggleSimulation}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold shadow-md backdrop-blur-md flex items-center gap-1.5 transition-all cursor-pointer ${
+              isSimulating
+                ? 'bg-primary-600 text-white border border-primary-400 animate-pulse'
+                : 'bg-white/95 text-slate-700 hover:bg-slate-50 border border-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>{isSimulating ? 'Simulating Drive...' : 'Simulate Drive'}</span>
+          </button>
+        </div>
+
+        {/* Camera mode selector pill */}
+        <div className="absolute bottom-3 left-3 z-10 bg-white/90 backdrop-blur-md rounded-xl p-1 shadow border border-slate-200 flex items-center gap-1 text-[11px] font-semibold">
+          <button
+            onClick={() => setCameraMode('FOLLOW')}
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              cameraMode === 'FOLLOW' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Follow Car
+          </button>
+          <button
+            onClick={() => setCameraMode('OVERVIEW')}
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              cameraMode === 'OVERVIEW' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Route Overview
+          </button>
+          <button
+            onClick={() => setCameraMode('FREE_EXPLORE')}
+            className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
+              cameraMode === 'FREE_EXPLORE' ? 'bg-primary-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            Free Explore
+          </button>
+        </div>
+      </div>
+
+      {/* Active Stop Action Card (Uber/Rapido style) */}
+      {currentStop && (
+        <Card padding="md" className="border-2 border-primary-500/30 bg-primary-50/20">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-primary-600 text-white font-bold text-xs flex items-center justify-center">
+                {currentStop.type === 'DROPOFF' ? '★' : currentStop.sequence}
+              </span>
+              <div>
+                <span className="text-[11px] font-bold text-primary-700 tracking-wider uppercase">
+                  {currentStop.type === 'DROPOFF' ? 'Destination Hub' : 'Current Pickup Stop'}
+                </span>
+                <h3 className="text-base font-bold text-slate-900">{currentStop.name}</h3>
+              </div>
+            </div>
+
+            <Badge
+              variant={
+                currentStop.status === 'ARRIVED'
+                  ? 'yellow'
+                  : currentStop.status === 'BOARDED' || currentStop.status === 'COMPLETED'
+                  ? 'green'
+                  : 'blue'
+              }
+            >
+              {currentStop.status}
+            </Badge>
+          </div>
+
+          {/* Quick Actions for Driver at Current Stop */}
+          <div className="flex items-center gap-3 pt-2 border-t border-slate-200/60">
+            {currentStop.type !== 'DROPOFF' && currentStop.status !== 'ARRIVED' && currentStop.status !== 'BOARDED' && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="flex-1"
+                onClick={() => markStopArrived(currentStop.id)}
+              >
+                <CheckCircle className="w-4 h-4 mr-1.5" />
+                Mark Arrived at Stop
+              </Button>
+            )}
+
+            {currentStop.type !== 'DROPOFF' && currentStop.status === 'ARRIVED' && (
+              <Button
+                variant="green"
+                size="sm"
+                className="flex-1"
+                onClick={() => markStopBoarded(currentStop.id)}
+              >
+                <CheckCircle className="w-4 h-4 mr-1.5" />
+                Board Passenger & Advance
+              </Button>
+            )}
+
+            {currentStop.type === 'DROPOFF' && (tripState?.stops || activeRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length > 1 && (
+              <Button
+                variant="green"
+                size="sm"
+                className="flex-1"
+                disabled={isSubmitting}
+                onClick={async () => {
+                  setIsSubmitting(true)
+                  try {
+                    if (currentStop.studentId) {
+                      await updatePassengerStatus(currentStop.studentId, 'dropped')
+                    } else {
+                      await markStopBoarded(currentStop.id)
+                    }
+                    await refreshRides()
+                    toast.success(`Dropped off passenger at ${currentStop.name}`)
+                  } catch (e: any) {
+                    toast.error(e?.message || 'Failed to complete dropoff')
+                  } finally {
+                    setIsSubmitting(false)
+                  }
+                }}
+              >
+                <CheckCircle className="w-4 h-4 mr-1.5" />
+                Drop Off Passenger at {currentStop.name} & Continue
+              </Button>
+            )}
+
+            {currentStop.type === 'DROPOFF' && (tripState?.stops || activeRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length <= 1 && (
+              <Button
+                variant="green"
+                size="sm"
+                className="flex-1"
+                disabled={isSubmitting}
+                onClick={handleCompleteTripAction}
+              >
+                <CheckCircle className="w-4 h-4 mr-1.5" />
+                {isSubmitting ? 'Completing Trip...' : 'Arrived at Final Destination — Complete Trip'}
+              </Button>
+            )}
+
+            {activeRide.status !== 'active' && (
+              <Button
+                variant="primary"
+                size="sm"
+                className="flex-1"
+                disabled={isSubmitting}
+                onClick={handleStartTripAction}
+              >
+                <Play className="w-4 h-4 mr-1.5 fill-current" />
+                {isSubmitting ? 'Starting...' : 'Start Trip'}
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
+      {/* Stop Sequence Progression Checklist */}
+      <Card padding="md">
+        <h3 className="font-heading font-bold text-slate-900 text-sm mb-3 flex items-center justify-between">
+          <span>Route Stops ({tripState?.stops?.length || activeRide.pickupPoints.length + 1})</span>
+          <span className="text-xs font-semibold text-primary-600">
+            {progress?.percent ? `${progress.percent}% Completed` : '0% Completed'}
+          </span>
+        </h3>
+
+        {/* Progress Bar */}
+        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4">
+          <div
+            className="h-full bg-primary-600 transition-all duration-500 rounded-full"
+            style={{ width: `${progress?.percent || 0}%` }}
+          />
+        </div>
+
+        <div className="space-y-3">
+          {(tripState?.stops || []).map((stop, idx) => {
+            const isDone = stop.status === 'BOARDED' || stop.status === 'COMPLETED'
+            const isCurrent = currentStop?.id === stop.id
+
+            return (
+              <div
+                key={stop.id || idx}
+                className={`flex items-center justify-between p-2.5 rounded-xl transition-colors ${
+                  isCurrent ? 'bg-primary-50/50 border border-primary-200' : 'hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center ${
+                      isDone
+                        ? 'bg-emerald-500 text-white'
+                        : isCurrent
+                        ? 'bg-primary-600 text-white ring-2 ring-primary-300 animate-pulse'
+                        : 'bg-slate-200 text-slate-600'
+                    }`}
+                  >
+                    {isDone ? '✓' : stop.type === 'DROPOFF' ? '★' : stop.sequence || idx + 1}
+                  </span>
+                  <div>
+                    <p className={`text-xs font-bold ${isDone ? 'line-through text-slate-400' : 'text-slate-800'}`}>
+                      {stop.name}
+                    </p>
+                    <p className="text-[10px] text-slate-400">{stop.type === 'DROPOFF' ? 'Destination' : 'Pickup Bay'}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Badge
+                    size="sm"
+                    variant={isDone ? 'green' : isCurrent ? 'blue' : 'slate'}
+                  >
+                    {stop.status}
+                  </Badge>
+
+                  {isCurrent && stop.status === 'UPCOMING' && (
+                    <button
+                      onClick={() => markStopArrived(stop.id)}
+                      title="Mark Arrived"
+                      className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-2 py-1 rounded-lg cursor-pointer"
+                    >
+                      Arrive
+                    </button>
+                  )}
+                  {isCurrent && stop.status === 'ARRIVED' && (
+                    <button
+                      onClick={() => markStopBoarded(stop.id)}
+                      title="Board Passenger"
+                      className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-2 py-1 rounded-lg cursor-pointer font-semibold"
+                    >
+                      Board
+                    </button>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </Card>
+
+      {/* Pooled Passengers Manifest with Individual Destinations */}
+      <Card padding="md">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-primary-600" />
+            <h3 className="font-heading font-bold text-slate-900 text-sm">
+              Pooled Passengers ({activeRide.passengers?.length || 0})
+            </h3>
+          </div>
+          <span className="text-xs font-semibold text-slate-500">
+            {activeRide.passengers?.filter((p) => p.status === 'boarded').length || 0} on board
+          </span>
+        </div>
+
+        <div className="divide-y divide-slate-100">
+          {(activeRide.passengers || []).length === 0 ? (
+            <p className="text-xs text-slate-400 py-3 text-center">No passengers booked yet.</p>
+          ) : (
+            (activeRide.passengers || []).map((passenger) => (
+              <div key={passenger.studentId} className="py-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <Avatar name={passenger.name} size="sm" />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <p className="text-xs font-bold text-slate-900">{passenger.name}</p>
+                      <span className="text-[10px] text-slate-500 font-mono">Seat #{passenger.seatNo}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      <span>Pickup: <strong>{passenger.pickup}</strong></span> →{' '}
+                      <span>Dropoff: <strong className="text-emerald-700">{passenger.destination || activeRide.destination}</strong></span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Badge
+                    size="sm"
+                    variant={
+                      passenger.status === 'boarded'
+                        ? 'blue'
+                        : passenger.status === 'dropped'
+                        ? 'green'
+                        : 'yellow'
+                    }
+                  >
+                    {passenger.status === 'boarded' ? 'On Board' : passenger.status === 'dropped' ? 'Dropped Off' : 'Waiting'}
+                  </Badge>
+
+                  {passenger.status === 'waiting' && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="text-xs h-7 px-2.5"
+                      onClick={async () => {
+                        await updatePassengerStatus(passenger.studentId, 'boarded')
+                        await refreshRides()
+                        toast.success(`${passenger.name} marked as boarded`)
+                      }}
+                    >
+                      Board
+                    </Button>
+                  )}
+
+                  {passenger.status === 'boarded' && (
+                    <Button
+                      size="sm"
+                      variant="green"
+                      className="text-xs h-7 px-2.5"
+                      onClick={async () => {
+                        await updatePassengerStatus(passenger.studentId, 'dropped')
+                        await refreshRides()
+                        toast.success(`${passenger.name} marked as dropped off`)
+                      }}
+                    >
+                      Drop Off
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </Card>
+    </div>
+  )
+}

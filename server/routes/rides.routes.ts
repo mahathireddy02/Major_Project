@@ -1,0 +1,484 @@
+import { FastifyPluginAsync } from 'fastify'
+import { RideModel } from '../models/Ride.js'
+import { BookingModel } from '../models/Booking.js'
+import { UserModel } from '../models/User.js'
+import { VehicleModel } from '../models/Vehicle.js'
+import { NotificationModel } from '../models/Notification.js'
+import { realtimeService } from '../services/realtimeService.js'
+import { routingService } from '../services/routingService.js'
+import { routeProgressService } from '../services/routeProgressService.js'
+
+export const rideRoutes: FastifyPluginAsync = async (fastify) => {
+  // List all rides
+  fastify.get('/', async (request) => {
+    const query = request.query as { status?: string; date?: string }
+    const filter: any = {}
+    if (query.status && query.status !== 'all') {
+      filter.status = query.status.toLowerCase()
+    }
+    if (query.date) {
+      filter.date = query.date
+    }
+
+    const rides = await RideModel.find(filter).sort({ createdAt: -1 })
+    return { success: true, data: rides }
+  })
+
+  // Get single ride
+  fastify.get('/:id', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+    return { success: true, data: ride }
+  })
+
+  // Get live authoritative trip state (Sections 39, 74, 75)
+  fastify.get('/:id/live', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    // Ensure route is initialized
+    if (!ride.tripRoute || !ride.tripRoute.geometry || ride.tripRoute.geometry.length < 2) {
+      await routeProgressService.buildTripRoute(ride)
+    }
+
+    const [driver, vehicle] = await Promise.all([
+      UserModel.findOne({ id: ride.driverId }),
+      VehicleModel.findOne({ id: ride.vehicleId }),
+    ])
+
+    const stops = ride.stops || []
+    const currentStopIndex = ride.tripRoute?.currentStopIndex || 0
+    const currentStop = stops[currentStopIndex] || null
+
+    const progress = {
+      percent: ride.tripRoute?.progressPercent || 0,
+      remainingDistanceMeters: ride.tripRoute?.remainingDistanceMeters || 0,
+      remainingDurationSeconds: ride.tripRoute?.remainingDurationSeconds || 0,
+      distanceTraveledMeters: Math.max(
+        0,
+        (ride.tripRoute?.distanceMeters || 0) - (ride.tripRoute?.remainingDistanceMeters || 0)
+      ),
+      etaString: ride.estimatedArrival || '8:35 AM',
+      isOffRoute: ride.hasDeviation || false,
+      deviationMeters: 0,
+    }
+
+    return {
+      success: true,
+      data: {
+        ride,
+        driver: driver
+          ? {
+              id: driver.id,
+              name: driver.name,
+              phone: driver.phone,
+              avatar: driver.avatar,
+              rating: driver.rating,
+              totalTrips: (driver as any).totalTrips || 100,
+            }
+          : undefined,
+        vehicle: vehicle
+          ? {
+              id: vehicle.id,
+              name: vehicle.name,
+              registration: vehicle.registrationNumber,
+              type: vehicle.vehicleType,
+              capacity: vehicle.capacity,
+              color: vehicle.color,
+              currentLat: vehicle.currentLat,
+              currentLng: vehicle.currentLng,
+              heading: vehicle.heading || 0,
+              speed: vehicle.speed || 0,
+            }
+          : undefined,
+        route: ride.tripRoute,
+        stops,
+        progress,
+        currentStop,
+        nextManeuver: ride.tripRoute?.steps?.[0] || undefined,
+        status: ride.status,
+      },
+    }
+  })
+
+  // Get current trip route
+  fastify.get('/:id/route', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+    if (!ride.tripRoute) {
+      await routeProgressService.buildTripRoute(ride)
+    }
+    return { success: true, data: ride.tripRoute }
+  })
+
+
+  // Create new ride
+  fastify.post('/', async (request) => {
+    const body = request.body as any
+    const rideId = body.id || `ride-${Date.now().toString().slice(-4)}`
+
+    // Generate initial OSRM route if coordinates exist
+    let routeCoords = body.routeCoordinates || []
+    if (routeCoords.length === 0 && body.pickupPoints && body.pickupPoints.length > 0) {
+      const waypoints: [number, number][] = [
+        ...body.pickupPoints.map((pp: any) => [pp.lat, pp.lng] as [number, number]),
+        [body.destinationLat, body.destinationLng],
+      ]
+      const osrmRoute = await routingService.getRoute(waypoints)
+      routeCoords = osrmRoute.geometry
+    }
+
+    const newRide = await RideModel.create({
+      id: rideId,
+      routeName: body.routeName || `Campus Route #${rideId}`,
+      driverId: body.driverId || 'd1',
+      vehicleId: body.vehicleId || 'v1',
+      pickupPoints: body.pickupPoints || [],
+      destination: body.destination,
+      destinationLat: body.destinationLat,
+      destinationLng: body.destinationLng,
+      departureTime: body.departureTime,
+      estimatedArrival: body.estimatedArrival || '',
+      capacity: body.capacity || 6,
+      bookedSeats: body.bookedSeats || 1,
+      passengers: body.passengers || [],
+      status: body.status || 'waiting',
+      fare: body.fare || 25,
+      routeCoordinates: routeCoords,
+      currentLat: body.currentLat || body.destinationLat,
+      currentLng: body.currentLng || body.destinationLng,
+      distanceKm: body.distanceKm || 4.2,
+      hasDeviation: false,
+      hasSosAlert: false,
+      date: body.date || 'today',
+    })
+
+    // Initialize TripRoute and stops
+    await routeProgressService.buildTripRoute(newRide)
+
+    realtimeService.broadcast('RIDE_UPDATED', { ride: newRide })
+
+    return { success: true, data: newRide }
+  })
+
+  // Join existing ride with ATOMIC concurrency protection
+  fastify.post('/:id/join', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const body = request.body as {
+      studentId: string
+      pickup: string
+      pickupName?: string
+      pickupAddress?: string
+      pickupCoords?: { lat: number; lng: number }
+      destination?: string
+      destinationName?: string
+      destinationAddress?: string
+      destinationCoords?: { lat: number; lng: number }
+      seats?: number
+    }
+
+    const requestedSeats = body.seats || 1
+    const studentId = body.studentId || (request.headers['x-user-id'] as string) || 's1'
+
+    // Fetch student info
+    const student = await UserModel.findOne({ id: studentId })
+    const studentName = student?.name || 'Student'
+
+    // First, inspect the ride
+    const currentRide = await RideModel.findOne({ id })
+    if (!currentRide) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    if (currentRide.bookedSeats + requestedSeats > currentRide.capacity) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'RIDE_FULL', message: 'This ride has no available capacity.' },
+      })
+    }
+
+    const nextSeatNo = currentRide.bookedSeats + 1
+    const studentDestination = body.destinationName || body.destination || currentRide.destination
+    const newPassenger = {
+      studentId,
+      name: studentName,
+      pickup: body.pickupName || body.pickup,
+      destination: studentDestination,
+      status: 'waiting' as const,
+      seatNo: nextSeatNo,
+    }
+
+    // Atomic update to guarantee no race-condition overbooking
+    const updatedRide = await RideModel.findOneAndUpdate(
+      {
+        id,
+        bookedSeats: { $lte: currentRide.capacity - requestedSeats },
+        status: { $nin: ['full', 'completed', 'cancelled'] },
+      },
+      {
+        $inc: { bookedSeats: requestedSeats },
+        $push: { passengers: newPassenger },
+      },
+      { new: true }
+    )
+
+    if (!updatedRide) {
+      return reply.status(409).send({
+        success: false,
+        error: { code: 'RIDE_FULL', message: 'Seat was booked by another student concurrently.' },
+      })
+    }
+
+    // If capacity reached, mark status as full
+    if (updatedRide.bookedSeats >= updatedRide.capacity) {
+      updatedRide.status = 'full'
+      await updatedRide.save()
+      realtimeService.broadcast('RIDE_FULL', { rideId: id })
+    }
+
+    let pickupCoords: { lat: number; lng: number } | undefined = undefined
+    const rawPickup = body.pickupCoords as any
+    if (rawPickup) {
+      if (Array.isArray(rawPickup) && rawPickup.length >= 2) {
+        pickupCoords = { lat: rawPickup[0], lng: rawPickup[1] }
+      } else if (typeof rawPickup.lat === 'number') {
+        pickupCoords = { lat: rawPickup.lat, lng: rawPickup.lng }
+      }
+    }
+    let destinationCoords: { lat: number; lng: number } | undefined = undefined
+    const rawDest = body.destinationCoords as any
+    if (rawDest) {
+      if (Array.isArray(rawDest) && rawDest.length >= 2) {
+        destinationCoords = { lat: rawDest[0], lng: rawDest[1] }
+      } else if (typeof rawDest.lat === 'number') {
+        destinationCoords = { lat: rawDest.lat, lng: rawDest.lng }
+      }
+    }
+
+    // Create Booking with explicit coordinates
+    const bookingId = `b-${Date.now().toString().slice(-6)}`
+    const booking = await BookingModel.create({
+      id: bookingId,
+      studentId,
+      studentName,
+      rideId: id,
+      pickup: body.pickup,
+      pickupName: body.pickupName || body.pickup,
+      pickupAddress: body.pickupAddress,
+      pickupLat: pickupCoords?.lat,
+      pickupLng: pickupCoords?.lng,
+      destination: studentDestination,
+      destinationName: studentDestination,
+      destinationAddress: body.destinationAddress,
+      destinationLat: destinationCoords?.lat || currentRide.destinationLat,
+      destinationLng: destinationCoords?.lng || currentRide.destinationLng,
+      fare: updatedRide.fare,
+      seats: requestedSeats,
+      seatNo: nextSeatNo,
+      status: 'confirmed',
+      bookingTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    })
+
+    // Dynamically update route and stops for the new pickup & dropoff
+    await routeProgressService.handlePassengerJoin(
+      updatedRide,
+      studentId,
+      studentName,
+      body.pickupName || body.pickup,
+      pickupCoords,
+      studentDestination,
+      destinationCoords
+    )
+
+    // Create in-app notification
+    await NotificationModel.create({
+      id: `n-${Date.now()}`,
+      userId: studentId,
+      type: 'match',
+      title: 'Booking Confirmed',
+      message: `You joined ${updatedRide.routeName}. Pickup at ${body.pickup}, ${updatedRide.departureTime}.`,
+      rideId: id,
+    })
+
+    // Broadcast Realtime Update
+    realtimeService.broadcast('BOOKING_CREATED', { booking, ride: updatedRide })
+    realtimeService.broadcast('RIDE_UPDATED', { ride: updatedRide })
+
+    return {
+      success: true,
+      data: {
+        booking,
+        ride: updatedRide,
+      },
+    }
+  })
+
+  // Cancel booking
+  fastify.post('/:id/cancel', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const { studentId } = request.body as { studentId: string }
+
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    const passenger = ride.passengers.find((p: any) => p.studentId === studentId)
+    if (!passenger) {
+      return reply.status(404).send({ success: false, error: { message: 'Passenger not booked on this ride' } })
+    }
+
+    // Remove passenger and decrement seats
+    ride.passengers = ride.passengers.filter((p: any) => p.studentId !== studentId)
+    ride.bookedSeats = Math.max(0, ride.bookedSeats - 1)
+    if (ride.status === 'full') {
+      ride.status = 'boarding'
+    }
+    await ride.save()
+
+    // Dynamically adjust stops and route
+    await routeProgressService.handlePassengerCancel(ride, studentId)
+
+    // Update booking
+    await BookingModel.updateMany(
+      { rideId: id, studentId, status: 'confirmed' },
+      { status: 'cancelled' }
+    )
+
+    realtimeService.broadcast('BOOKING_CANCELLED', { rideId: id, studentId })
+    realtimeService.broadcast('RIDE_UPDATED', { ride })
+
+    return { success: true, data: ride }
+  })
+
+  // Recalculate route
+  fastify.post('/:id/recalculate-route', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+    const currentLat = ride.currentLat || ride.destinationLat
+    const currentLng = ride.currentLng || ride.destinationLng
+    const updatedRoute = await routeProgressService.reroute(ride, currentLat, currentLng)
+    return { success: true, data: updatedRoute }
+  })
+
+  // Start ride
+  fastify.post('/:id/start', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOneAndUpdate(
+      { id },
+      { status: 'active' },
+      { new: true }
+    )
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    realtimeService.broadcast('RIDE_STARTED', { ride })
+    realtimeService.broadcast('RIDE_UPDATED', { ride })
+
+    return { success: true, data: ride }
+  })
+
+  // Complete ride
+  fastify.post('/:id/complete', async (request, reply) => {
+    const { id } = request.params as { id: string }
+    const ride = await RideModel.findOne({ id })
+    if (!ride) {
+      return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
+    }
+
+    ride.status = 'completed'
+    if (ride.tripRoute) {
+      ride.tripRoute.status = 'COMPLETED'
+      ride.tripRoute.progressPercent = 100
+      ride.tripRoute.remainingDistanceMeters = 0
+      ride.tripRoute.remainingDurationSeconds = 0
+    }
+    for (const s of ride.stops || []) {
+      s.status = 'COMPLETED'
+    }
+    for (const p of ride.passengers || []) {
+      p.status = 'dropped'
+    }
+
+    // Sync any bookings for this ride that might not be in ride.passengers
+    const relatedBookings = await BookingModel.find({
+      rideId: id,
+      status: { $ne: 'cancelled' },
+    })
+    for (const b of relatedBookings) {
+      const existing = (ride.passengers || []).find((p: any) => p.studentId === b.studentId)
+      if (!existing) {
+        const studentUser = await UserModel.findOne({ id: b.studentId })
+        ride.passengers.push({
+          studentId: b.studentId,
+          name: studentUser?.name || 'Student',
+          pickup: b.pickup,
+          status: 'dropped',
+          seatNo: (b as any).seatNo || ride.passengers.length + 1,
+        })
+      }
+    }
+
+    ride.markModified('passengers')
+    ride.markModified('stops')
+    ride.markModified('tripRoute')
+    await ride.save()
+
+    // Free vehicle
+    if (ride.vehicleId) {
+      await VehicleModel.updateOne({ id: ride.vehicleId }, { status: 'AVAILABLE' })
+    }
+
+    await BookingModel.updateMany(
+      { rideId: id, status: { $ne: 'cancelled' } },
+      { status: 'completed', completedAt: new Date() }
+    )
+
+    realtimeService.broadcast('RIDE_COMPLETED', { rideId: id, ride })
+    realtimeService.broadcast('RIDE_UPDATED', { ride })
+    realtimeService.broadcast('BOOKING_UPDATED', { rideId: id, status: 'completed' })
+
+    return { success: true, data: ride }
+  })
+
+  // List all bookings or bookings for student
+  fastify.get('/bookings/user/:studentId', async (request) => {
+    const { studentId } = request.params as { studentId: string }
+    const bookings = await BookingModel.find({ studentId }).sort({ bookedAt: -1 })
+    return { success: true, data: bookings }
+  })
+
+  fastify.get('/bookings', async (request) => {
+    const query = request.query as { studentId?: string; rideId?: string }
+    const filter: any = {}
+    if (query.studentId) filter.studentId = query.studentId
+    if (query.rideId) filter.rideId = query.rideId
+    const bookings = await BookingModel.find(filter).sort({ bookedAt: -1 })
+
+    // Enrich bookings with passenger name from UserModel
+    const studentIds = [...new Set(bookings.map((b) => b.studentId))]
+    const users = await UserModel.find({ id: { $in: studentIds } }, { id: 1, name: 1 })
+    const nameMap = Object.fromEntries(users.map((u) => [u.id, u.name]))
+
+    const enriched = bookings.map((b) => ({
+      ...b.toObject(),
+      passengerName: nameMap[b.studentId] || b.studentId,
+      studentName: nameMap[b.studentId] || b.studentId,
+    }))
+
+    return { success: true, data: enriched }
+  })
+}
