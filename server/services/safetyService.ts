@@ -107,7 +107,9 @@ export class SafetyService {
     rideId?: string,
     userId: string = 's1',
     lat?: number,
-    lng?: number
+    lng?: number,
+    emergencyPhone?: string,
+    emergencyName?: string
   ): Promise<any> {
     const user = await UserModel.findOne({ id: userId })
     const userRole = (user?.role || 'STUDENT').toUpperCase()
@@ -155,7 +157,27 @@ export class SafetyService {
 
     const driverUser = ride?.driverId ? await UserModel.findOne({ id: ride.driverId }) : (isDriver ? user : null)
     const vehicle = ride?.vehicleId ? await VehicleModel.findOne({ id: ride.vehicleId }) : null
-    const emergencyContact = await EmergencyContactModel.findOne({ userId })
+
+    // Fetch or dynamically create/update Emergency Contact
+    let emergencyContact = await EmergencyContactModel.findOne({ userId })
+    if (emergencyPhone && emergencyPhone.trim()) {
+      const cleanPhone = emergencyPhone.trim()
+      const cleanName = (emergencyName || 'Emergency Contact').trim()
+      if (emergencyContact) {
+        emergencyContact.phone = cleanPhone
+        if (cleanName) emergencyContact.name = cleanName
+        await emergencyContact.save()
+      } else {
+        emergencyContact = await EmergencyContactModel.create({
+          id: `ec-${userId}-${Date.now().toString().slice(-4)}`,
+          userId,
+          name: cleanName,
+          relationship: 'Emergency Contact',
+          phone: cleanPhone,
+          isPrimary: true,
+        })
+      }
+    }
 
     const resolvedLat = lat ?? ride?.currentLat ?? vehicle?.currentLat ?? 17.398
     const resolvedLng = lng ?? ride?.currentLng ?? vehicle?.currentLng ?? 78.479
@@ -166,15 +188,17 @@ export class SafetyService {
     const eventId = `sos-${Date.now()}`
     const eventType = isDriver ? 'DRIVER_SOS_TRIGGERED' : 'STUDENT_SOS_TRIGGERED'
 
-    // Format and trigger Emergency SMS alert via Twilio to registered contact (or SOS_ALERT_PHONE_NUMBER fallback)
-    const targetPhone = emergencyContact?.phone || ENV.SOS_ALERT_PHONE_NUMBER || ''
+    // Format and trigger Emergency SMS & Voice Call via Twilio to registered contact (or SOS_ALERT_PHONE_NUMBER fallback)
+    const targetPhone = emergencyPhone?.trim() || emergencyContact?.phone || ENV.SOS_ALERT_PHONE_NUMBER || ''
     let smsResult = { sent: false, status: 'NOT_CONFIGURED' as const, message: '' }
+    let callResult = { success: false, status: 'NOT_CONFIGURED' as const, callSid: '', message: '' }
 
     if (targetPhone) {
+      // 1. Dispatch Emergency SMS Alert
       try {
         const twilioRes = await twilioService.sendSOSAlert({
           recipientPhone: targetPhone,
-          recipientName: emergencyContact?.name || 'Emergency Contact',
+          recipientName: emergencyContact?.name || emergencyName || 'Emergency Contact',
           senderName: user?.name || userId,
           senderRole: userRole,
           rideId: ride?.id,
@@ -192,6 +216,31 @@ export class SafetyService {
       } catch (smsErr: any) {
         console.warn('[SafetyService] Twilio SOS SMS error (non-fatal):', smsErr?.message)
         smsResult = { sent: false, status: 'FAILED' as const, message: smsErr?.message || 'Twilio SMS failed' }
+      }
+
+      // 2. Dispatch Emergency Voice Call Alert
+      try {
+        const twilioCallRes = await twilioService.makeEmergencyCall({
+          recipientPhone: targetPhone,
+          recipientName: emergencyContact?.name || emergencyName || 'Emergency Contact',
+          senderName: user?.name || userId,
+          senderRole: userRole,
+          rideId: ride?.id,
+          routeName: ride ? routeName : undefined,
+          lat: resolvedLat,
+          lng: resolvedLng,
+          vehiclePlate: vehicle?.registrationNumber,
+        })
+
+        callResult = {
+          success: twilioCallRes.success,
+          status: twilioCallRes.status,
+          callSid: twilioCallRes.callSid || '',
+          message: twilioCallRes.message || twilioCallRes.error || (twilioCallRes.success ? 'Twilio voice call initiated.' : 'Failed to initiate voice call'),
+        }
+      } catch (callErr: any) {
+        console.warn('[SafetyService] Twilio SOS Voice Call error (non-fatal):', callErr?.message)
+        callResult = { success: false, status: 'FAILED' as const, callSid: '', message: callErr?.message || 'Twilio Voice Call failed' }
       }
     } else {
       console.log('[SafetyService] No emergency contact phone or SOS_ALERT_PHONE_NUMBER configured.')
@@ -233,6 +282,9 @@ export class SafetyService {
         : undefined,
       smsStatus: smsResult.status,
       smsMessage: smsResult.message,
+      callStatus: callResult.status,
+      callSid: callResult.callSid,
+      callMessage: callResult.message,
     })
 
     // Centralized Event Notification dispatch
@@ -266,7 +318,7 @@ export class SafetyService {
       })
     }
 
-    // Broadcast live telemetry packet across WebSocket
+    // Broadcast live telemetry packet across WebSocket with alarm flag
     realtimeService.broadcast('SAFETY_ALERT', {
       rideId: ride?.id,
       safetyEvent,
@@ -276,6 +328,8 @@ export class SafetyService {
       vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, registration: vehicle.registrationNumber } : null,
       emergencyContact,
       smsStatus: smsResult.status,
+      callStatus: callResult.status,
+      playAlarm: true,
     })
 
     return {
@@ -286,6 +340,8 @@ export class SafetyService {
         ? { name: emergencyContact.name, relationship: emergencyContact.relationship, phone: emergencyContact.phone }
         : null,
       smsResult,
+      callResult,
+      playAlarm: true,
     }
   }
 

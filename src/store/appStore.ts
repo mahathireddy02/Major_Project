@@ -10,6 +10,7 @@ import type {
   Vehicle,
 } from '../types'
 import { api } from '../services/api'
+import { sosAlarmPlayer } from '../utils/alarmSound'
 
 import { showNotificationToast } from '../components/notifications/NotificationToast'
 
@@ -149,7 +150,7 @@ interface AppState {
   loadAuditLog: () => Promise<void>
 
   // Actions — Safety
-  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => Promise<any>
+  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string } | string, studentId?: string) => Promise<any>
   acknowledgeSafetyEvent: (eventId: string) => Promise<void>
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
@@ -319,6 +320,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
+            // Immediately play loud emergency siren alarm across listening devices
+            sosAlarmPlayer.play().catch(() => {})
           }
           if (payload?.ride) {
             set((state) => ({
@@ -329,6 +332,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           event === 'SAFETY_EVENT_ACKNOWLEDGED' ||
           event === 'SOS_ACKNOWLEDGED'
         ) {
+          sosAlarmPlayer.stop()
           const rawEvent = payload?.safetyEvent || payload?.event || payload
           if (rawEvent?.id) {
             const normalized = normalizeSafetyEvent(rawEvent)
@@ -340,6 +344,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           event === 'SAFETY_EVENT_RESOLVED' ||
           event === 'SOS_RESOLVED'
         ) {
+          sosAlarmPlayer.stop()
           const rawEvent = payload?.safetyEvent || payload?.event || payload
           if (rawEvent?.id) {
             const normalized = normalizeSafetyEvent(rawEvent)
@@ -1023,7 +1028,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Safety Actions
   triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
     try {
-      let payload: { rideId?: string; userId?: string; lat?: number; lng?: number } = {}
+      // Immediately start sounding loud siren alarm upon user gesture
+      sosAlarmPlayer.play().catch(() => {})
+
+      let payload: {
+        rideId?: string
+        userId?: string
+        lat?: number
+        lng?: number
+        emergencyPhone?: string
+        emergencyName?: string
+      } = {}
+
       if (typeof params === 'string') {
         payload = { rideId: params, userId: studentId || get().currentStudentId || get().currentUser?.id }
       } else if (params && typeof params === 'object') {

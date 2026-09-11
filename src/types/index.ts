@@ -306,6 +306,9 @@ export interface SafetyEvent {
   acknowledgedBy?: string
   smsStatus?: string
   smsMessage?: string
+  callStatus?: string
+  callSid?: string
+  callMessage?: string
   lat?: number
   lng?: number
   status?: 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED' | string

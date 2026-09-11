@@ -903,6 +903,8 @@ class ApiClient {
     userId?: string
     lat?: number
     lng?: number
+    emergencyPhone?: string
+    emergencyName?: string
   }): Promise<any> {
     return this.request('/safety/sos', {
       method: 'POST',

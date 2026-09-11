@@ -1,4 +1,4 @@
-﻿import twilio from 'twilio'
+import twilio from 'twilio'
 import { ENV } from '../config/env.js'
 import { normalizePhoneNumber, isValidPhoneNumber } from '../utils/phone.js'
 
@@ -39,6 +39,16 @@ export interface SosAlertPayload {
   lng?: number
   vehiclePlate?: string
   emergencyDetails?: string
+}
+
+export interface SendCallResult {
+  success: boolean
+  callSid?: string
+  status: 'INITIATED' | 'QUEUED' | 'RINGING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'NOT_CONFIGURED'
+  provider: 'TWILIO' | 'DEV_SIMULATION'
+  recipient: string
+  error?: string
+  message?: string
 }
 
 interface LocalOtpEntry {
@@ -376,6 +386,100 @@ export class TwilioService {
     ].filter(Boolean).join('\n')
 
     return this.sendSMS(normalizedTo, smsBody)
+  }
+
+  /** Universal SOS Emergency Voice Call Dispatch via Twilio */
+  async makeEmergencyCall(payload: SosAlertPayload): Promise<SendCallResult> {
+    const targetPhone = payload.recipientPhone?.trim() || ENV.SOS_ALERT_PHONE_NUMBER?.trim()
+
+    if (!targetPhone) {
+      return {
+        success: false,
+        status: 'NOT_CONFIGURED',
+        provider: this.isConfigured ? 'TWILIO' : 'DEV_SIMULATION',
+        recipient: '',
+        error: 'No emergency contact phone or SOS_ALERT_PHONE_NUMBER configured in .env',
+      }
+    }
+
+    const normalizedTo = normalizePhoneNumber(targetPhone)
+    const normalizedFrom = this.fromNumber ? normalizePhoneNumber(this.fromNumber) : ''
+
+    // Prevent Twilio error: Cannot call from and to the same number
+    if (normalizedFrom && normalizedTo === normalizedFrom) {
+      console.warn('[TwilioService] Recipient phone matches Twilio caller ID. Voice call self-dialing skipped.')
+      return {
+        success: false,
+        status: 'FAILED',
+        provider: 'TWILIO',
+        recipient: normalizedTo,
+        error: 'Emergency contact phone number matches Twilio sender phone number.',
+      }
+    }
+
+    const sender = payload.senderName || 'A campus commuter'
+    const role = (payload.senderRole || 'student').toUpperCase()
+    const trip = payload.routeName || (payload.rideId ? `Ride #${payload.rideId}` : 'the campus vicinity')
+    const latStr = payload.lat ? payload.lat.toFixed(4) : ''
+    const lngStr = payload.lng ? payload.lng.toFixed(4) : ''
+    const locationSpoken = latStr && lngStr ? `at latitude ${latStr}, longitude ${lngStr}` : 'within the campus area'
+
+    const twiml = `<Response>
+  <Say voice="alice" language="en-IN">
+    Attention. Emergency Alert from Campus Mobility.
+    ${sender}, a registered ${role}, has activated an emergency S O S distress alert while on ${trip}, ${locationSpoken}.
+    Immediate assistance has been requested.
+    An S M S with live GPS coordinates and Google Maps link has been dispatched to your phone.
+    Please check your messages and contact ${sender} or campus security immediately.
+  </Say>
+  <Pause length="2"/>
+  <Say voice="alice" language="en-IN">
+    Repeating: Emergency S O S alert from ${sender}. Please check your phone immediately.
+  </Say>
+</Response>`
+
+    if (this.isConfigured && this.client && this.fromNumber) {
+      try {
+        const call = await this.client.calls.create({
+          twiml,
+          to: normalizedTo,
+          from: this.fromNumber,
+        })
+        console.log(`[TwilioService] Emergency Voice Call initiated to ${normalizedTo} (Call SID: ${call.sid}, Status: ${call.status})`)
+        return {
+          success: true,
+          callSid: call.sid,
+          status: 'INITIATED',
+          provider: 'TWILIO',
+          recipient: normalizedTo,
+          message: `Twilio automated emergency call initiated (SID: ${call.sid})`,
+        }
+      } catch (err: any) {
+        console.error('[TwilioService] makeEmergencyCall error:', err.message)
+        return {
+          success: false,
+          status: 'FAILED',
+          provider: 'TWILIO',
+          recipient: normalizedTo,
+          error: err.message,
+        }
+      }
+    }
+
+    // Dev Simulation
+    console.log('\n==================================================')
+    console.log(`[TWILIO VOICE CALL DISPATCH - DEV SIMULATION] To: ${normalizedTo}`)
+    console.log('--------------------------------------------------')
+    console.log(`Simulating Emergency Voice Call alert for ${sender} (${role}) to ${normalizedTo}...`)
+    console.log('==================================================\n')
+
+    return {
+      success: true,
+      status: 'NOT_CONFIGURED',
+      provider: 'DEV_SIMULATION',
+      recipient: normalizedTo,
+      message: 'Dev simulated emergency phone call dispatched to ' + normalizedTo,
+    }
   }
 }
 

@@ -32,6 +32,9 @@ export interface ISafetyEvent extends Document {
   }
   smsStatus?: 'SENT' | 'FAILED' | 'NOT_CONFIGURED'
   smsMessage?: string
+  callStatus?: 'INITIATED' | 'QUEUED' | 'RINGING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'NOT_CONFIGURED'
+  callSid?: string
+  callMessage?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -81,6 +84,9 @@ const SafetyEventSchema = new Schema<ISafetyEvent>(
     },
     smsStatus: { type: String, default: 'NOT_CONFIGURED' },
     smsMessage: { type: String },
+    callStatus: { type: String, default: 'NOT_CONFIGURED' },
+    callSid: { type: String },
+    callMessage: { type: String },
   },
   { timestamps: true }
 )
