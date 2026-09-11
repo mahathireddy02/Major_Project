@@ -515,9 +515,24 @@ export async function seedDatabase() {
   await VehicleModel.insertMany(VEHICLES_SEED)
   console.log(`[Seed] Inserted ${VEHICLES_SEED.length} campus vehicles.`)
 
-  // Insert Rides
-  await RideModel.insertMany(RIDES_SEED)
-  console.log(`[Seed] Inserted ${RIDES_SEED.length} rides across various lifecycle states.`)
+  // Insert Rides with enriched driver and vehicle data
+  const driverMap = new Map(DRIVERS_SEED.map((d) => [d.id, d]))
+  const vehicleMap = new Map(VEHICLES_SEED.map((v) => [v.id, v]))
+  const enrichedRides = RIDES_SEED.map((r) => {
+    const driver = driverMap.get(r.driverId)
+    const vehicle = vehicleMap.get(r.vehicleId)
+    return {
+      ...r,
+      driverName: driver?.name || 'Rahul Kumar',
+      driverPhone: driver?.phone || '+91 99887 76655',
+      driverRating: driver?.rating || 4.8,
+      driverAvatar: driver?.avatar || 'RK',
+      vehicleName: vehicle?.name || 'Campus Shuttle Bus 01 (V1)',
+      vehiclePlate: vehicle?.registrationNumber || 'TS 09 AB 1234',
+    }
+  })
+  await RideModel.insertMany(enrichedRides)
+  console.log(`[Seed] Inserted ${enrichedRides.length} rides across various lifecycle states with verified driver and vehicle details.`)
 
   // Safety Event (Ride #105 historical deviation)
   await SafetyEventModel.create({

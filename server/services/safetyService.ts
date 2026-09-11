@@ -174,7 +174,7 @@ export class SafetyService {
     })
 
     const activeContactPhone = existingActive?.emergencyContact?.phone || ''
-    const contactChanged = Boolean(targetPhone && !isDummyPhone(targetPhone) && activeContactPhone !== targetPhone)
+    const contactChanged = Boolean(emergencyPhone && !isDummyPhone(emergencyPhone) && activeContactPhone !== emergencyPhone.trim())
 
     if (existingActive && !forceNew && !contactChanged) {
       console.log(`[SafetyService] Active SOS already open for user ${resolvedUserId} (${existingActive.id}). Returning existing alert to prevent duplicate spam.`)

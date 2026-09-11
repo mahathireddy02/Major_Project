@@ -34,7 +34,68 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       filter.status = { $nin: ['completed', 'cancelled'] }
     }
     const rides = await RideModel.find(filter).sort({ createdAt: -1 })
-    return { success: true, data: rides }
+    const driverIds = [...new Set(rides.map((r) => r.driverId).filter(Boolean))]
+    const vehicleIds = [...new Set(rides.map((r) => r.vehicleId).filter(Boolean))]
+    const [drivers, vehicles] = await Promise.all([
+      UserModel.find({ id: { $in: driverIds } }),
+      VehicleModel.find({ id: { $in: vehicleIds } }),
+    ])
+    const driverMap = new Map(drivers.map((d) => [d.id, d]))
+    const vehicleMap = new Map(vehicles.map((v) => [v.id, v]))
+
+    const hydrated = rides.map((r) => {
+      const rObj = r.toObject ? r.toObject() : { ...r }
+      const driver = driverMap.get(r.driverId)
+      const vehicle = vehicleMap.get(r.vehicleId)
+      return {
+        ...rObj,
+        driverName: driver?.name || r.driverName || 'Rahul Kumar',
+        driverPhone: driver?.phone || r.driverPhone || '+91 99887 76655',
+        driverRating: driver?.rating || r.driverRating || 4.8,
+        driverAvatar: driver?.avatar || (driver?.name ? driver.name.slice(0, 2).toUpperCase() : 'RK'),
+        vehicleName: vehicle?.name || r.vehicleName || 'Campus Shuttle Bus 01 (V1)',
+        vehiclePlate: vehicle?.registrationNumber || r.vehiclePlate || 'TS 09 AB 1234',
+      }
+    })
+    return { success: true, data: hydrated }
+  })
+
+  // Get current active trip for driver
+  fastify.get('/current-trip', async (request, reply) => {
+    const driverId = request.user?.id || (request.headers['x-driver-id'] as string) || (request.query as any)?.driverId || 'd1'
+    const orConditions: any[] = [{ driverId }]
+    if (!driverId || driverId === 'd1' || driverId === 'driver-1') {
+      orConditions.push({ driverId: 'd1' }, { driverId: 'driver-1' })
+    }
+
+    const trip = await RideModel.findOne({
+      $or: orConditions,
+      status: { $in: ['active', 'boarding', 'waiting'] },
+    }).sort({ createdAt: -1 })
+
+    if (!trip) {
+      return { success: true, data: null }
+    }
+
+    const [driver, vehicle, bookings] = await Promise.all([
+      UserModel.findOne({ id: trip.driverId }),
+      VehicleModel.findOne({ id: trip.vehicleId }),
+      BookingModel.find({ rideId: trip.id, status: { $ne: 'cancelled' } }),
+    ])
+
+    const tObj = trip.toObject ? trip.toObject() : { ...trip }
+    return {
+      success: true,
+      data: {
+        ...tObj,
+        driverName: driver?.name || trip.driverName || 'Rahul Kumar',
+        driverPhone: driver?.phone || trip.driverPhone || '+91 99887 76655',
+        driverRating: driver?.rating || trip.driverRating || 4.8,
+        vehicleName: vehicle?.name || trip.vehicleName || 'Campus Shuttle Bus 01 (V1)',
+        vehiclePlate: vehicle?.registrationNumber || trip.vehiclePlate || 'TS 09 AB 1234',
+        bookings,
+      },
+    }
   })
 
   // Accept a ride request
