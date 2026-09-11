@@ -464,6 +464,13 @@ export class SafetyService {
       studentName: event.userName,
     })
 
+    realtimeService.broadcast('SAFETY_EVENT_ACKNOWLEDGED', {
+      eventId,
+      status: 'ACKNOWLEDGED',
+      safetyEvent: event,
+      rideId: event.rideId,
+    })
+
     realtimeService.broadcast('SAFETY_ALERT', {
       eventId,
       status: 'ACKNOWLEDGED',
@@ -514,6 +521,14 @@ export class SafetyService {
         })
       }
     }
+
+    realtimeService.broadcast('SAFETY_EVENT_RESOLVED', {
+      eventId,
+      resolved: true,
+      status: 'RESOLVED',
+      safetyEvent: event,
+      rideId: event.rideId,
+    })
 
     realtimeService.broadcast('SAFETY_ALERT', {
       eventId,

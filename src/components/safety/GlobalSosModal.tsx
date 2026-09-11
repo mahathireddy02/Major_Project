@@ -5,8 +5,6 @@ import {
   MapPin,
   Phone,
   PhoneCall,
-  Volume2,
-  VolumeX,
   User,
   Car,
   X,
@@ -19,7 +17,6 @@ import {
 import toast from 'react-hot-toast'
 import { useAppStore } from '../../store/appStore'
 import { api } from '../../services/api'
-import { sosAlarmPlayer } from '../../utils/alarmSound'
 import type { EmergencyContact } from '../../types'
 
 interface GlobalSosModalProps {
@@ -44,9 +41,9 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
   const [customPhone, setCustomPhone] = useState('')
   const [customName, setCustomName] = useState('')
   const [isEditingContact, setIsEditingContact] = useState(false)
-  const [isMuted, setIsMuted] = useState(false)
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
 
   const user = currentUser || (role === 'driver' ? currentDriver : currentStudent)
   const effectiveUserId = user?.id || (role === 'driver' ? currentDriverId || 'd1' : currentStudentId || 's1')
@@ -158,7 +155,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
 
   const handleConfirmSOS = async () => {
     setIsSubmitting(true)
-
+    // NOTE: Siren audio is strictly sounded at Dispatcher Command Center, NOT on user/driver device
     try {
       const lat = gpsCoords?.lat || activeRide?.currentLat || 17.3616
       const lng = gpsCoords?.lng || activeRide?.currentLng || 78.4747
@@ -176,7 +173,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
       })
 
       toast.success(
-        `Emergency SOS Dispatched! Automated Voice Call, SMS, and Email alert placed to ${nameToSend} (${phoneToSend}). Dispatcher notified.`,
+        `Emergency SOS Dispatched! Automated Voice Call, SMS, and Email alert placed to ${nameToSend} (${phoneToSend}). Dispatcher notified`,
         { icon: '🚨', duration: 7000 }
       )
     } catch (err: any) {
@@ -195,6 +192,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
       sosAlarmPlayer.stop()
     }
   }
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
@@ -273,17 +271,12 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
 
                 <div className="flex items-center justify-between text-xs text-rose-950 bg-white/80 p-2.5 rounded-xl border border-rose-200">
                   <span className="flex items-center gap-2 font-bold">
-                    <Volume2 size={15} className="text-rose-600 animate-bounce" />
-                    Loud Siren Alarm:
+                    <ShieldAlert size={15} className="text-rose-600 animate-pulse" />
+                    Dispatch Emergency Alarm:
                   </span>
-                  <button
-                    type="button"
-                    onClick={handleToggleMute}
-                    className="flex items-center gap-1 font-bold text-[11px] text-rose-700 hover:text-rose-900 underline cursor-pointer"
-                  >
-                    {isMuted ? <VolumeX size={13} /> : <Volume2 size={13} />}
-                    <span>{isMuted ? 'Unmute Siren' : 'Mute Siren'}</span>
-                  </button>
+                  <span className="font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded text-[11px]">
+                    Alerting Campus Dispatch
+                  </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
@@ -315,7 +308,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
               <ul className="list-disc pl-4 space-y-1 text-amber-800">
                 <li>Automated voice phone call will be placed directly to your Emergency Contact ({displayEmergencyPhone}).</li>
                 <li>Emergency SMS with live GPS coordinates and Google Maps link will be sent.</li>
-                <li>Loud high-decibel siren alarm will sound continuously.</li>
+                <li>Loud emergency beacon alarm sounds immediately at Campus Dispatch Control.</li>
                 <li>Telemetry is broadcast to Campus Dispatch Control and authorized responders.</li>
               </ul>
             </div>
@@ -440,14 +433,10 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
 
         {/* Modal Actions */}
         <div className="p-5 bg-slate-50 border-t border-slate-200 flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={handleToggleMute}
-            className="px-3 py-2 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-100 text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
-          >
-            {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} className="text-rose-600" />}
-            <span>{isMuted ? 'Unmute Siren' : 'Mute Siren'}</span>
-          </button>
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+            <ShieldAlert size={15} className="text-rose-600" />
+            <span className="hidden sm:inline">Campus Safety & Dispatch Connected</span>
+          </div>
 
           <div className="flex items-center gap-2">
             <button

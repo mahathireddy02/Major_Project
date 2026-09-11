@@ -29,6 +29,9 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     }
     if (query.status && query.status !== 'all') {
       filter.status = query.status
+    } else if (!query.status) {
+      // Default: exclude completed/cancelled — driver only needs active/pending rides
+      filter.status = { $nin: ['completed', 'cancelled'] }
     }
     const rides = await RideModel.find(filter).sort({ createdAt: -1 })
     return { success: true, data: rides }

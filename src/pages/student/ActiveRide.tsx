@@ -169,32 +169,44 @@ export default function ActiveRide() {
           vehicleLng={activeRide.currentLng}
           height="h-64"
           interactive
+          rideBookedSeats={activeRide.bookedSeats}
+          rideCapacity={activeRide.capacity}
         />
         {/* Floating ETA Badge */}
         <div className="absolute top-3 left-3 bg-white/95 backdrop-blur-md px-3.5 py-1.5 rounded-xl shadow-md border border-slate-200 flex items-center gap-2">
           <Clock size={14} className="text-primary-600" />
-          <span className="text-xs font-bold text-slate-900">Arriving in ~6 min</span>
+          <span className="text-xs font-bold text-slate-900">
+            {activeRide.estimatedArrival ? `ETA: ${activeRide.estimatedArrival}` : 'En Route'}
+          </span>
         </div>
       </div>
 
       {/* Next Pickup Card */}
-      <Card className="mb-4 bg-gradient-to-r from-primary-50 to-white border-primary-200" padding="md">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-600 text-white flex items-center justify-center flex-shrink-0">
-              <MapPin size={20} />
+      {(() => {
+        const nextStop = activeRide.stops?.find((s: any) => s.status === 'UPCOMING' || s.status === 'ARRIVING' || s.status === 'ARRIVED') || activeRide.pickupPoints?.[0]
+        const nextStopName = nextStop?.name || activeRide.destination || 'Campus Destination'
+        return (
+          <Card className="mb-4 bg-gradient-to-r from-primary-50 to-white border-primary-200" padding="md">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary-600 text-white flex items-center justify-center flex-shrink-0">
+                  <MapPin size={20} />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-primary-700 uppercase tracking-wider">Next Stop</p>
+                  <p className="font-heading font-bold text-slate-900 text-sm">{nextStopName}</p>
+                  <p className="text-[11px] text-slate-500">
+                    {(nextStop as any)?.estimatedPickupTime || (nextStop as any)?.time ? `Estimated: ${(nextStop as any).estimatedPickupTime || (nextStop as any).time}` : `Heading to ${activeRide.destination}`}
+                  </p>
+                </div>
+              </div>
+              <Button size="sm" variant="secondary" onClick={() => navigate(`/student/live?rideId=${activeRide.id}`)}>
+                Full Screen
+              </Button>
             </div>
-            <div>
-              <p className="text-xs font-medium text-primary-700 uppercase tracking-wider">Next Stop</p>
-              <p className="font-heading font-bold text-slate-900 text-sm">Hostel B Bay</p>
-              <p className="text-[11px] text-slate-500">4 minutes away · 2 boarding</p>
-            </div>
-          </div>
-          <Button size="sm" variant="secondary" onClick={() => navigate(`/student/live?rideId=${activeRide.id}`)}>
-            Full Screen
-          </Button>
-        </div>
-      </Card>
+          </Card>
+        )
+      })()}
 
       {/* Driver & Vehicle Card */}
       {driver && vehicle && (
