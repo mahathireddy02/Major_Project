@@ -367,6 +367,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           vehicleType: u.vehicleType,
           verificationStatus: u.verificationStatus === 'REJECTED' ? 'REJECTED' : (u.verificationStatus || 'VERIFIED'),
           nameMatchStatus: u.nameMatchStatus || 'MATCHED',
+          driverType: (u.driverType === 'student' ? 'student' : 'regular') as 'regular' | 'student',
+          studentId: u.studentId || u.rollNumber || '',
+          rollNumber: u.rollNumber || '',
+          availableDays: u.availableDays || [],
+          availableTime: u.availableTime || '',
+          preferredRoute: u.preferredRoute || '',
         }))
 
       set({
@@ -697,6 +703,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         role: 'driver' as const,
         vehicleId: u.vehicleId || '',
         email: u.email,
+        driverType: (u.driverType === 'student' ? 'student' : 'regular') as 'regular' | 'student',
+        studentId: u.studentId || u.rollNumber || '',
+        rollNumber: u.rollNumber || '',
       }))
 
       // Normalize vehicles returned by dispatcher dashboard

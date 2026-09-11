@@ -1,6 +1,6 @@
 import { useAppStore } from '../../store/appStore'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Users, Clock, Play, CheckCircle, Star, Navigation, ChevronRight } from 'lucide-react'
+import { MapPin, Users, Clock, Play, CheckCircle, Star, Navigation, ChevronRight, GraduationCap, Lock } from 'lucide-react'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import SeatProgress from '../../components/ui/SeatProgress'
@@ -65,13 +65,33 @@ export default function DriverDashboard() {
         <div>
           <p className="text-sm text-slate-500">Good morning,</p>
           <h1 className="font-heading font-bold text-xl text-slate-900">{currentDriver?.name ?? 'Driver'}</h1>
-          <div className="flex items-center gap-1 mt-0.5">
-            <Star size={13} className="text-amber-400 fill-amber-400" />
-            <span className="text-sm font-semibold text-slate-700">{currentDriver?.rating}</span>
-            <span className="text-xs text-slate-400">· {currentDriver?.totalTrips} trips</span>
+          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+            <div className="flex items-center gap-1">
+              <Star size={13} className="text-amber-400 fill-amber-400" />
+              <span className="text-sm font-semibold text-slate-700">{currentDriver?.rating}</span>
+              <span className="text-xs text-slate-400">· {currentDriver?.totalTrips} trips</span>
+            </div>
+            {(currentDriver as any)?.driverType === 'student' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold border border-emerald-200">
+                <GraduationCap size={11} /> STUDENT DRIVER
+              </span>
+            )}
           </div>
         </div>
       </div>
+
+      {/* Route Locked banner for Student Drivers */}
+      {(currentDriver as any)?.driverType === 'student' && (
+        <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2.5">
+          <Lock size={16} className="text-amber-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-xs font-bold text-amber-800">🔒 ROUTE LOCKED</p>
+            <p className="text-[11px] text-amber-700 leading-relaxed mt-0.5">
+              Your assigned route will remain unchanged unless a safety, vehicle, driver availability, or administrator action requires a change.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
@@ -127,6 +147,11 @@ export default function DriverDashboard() {
                        : ride.status === 'completed' ? 'Completed'
                        : 'Upcoming'}
                     </Badge>
+                    {(currentDriver as any)?.driverType === 'student' && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[9px] font-bold border border-amber-200">
+                        <Lock size={9} /> LOCKED
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-slate-500 flex items-center gap-1">
                     <MapPin size={11} />
