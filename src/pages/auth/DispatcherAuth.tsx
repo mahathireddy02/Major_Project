@@ -10,7 +10,7 @@ export default function DispatcherAuth() {
   const login = useAppStore((s) => s.login)
 
   const [username, setUsername] = useState('dispatcher@campusflow.io')
-  const [password, setPassword] = useState('')
+  const [password, setPassword] = useState('CampusFlowAdmin2026!')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -33,7 +33,14 @@ export default function DispatcherAuth() {
       toast.success('Access granted to Dispatch Command Center.')
       navigate('/admin/dashboard')
     } catch (err: any) {
-      toast.error(err.message || 'Invalid dispatcher credentials.')
+      const msg = err.message || 'Invalid dispatcher credentials.'
+      toast.error(
+        msg.includes('password') || msg.includes('credentials')
+          ? `${msg} Try: CampusFlowAdmin2026!`
+          : msg.includes('fetch') || msg.includes('network')
+          ? 'Cannot connect to backend server. Is it running on port 5000?'
+          : msg
+      )
     } finally {
       setLoading(false)
     }
@@ -105,9 +112,15 @@ export default function DispatcherAuth() {
 
           <div className="p-3.5 bg-blue-50/70 border border-blue-200/80 rounded-xl mb-5 text-xs text-blue-900 flex items-start gap-2.5">
             <AlertCircle size={16} className="text-primary-600 flex-shrink-0 mt-0.5" />
-            <p className="leading-relaxed">
-              Dispatcher is a restricted operational role with full network dispatch authority. Public registration is disabled.
-            </p>
+            <div className="leading-relaxed space-y-1">
+              <p>Dispatcher is a restricted operational role with full network dispatch authority.</p>
+              <p className="font-semibold text-blue-800 mt-1">
+                Demo credentials are pre-filled — just click "Authenticate" to continue.
+              </p>
+              <p className="font-mono bg-white/70 rounded px-1 py-0.5 border border-blue-200 text-[11px]">
+                📧 dispatcher@campusflow.io &nbsp;·&nbsp; 🔑 CampusFlowAdmin2026!
+              </p>
+            </div>
           </div>
 
           <form onSubmit={handleSignIn} className="space-y-4">

@@ -7,6 +7,7 @@ export interface RouteResult {
   geometry: [number, number][] // [lat, lng]
   legs: any[]
   steps?: any[]
+  isHaversineFallback?: boolean  // true when OSRM was unavailable and haversine was used
 }
 
 // In-memory LRU-style cache
@@ -130,6 +131,7 @@ export class RoutingService {
       geometry: coordinates,
       legs: [],
       steps: [],
+      isHaversineFallback: true,
     }
 
     return fallbackResult

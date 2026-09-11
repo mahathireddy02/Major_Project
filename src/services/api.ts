@@ -12,6 +12,11 @@ import type {
   RouteStop,
   RouteStep,
   LiveTripState,
+  FareEstimateResult,
+  RideFare,
+  PricingEvent,
+  PricingConfig,
+  FleetPricingMetrics,
 } from '../types'
 
 
@@ -738,6 +743,110 @@ class ApiClient {
   async getOptimizationBenchmark(): Promise<any> {
     return this.request('/optimization/benchmark')
   }
+
+  // ==========================================
+  // Dynamic Shared-Ride Pricing APIs
+  // ==========================================
+
+  async getFareEstimate(params: {
+    pickupName: string
+    pickupLat: number
+    pickupLng: number
+    destinationName: string
+    destinationLat: number
+    destinationLng: number
+    seats?: number
+    rideId?: string
+  }): Promise<{ success: boolean; data: FareEstimateResult }> {
+    return this.request('/pricing/estimate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
+
+  async calculateFare(params: {
+    studentId?: string
+    pickupName: string
+    pickupLat: number
+    pickupLng: number
+    destinationName: string
+    destinationLat: number
+    destinationLng: number
+    seats?: number
+    rideId: string
+  }): Promise<{ success: boolean; data: any }> {
+    return this.request('/pricing/calculate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
+
+  async recalculateFare(params: {
+    bookingId: string
+    reason?: string
+    forceAdjustAmount?: number
+  }): Promise<{ success: boolean; data: any }> {
+    return this.request('/pricing/recalculate', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
+
+  async getBookingFare(bookingId: string): Promise<{ success: boolean; data: RideFare }> {
+    return this.request(`/pricing/booking/${bookingId}`)
+  }
+
+  async getRideFares(rideId: string): Promise<{
+    success: boolean
+    data: {
+      rideId: string
+      routeName: string
+      vehicleId: string
+      capacity: number
+      bookedSeats: number
+      totalRevenue: number
+      averageFare: number
+      totalSharedSavings: number
+      passengers: Array<{
+        bookingId: string
+        studentId: string
+        studentName: string
+        pickup: string
+        destination: string
+        seats: number
+        fare: number
+        fareBreakdown?: any
+        isLocked: boolean
+        calculationStatus: string
+        distanceKm?: number
+        durationMinutes?: number
+        sharedSavings: number
+        routeOverlapPercent: number
+      }>
+    }
+  }> {
+    return this.request(`/pricing/ride/${rideId}`)
+  }
+
+  async getRidePricingEvents(rideId: string): Promise<{ success: boolean; data: PricingEvent[] }> {
+    return this.request(`/pricing/ride/${rideId}/events`)
+  }
+
+  async getPricingConfig(): Promise<{ success: boolean; data: PricingConfig }> {
+    return this.request('/pricing/config')
+  }
+
+  async updatePricingConfig(config: Partial<PricingConfig>): Promise<{ success: boolean; data: PricingConfig }> {
+    return this.request('/pricing/config', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    })
+  }
+
+  async getFleetPricingMetrics(): Promise<{ success: boolean; data: FleetPricingMetrics }> {
+    return this.request('/pricing/fleet-metrics')
+  }
 }
 
 export const api = new ApiClient()
+

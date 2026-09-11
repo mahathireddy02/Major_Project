@@ -218,7 +218,10 @@ export default function RideRequests() {
                       </td>
                       <td className="px-5 py-4">
                         <span className="font-medium text-slate-900">{item.seatNo ? `Seat #${item.seatNo}` : '1 Seat'}</span>
-                        <span className="text-[11px] text-slate-400 block font-mono">₹{item.fare || 40}</span>
+                        <span className="text-[11px] text-slate-500 block font-mono">
+                          {item.fare != null && item.fare > 0 ? `₹${item.fare}` : '—'}
+                          {item.isPriceLocked && <span className="ml-1 text-[9px] text-emerald-600 font-semibold" title="Price Locked">🔒</span>}
+                        </span>
                       </td>
                       <td className="px-5 py-4">
                         <Badge variant={getStatusBadgeVariant(item.displayStatus)} size="sm">
@@ -333,7 +336,10 @@ export default function RideRequests() {
               </div>
               <div className="flex items-center justify-between">
                 <span>Fare:</span>
-                <span className="font-mono font-bold text-slate-900">₹{selectedBooking.fare || 40}</span>
+                <span className="font-mono font-bold text-slate-900">
+                  {selectedBooking.fare != null && selectedBooking.fare > 0 ? `₹${selectedBooking.fare}` : '—'}
+                  {selectedBooking.isPriceLocked && <span className="ml-1.5 text-xs text-emerald-600 font-normal">🔒 Locked</span>}
+                </span>
               </div>
             </div>
           </div>

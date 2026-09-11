@@ -121,13 +121,9 @@ export default function DriverAuth() {
       setDetectedName('')
       setDetectedLicense('')
       setOcrResult({
-        matchScore: 0,
-        isMatch: false,
-        nameOk: false,
-        dlOk: false,
-        status: 'MISMATCH',
-        statusLabel: '⚠️ Unable to read ID card. Please upload a clearer image.',
-        explanation: 'Unable to read ID card. Please upload a clearer image.',
+        matchScore: 0, isMatch: false, nameOk: false, dlOk: false, status: 'MISMATCH',
+        statusLabel: '⚠️ Could not read license — please upload a clearer photo',
+        explanation: 'OCR could not extract text from the uploaded image.'
       })
       toast.error('Unable to read ID card. Please upload a clearer image.')
     } finally {
@@ -158,7 +154,7 @@ export default function DriverAuth() {
     try {
       await registerDriver({
         fullName,
-        collegeName,
+        collegeName: 'Campus Transport',
         phone,
         email,
         password,

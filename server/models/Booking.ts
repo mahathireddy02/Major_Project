@@ -21,6 +21,10 @@ export interface IBooking extends Document {
   dropoffStopId?: string
   seats: number
   fare: number
+  fareId?: string
+  fareBreakdown?: any
+  isPriceLocked?: boolean
+  pricingVersion?: string
   seatNo: number
   status: BookingStatus
   matchScore?: number
@@ -50,6 +54,10 @@ const BookingSchema = new Schema<IBooking>(
     dropoffStopId: { type: String },
     seats: { type: Number, default: 1 },
     fare: { type: Number, required: true },
+    fareId: { type: String, index: true },
+    fareBreakdown: { type: Schema.Types.Mixed },
+    isPriceLocked: { type: Boolean, default: true },
+    pricingVersion: { type: String, default: 'v1.0' },
     seatNo: { type: Number, required: true },
     status: {
       type: String,

@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from 'react'
 import {
   Navigation, Search, RefreshCw, AlertTriangle, ChevronDown, ChevronUp,
-  MapPin, Users, Clock, Shield, Car, RotateCw, UserCheck, Eye, Phone, CheckCircle2
+  MapPin, Users, Clock, Shield, Car, RotateCw, UserCheck, Eye, Phone, CheckCircle2,
+  Sparkles, DollarSign, History, RefreshCcw, TrendingUp, ShieldCheck
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import DispatcherHeader from '../../components/admin/DispatcherHeader'
@@ -11,7 +12,9 @@ import Badge from '../../components/ui/Badge'
 import SeatProgress from '../../components/ui/SeatProgress'
 import Avatar from '../../components/ui/Avatar'
 import { getRideStatusLabel } from '../../lib/utils'
-import type { Ride } from '../../types'
+import { api } from '../../services/api'
+import type { Ride, FleetPricingMetrics, PricingEvent } from '../../types'
+import toast from 'react-hot-toast'
 
 export default function AdminActiveRides() {
   const rides = useAppStore((s) => s.rides)
@@ -24,14 +27,24 @@ export default function AdminActiveRides() {
   const [search, setSearch] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null)
-  const [drawerTab, setDrawerTab] = useState<'manifest' | 'stops' | 'telematics'>('manifest')
+  const [drawerTab, setDrawerTab] = useState<'manifest' | 'stops' | 'telematics' | 'pricing'>('manifest')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
+  const [fleetMetrics, setFleetMetrics] = useState<FleetPricingMetrics | null>(null)
+  const [selectedRideFares, setSelectedRideFares] = useState<any | null>(null)
+  const [selectedRideEvents, setSelectedRideEvents] = useState<PricingEvent[]>([])
+  const [isPricingLoading, setIsPricingLoading] = useState(false)
 
   const refreshData = async () => {
     setIsRefreshing(true)
     try {
       await loadDispatcherData()
+      const metricRes = await api.getFleetPricingMetrics()
+      if (metricRes.success && metricRes.data) {
+        setFleetMetrics(metricRes.data)
+      }
+    } catch (err: any) {
+      console.warn('[ActiveRides] Failed to load fleet pricing metrics:', err?.message)
     } finally {
       setIsRefreshing(false)
     }
@@ -40,6 +53,29 @@ export default function AdminActiveRides() {
   useEffect(() => {
     refreshData()
   }, [])
+
+  // When selectedRide changes, load its per-passenger fares and pricing events
+  useEffect(() => {
+    if (selectedRide) {
+      setIsPricingLoading(true)
+      Promise.all([
+        api.getRideFares(selectedRide.id).catch(() => null),
+        api.getRidePricingEvents(selectedRide.id).catch(() => null),
+      ])
+        .then(([faresRes, eventsRes]) => {
+          if (faresRes && (faresRes as any).success) {
+            setSelectedRideFares((faresRes as any).data)
+          }
+          if (eventsRes && (eventsRes as any).success) {
+            setSelectedRideEvents((eventsRes as any).data)
+          }
+        })
+        .finally(() => setIsPricingLoading(false))
+    } else {
+      setSelectedRideFares(null)
+      setSelectedRideEvents([])
+    }
+  }, [selectedRide?.id])
 
   // Filter and search
   const filteredRides = useMemo(() => {
@@ -75,6 +111,32 @@ export default function AdminActiveRides() {
     setActionLoading(true)
     try {
       await recalculateRideRoute(rideId)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleRecalculatePassengerFare = async (bookingId: string) => {
+    const reason = window.prompt('Enter reason for pricing recalculation / override audit trail:')
+    if (reason === null) return
+    try {
+      setActionLoading(true)
+      const res = await api.recalculateFare({
+        bookingId,
+        reason: reason.trim() || 'Dispatcher manual recalculation',
+      })
+      if (res.success) {
+        toast.success('Passenger fare recalculated successfully')
+        if (selectedRide) {
+          const faresRes = await api.getRideFares(selectedRide.id)
+          if (faresRes.success) setSelectedRideFares(faresRes.data)
+          const eventsRes = await api.getRidePricingEvents(selectedRide.id)
+          if (eventsRes.success) setSelectedRideEvents(eventsRes.data)
+        }
+        refreshData()
+      }
+    } catch (err: any) {
+      toast.error(`Recalculation failed: ${err?.message || 'Error'}`)
     } finally {
       setActionLoading(false)
     }
@@ -141,6 +203,53 @@ export default function AdminActiveRides() {
             </div>
           </Card>
         </div>
+
+        {/* Fleet-Level Pricing Intelligence Banner (Section 23) */}
+        {fleetMetrics && (
+          <Card className="bg-gradient-to-r from-slate-900 via-slate-800 to-indigo-950 border-slate-700 p-4 text-white shadow-md">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-400">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">Fleet Pricing Intelligence</span>
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                      fleetMetrics.demandLevel === 'HIGH'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : fleetMetrics.demandLevel === 'LOW'
+                        ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                        : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                    }`}>
+                      Demand: {fleetMetrics.demandLevel}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-300 mt-0.5">Authoritative route-aware fares · DeepSeek AI advisory layer</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-left">
+                <div className="bg-white/5 rounded-xl px-3 py-2 border border-white/10">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Total Revenue</span>
+                  <span className="text-base font-bold text-white font-mono">₹{fleetMetrics.totalRevenue}</span>
+                </div>
+                <div className="bg-white/5 rounded-xl px-3 py-2 border border-white/10">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Avg Fare / Passenger</span>
+                  <span className="text-base font-bold text-white font-mono">₹{fleetMetrics.averageFarePerPassenger}</span>
+                </div>
+                <div className="bg-white/5 rounded-xl px-3 py-2 border border-white/10">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Avg Shared Savings</span>
+                  <span className="text-base font-bold text-emerald-400 font-mono">₹{fleetMetrics.averageSharedSavings}</span>
+                </div>
+                <div className="bg-white/5 rounded-xl px-3 py-2 border border-white/10">
+                  <span className="text-[10px] text-slate-400 block uppercase font-semibold">Seat Utilization</span>
+                  <span className="text-base font-bold text-indigo-300 font-mono">{fleetMetrics.seatUtilization}%</span>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Filter and Search */}
         <Card className="bg-white border-[#E5EAF0] p-4 shadow-sm">
@@ -328,13 +437,18 @@ export default function AdminActiveRides() {
                                 <div className="truncate">
                                   <p className="font-bold text-[#17202A] truncate">{p.name}</p>
                                   <p className="text-[11px] text-[#5E6875] truncate">
-                                    Pickup: {p.pickup} • Seat #{p.seatNo}
+                                    {p.pickup} → {p.destination || ride.destination} • Seat #{p.seatNo}
                                   </p>
                                 </div>
                               </div>
-                              <Badge variant={p.status === 'boarded' ? 'green' : 'yellow'} size="sm">
-                                {p.status}
-                              </Badge>
+                              <div className="text-right shrink-0 flex flex-col items-end gap-1">
+                                <span className="font-bold text-[#17202A] font-mono text-xs">
+                                  ₹{p.fare !== undefined ? p.fare : ride.fare}
+                                </span>
+                                <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200 uppercase">
+                                  LOCKED
+                                </span>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -362,6 +476,7 @@ export default function AdminActiveRides() {
           { key: 'manifest', label: `Passenger Manifest (${selectedRide?.passengers?.length || 0})` },
           { key: 'stops', label: 'Route Stops' },
           { key: 'telematics', label: 'Vehicle Telemetry' },
+          { key: 'pricing', label: 'Dynamic Pricing & Audit' },
         ]}
         activeTab={drawerTab}
         onTabChange={(tab) => setDrawerTab(tab as any)}
@@ -441,6 +556,179 @@ export default function AdminActiveRides() {
                     <p className="text-[10px] text-[#5E6875] uppercase">Hardware Status</p>
                     <p className="font-bold text-[#0F9F8F] mt-0.5">Online & Streaming</p>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {drawerTab === 'pricing' && (
+              <div className="space-y-4">
+                {/* Vehicle Pricing Summary Strip */}
+                <div className="p-3.5 bg-gradient-to-r from-slate-900 to-indigo-950 rounded-xl text-white border border-slate-700 shadow-sm space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-indigo-400" />
+                      <span className="text-xs font-bold uppercase tracking-wider text-indigo-300">
+                        Vehicle Fare Rollup
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                      Demand: {selectedRide.demandLevel || 'NORMAL'}
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                    <div className="bg-white/10 rounded-lg p-2">
+                      <span className="text-[10px] text-slate-400 block uppercase">Total Fares</span>
+                      <span className="font-bold text-white font-mono text-sm">
+                        ₹{selectedRideFares?.totalRevenue || selectedRide.totalFareAmount || 0}
+                      </span>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-2">
+                      <span className="text-[10px] text-slate-400 block uppercase">Avg Fare</span>
+                      <span className="font-bold text-white font-mono text-sm">
+                        ₹{selectedRideFares?.averageFare || selectedRide.averageFare || 0}
+                      </span>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-2">
+                      <span className="text-[10px] text-slate-400 block uppercase">Total Savings</span>
+                      <span className="font-bold text-emerald-400 font-mono text-sm">
+                        ₹{selectedRideFares?.totalSharedSavings || selectedRide.totalSharedSavings || 0}
+                      </span>
+                    </div>
+                    <div className="bg-white/10 rounded-lg p-2">
+                      <span className="text-[10px] text-slate-400 block uppercase">Occupancy</span>
+                      <span className="font-bold text-indigo-300 font-mono text-sm">
+                        {selectedRide.bookedSeats}/{selectedRide.capacity}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Per-Passenger Individual Fares (Section 22) */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#5E6875]">
+                      Individual Passenger Fares ({selectedRide.passengers?.length || 0})
+                    </h4>
+                    <span className="text-[11px] text-slate-400">Never divided equally</span>
+                  </div>
+
+                  {(!selectedRide.passengers || selectedRide.passengers.length === 0) ? (
+                    <p className="text-xs text-[#5E6875] italic">No active passenger bookings.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedRide.passengers.map((p, idx) => {
+                        const fareRecord = selectedRideFares?.passengers?.find(
+                          (item: any) => item.studentId === p.studentId
+                        )
+                        const bookingId = (p as any).bookingId || fareRecord?.bookingId
+
+                        return (
+                          <div
+                            key={idx}
+                            className="p-3 bg-white rounded-xl border border-[#E5EAF0] shadow-2xs space-y-2"
+                          >
+                            <div className="flex items-start justify-between">
+                              <div className="flex items-center gap-2.5">
+                                <Avatar name={p.name} size="sm" />
+                                <div>
+                                  <p className="font-bold text-xs text-[#17202A]">{p.name}</p>
+                                  <p className="text-[11px] text-[#5E6875]">
+                                    {p.pickup} → {p.destination || selectedRide.destination}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <span className="font-bold font-mono text-sm text-[#17202A] block">
+                                  ₹{fareRecord?.fare || p.fare || selectedRide.fare}
+                                </span>
+                                <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                  Locked
+                                </span>
+                              </div>
+                            </div>
+
+                            {fareRecord && (
+                              <div className="grid grid-cols-3 gap-2 text-[11px] text-slate-500 bg-slate-50 p-2 rounded-lg border border-slate-100">
+                                <div>
+                                  <span className="block text-[10px] text-slate-400">Distance</span>
+                                  <span className="font-medium text-slate-700">{fareRecord.distanceKm || '--'} km</span>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-slate-400">Route Overlap</span>
+                                  <span className="font-medium text-slate-700">{fareRecord.routeOverlapPercent || 0}%</span>
+                                </div>
+                                <div>
+                                  <span className="block text-[10px] text-slate-400">Pooled Savings</span>
+                                  <span className="font-medium text-emerald-600 font-mono">-₹{fareRecord.sharedSavings || 0}</span>
+                                </div>
+                              </div>
+                            )}
+
+                            {bookingId && (
+                              <div className="pt-1 flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => handleRecalculatePassengerFare(bookingId)}
+                                  disabled={actionLoading}
+                                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-lg transition-colors"
+                                >
+                                  <RefreshCcw size={12} className={actionLoading ? 'animate-spin' : ''} />
+                                  Recalculate with Audit
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Pricing Event Audit Trail (Section 4 & 22) */}
+                <div className="space-y-2 pt-2 border-t border-slate-200">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-[#5E6875] flex items-center gap-1.5">
+                      <History size={13} className="text-slate-500" />
+                      Pricing Audit Log ({selectedRideEvents.length})
+                    </h4>
+                    <span className="text-[10px] text-slate-400">Reproducible history</span>
+                  </div>
+
+                  {selectedRideEvents.length === 0 ? (
+                    <p className="text-xs text-slate-400 italic p-2 bg-slate-50 rounded-lg">
+                      No pricing audit events recorded yet for this ride.
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                      {selectedRideEvents.map((evt) => (
+                        <div
+                          key={evt.id}
+                          className="p-2.5 bg-white rounded-lg border border-[#E5EAF0] text-xs space-y-1"
+                        >
+                          <div className="flex items-center justify-between font-medium">
+                            <span className="font-semibold text-indigo-700 font-mono text-[11px]">
+                              {evt.eventType}
+                            </span>
+                            <span className="font-mono text-slate-800 font-bold">
+                              {evt.oldAmount !== undefined && `₹${evt.oldAmount} → `}₹{evt.newAmount}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-600">
+                            <strong>Trigger:</strong> {evt.trigger}
+                          </p>
+                          {evt.reason && (
+                            <p className="text-[11px] text-slate-500 italic">
+                              {evt.reason}
+                            </p>
+                          )}
+                          <p className="text-[10px] text-slate-400 font-mono text-right">
+                            {new Date(evt.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}

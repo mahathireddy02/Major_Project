@@ -119,7 +119,13 @@ export default function DriverProfile() {
     })
 
   // Aggregate Metrics
-  const totalEarnings = completedRides.reduce((acc, r) => acc + (r.fare || 25) * (r.bookedSeats || 1), 0)
+  const totalEarnings = completedRides.reduce((acc, r) => {
+    if (r.totalFareAmount && r.totalFareAmount > 0) return acc + r.totalFareAmount
+    if (r.passengers && r.passengers.length > 0) {
+      return acc + r.passengers.reduce((pSum, p) => pSum + (p.fare || 0), 0)
+    }
+    return acc + (r.fare || 0) * (r.bookedSeats || 1)
+  }, 0)
   const totalKmDriven = completedRides.reduce((acc, r) => acc + (r.distanceKm || 4.2), 0)
 
   const switchTab = (tab: 'profile' | 'history') => {
@@ -272,7 +278,9 @@ export default function DriverProfile() {
               {displayedRides.map((ride) => {
                 const isCompleted = ride.status === 'completed'
                 const isActive = ride.status === 'active'
-                const fareCollected = (ride.fare || 25) * (ride.bookedSeats || 1)
+                const fareCollected = ride.totalFareAmount || (ride.passengers && ride.passengers.length > 0
+                  ? ride.passengers.reduce((sum, p) => sum + (p.fare || 0), 0)
+                  : (ride.fare || 0) * (ride.bookedSeats || 1))
                 const isExpanded = expandedRideId === ride.id
 
                 return (
@@ -304,7 +312,9 @@ export default function DriverProfile() {
                         {/* Fare & Seats */}
                         <div className="text-right flex-shrink-0">
                           <span className="font-heading font-extrabold text-base text-slate-900">₹{fareCollected}</span>
-                          <p className="text-[10px] text-slate-400 font-medium">₹{ride.fare || 25} / seat</p>
+                          <p className="text-[10px] text-slate-400 font-medium">
+                            {ride.averageFare ? `avg ₹${ride.averageFare} / seat` : (ride.fare ? `₹${ride.fare} / seat` : 'Dynamic')}
+                          </p>
                         </div>
                       </div>
 

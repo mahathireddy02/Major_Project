@@ -165,12 +165,19 @@ export interface PickupPoint {
 }
 
 export interface Passenger {
+  id?: string
   studentId: string
+  userId?: string
   name: string
   pickup: string
   destination?: string
   status: 'waiting' | 'boarded' | 'dropped'
   seatNo: number
+  fare?: number
+  isPriceLocked?: boolean
+  fareId?: string
+  bookingId?: string
+  fareBreakdown?: FareBreakdown
 }
 
 export interface Ride {
@@ -191,6 +198,10 @@ export interface Ride {
   passengers: Passenger[]
   status: RideStatus
   fare: number
+  totalFareAmount?: number
+  averageFare?: number
+  totalSharedSavings?: number
+  demandLevel?: 'LOW' | 'NORMAL' | 'HIGH'
   routeCoordinates: [number, number][]
   currentLat: number
   currentLng: number
@@ -221,6 +232,10 @@ export interface Booking {
   dropoffStopId?: string
   status: BookingStatus
   fare: number
+  fareId?: string
+  fareBreakdown?: FareBreakdown
+  isPriceLocked?: boolean
+  pricingVersion?: string
   seatNo: number
   bookedAt: string
   bookingTime?: string
@@ -283,4 +298,139 @@ export interface UserStats {
   earnings?: number
   rating: number
 }
+
+export interface FareBreakdown {
+  baseFare: number
+  distanceFare: number
+  durationFare: number
+  routeContribution: number
+  demandAdjustment: number
+  sharedSavings: number
+  aiAdjustment: number
+  finalFare: number
+  finalFarePaise: number
+  currency: string
+  rates: {
+    perKm: number
+    perMinute: number
+    base: number
+    minimumFare: number
+    maximumFare: number
+  }
+  metrics: {
+    distanceKm: number
+    durationMinutes: number
+    routeOverlapPercent: number
+    additionalDistanceKm: number
+    additionalDurationMinutes: number
+    occupancy: number
+    capacity: number
+    demandTier: string
+  }
+  explanation: string
+  aiAdvice?: {
+    recommendedDemandFactor?: number
+    recommendedSharedSavingsFactor?: number
+    confidence?: number
+    reason?: string
+    anomaly?: boolean
+    appliedAdjustmentPercent?: number
+    source?: string
+  }
+}
+
+export interface RideFare {
+  id: string
+  bookingId: string
+  rideId: string
+  passengerId?: string
+  currency: string
+  baseAmount: number
+  distanceAmount: number
+  timeAmount: number
+  routeContributionAmount: number
+  sharedSavingsAmount: number
+  demandAdjustmentAmount: number
+  aiAdjustmentAmount: number
+  finalAmount: number
+  finalAmountPaise: number
+  distanceKm: number
+  durationMinutes: number
+  routeOverlapPercent: number
+  additionalDistanceKm: number
+  additionalDurationMinutes: number
+  occupancyAtCalculation: number
+  pricingVersion: string
+  calculationStatus: 'ESTIMATE' | 'CONFIRMED' | 'RECALCULATED' | 'CREDITED' | 'LOCKED'
+  calculationReason?: string
+  aiExplanation?: string
+  breakdown: FareBreakdown
+  isLocked: boolean
+  lockedAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PricingEvent {
+  id: string
+  rideId: string
+  bookingId?: string
+  eventType:
+    | 'INITIAL_CALCULATION'
+    | 'PASSENGER_JOINED'
+    | 'PASSENGER_CANCELLED'
+    | 'ROUTE_RECALCULATED'
+    | 'VEHICLE_CHANGED'
+    | 'CAPACITY_CHANGED'
+    | 'DEMAND_UPDATED'
+    | 'MANUAL_DISPATCH_ADJUSTMENT'
+    | 'PRICE_RECALCULATED'
+  oldAmount?: number
+  newAmount: number
+  trigger: string
+  reason?: string
+  inputSnapshot?: any
+  calculationSnapshot?: any
+  createdAt: string
+}
+
+export interface PricingConfig {
+  id: string
+  name: string
+  baseFare: number
+  perKmRate: number
+  perMinuteRate: number
+  minimumFare: number
+  maximumFare: number
+  sharedDiscountCap: number
+  aiAdjustmentCap: number
+  effectiveFrom?: string
+  effectiveUntil?: string
+  isActive: boolean
+}
+
+export interface FleetPricingMetrics {
+  averageFarePerPassenger: number
+  totalRevenue: number
+  averageSharedSavings: number
+  seatUtilization: number
+  activeRidesCount: number
+  totalPassengersCount: number
+  demandLevel: 'LOW' | 'NORMAL' | 'HIGH'
+}
+
+export interface FareEstimateResult {
+  currency: string
+  estimatedFare: number
+  estimateRange: { min: number; max: number }
+  distanceKm: number
+  durationMinutes: number
+  sharedSavings: number
+  routeOverlapPercent: number
+  breakdown: FareBreakdown
+  explanation: string
+  pricingVersion: string
+  isHaversineFallback?: boolean
+}
+
 

@@ -1,11 +1,13 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { MapPin, Clock, Users, Navigation, Zap, ArrowLeft, Info, RotateCcw, Map } from 'lucide-react';
+import { MapPin, Clock, Users, Navigation, Zap, ArrowLeft, Info, RotateCcw, Map, Sparkles, ShieldCheck } from 'lucide-react';
 import Button from '../../components/ui/Button';
 import Card from '../../components/ui/Card';
 import { LOCATIONS } from '../../data/mockData';
 import { CampusMap, MapPoint } from '../../components/map';
 import { routingService } from '../../services/routing/routingService';
+import { api } from '../../services/api';
+import type { FareEstimateResult } from '../../types';
 import LocationSearchInput from '../../components/booking/LocationSearchInput';
 import { MapLocationPickerModal } from '../../components/booking/MapLocationPickerModal';
 import { DepartureTimeSelector, getCurrentRealTime } from '../../components/booking/DepartureTimeSelector';
@@ -74,6 +76,39 @@ const BookRide: React.FC = () => {
     isOpen: boolean;
     mode: 'pickup' | 'destination';
   }>({ isOpen: false, mode: 'pickup' });
+
+  const [fareEstimate, setFareEstimate] = useState<FareEstimateResult | null>(null);
+  const [isEstimatingFare, setIsEstimatingFare] = useState<boolean>(false);
+
+  // Dynamic Fare Estimation from Backend Pricing Engine
+  useEffect(() => {
+    if (pickupPlace?.lat && pickupPlace?.lng && destinationPlace?.lat && destinationPlace?.lng) {
+      setIsEstimatingFare(true);
+      api
+        .getFareEstimate({
+          pickupName: pickupPlace.name,
+          pickupLat: pickupPlace.lat,
+          pickupLng: pickupPlace.lng,
+          destinationName: destinationPlace.name,
+          destinationLat: destinationPlace.lat,
+          destinationLng: destinationPlace.lng,
+          seats,
+        })
+        .then((res) => {
+          if (res.success && res.data) {
+            setFareEstimate(res.data);
+          }
+        })
+        .catch((err) => {
+          console.warn('[BookRide] Fare estimate error:', err?.message);
+        })
+        .finally(() => {
+          setIsEstimatingFare(false);
+        });
+    } else {
+      setFareEstimate(null);
+    }
+  }, [pickupPlace?.lat, pickupPlace?.lng, destinationPlace?.lat, destinationPlace?.lng, seats]);
 
   // Memoize map points to ensure stable array references
   const mapPoints = useMemo<MapPoint[]>(() => {
@@ -471,20 +506,90 @@ const BookRide: React.FC = () => {
         </Card>
 
         {/* ---------------------------------------------------------------- */}
-        {/* Fare estimate info                                                 */}
+        {/* Dynamic Fare Estimate Card                                        */}
         {/* ---------------------------------------------------------------- */}
-        <Card className="p-4 border border-amber-200 bg-amber-50 shadow-sm">
-          <div className="flex gap-3 items-start">
-            <Info className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
-            <div className="text-xs text-amber-800 leading-relaxed">
-              <p className="font-semibold mb-0.5">Estimated Fare</p>
-              <p>
-                Shared rides typically cost <strong>Rs.15-40</strong> per person depending
-                on distance and number of co-passengers. Final fare shown after matching.
-              </p>
+        {fareEstimate ? (
+          <Card className="p-4 border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 shadow-sm">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  Estimated Shared Fare
+                </div>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-2xl font-heading font-extrabold text-slate-900">
+                    ₹{fareEstimate.estimateRange.min} – ₹{fareEstimate.estimateRange.max}
+                  </span>
+                  <span className="text-xs text-slate-500 font-medium">
+                    ({fareEstimate.distanceKm} km · ~{fareEstimate.durationMinutes} min)
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                  <ShieldCheck className="w-3 h-3" />
+                  Route-Optimized
+                </span>
+                {fareEstimate.isHaversineFallback && (
+                  <p className="text-[10px] text-amber-700 font-semibold mt-0.5 flex items-center gap-0.5">
+                    <Info className="w-3 h-3" />
+                    Approx. (OSRM unavailable)
+                  </p>
+                )}
+                {fareEstimate.sharedSavings > 0 && (
+                  <p className="text-[11px] text-emerald-700 font-semibold mt-1">
+                    Save up to ₹{fareEstimate.sharedSavings}
+                  </p>
+                )}
+              </div>
             </div>
-          </div>
-        </Card>
+
+            <div className="mt-3 pt-3 border-t border-emerald-100 grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="bg-white/70 rounded-lg p-1.5">
+                <span className="text-[10px] text-slate-500 block">Base + Distance</span>
+                <span className="font-bold text-slate-800">
+                  ₹{fareEstimate.breakdown.baseFare + fareEstimate.breakdown.distanceFare}
+                </span>
+              </div>
+              <div className="bg-white/70 rounded-lg p-1.5">
+                <span className="text-[10px] text-slate-500 block">Shared Savings</span>
+                <span className="font-bold text-emerald-600">
+                  -₹{fareEstimate.breakdown.sharedSavings || 0}
+                </span>
+              </div>
+              <div className="bg-white/70 rounded-lg p-1.5">
+                <span className="text-[10px] text-slate-500 block">Target Fare</span>
+                <span className="font-bold text-slate-900">
+                  ₹{fareEstimate.estimatedFare}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-slate-600 mt-2 leading-tight">
+              {fareEstimate.explanation}
+            </p>
+          </Card>
+        ) : isEstimatingFare ? (
+          <Card className="p-4 border border-blue-200 bg-blue-50 shadow-sm flex items-center gap-3">
+            <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin shrink-0" />
+            <p className="text-xs text-blue-800 font-medium">
+              Calculating road route and shared pooling fare via OSRM & Pricing Engine...
+            </p>
+          </Card>
+        ) : (
+          <Card className="p-4 border border-slate-200 bg-slate-50 shadow-sm">
+            <div className="flex gap-3 items-start">
+              <Info className="w-4 h-4 text-slate-400 mt-0.5 shrink-0" />
+              <div className="text-xs text-slate-600 leading-relaxed">
+                <p className="font-semibold text-slate-800 mb-0.5">Dynamic Fair Fare Guarantee</p>
+                <p>
+                  Every passenger pays their own individual fare based on exact road distance, duration, and shared route efficiency.
+                  Select pickup and destination to preview your instant estimate.
+                </p>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* ---------------------------------------------------------------- */}
         {/* CTA                                                                */}

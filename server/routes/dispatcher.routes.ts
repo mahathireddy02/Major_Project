@@ -9,6 +9,8 @@ import { AuditLogModel } from '../models/AuditLog.js'
 import { requireRoles } from '../middleware/auth.js'
 import { realtimeService } from '../services/realtimeService.js'
 import { routingService } from '../services/routingService.js'
+import { RideFareModel } from '../models/RideFare.js'
+import { pricingEngine } from '../services/pricingEngine.js'
 
 export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
   // Enforce Dispatcher / Admin RBAC on all dispatcher endpoints
@@ -40,7 +42,9 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const avgOccupancy = totalCapacity > 0 ? Math.round((totalBooked / totalCapacity) * 100) : 0
-    const estimatedSavings = totalBooked * 18 // Average cost savings per pooled passenger
+
+    // Fetch real-time dynamic pricing fleet metrics
+    const fleetPricing = await pricingEngine.getFleetMetrics()
 
     return {
       success: true,
@@ -54,8 +58,12 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
           totalDrivers: drivers.length,
           activeSafetyAlerts: activeEvents.length,
           pendingRequests: pendingBookings.length,
-          estimatedSavings,
+          estimatedSavings: fleetPricing.averageSharedSavings * (fleetPricing.totalPassengersCount || 1),
           avgOccupancy,
+          totalRevenue: fleetPricing.totalRevenue,
+          averageFarePerPassenger: fleetPricing.averageFarePerPassenger,
+          averageSharedSavings: fleetPricing.averageSharedSavings,
+          demandLevel: fleetPricing.demandLevel,
         },
         alerts: activeEvents,
         activeRides,
@@ -81,10 +89,11 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
     }
 
-    const [driver, vehicle, bookings] = await Promise.all([
+    const [driver, vehicle, bookings, fares] = await Promise.all([
       UserModel.findOne({ id: ride.driverId }),
       VehicleModel.findOne({ id: ride.vehicleId }),
       BookingModel.find({ rideId: id }),
+      RideFareModel.find({ rideId: id }),
     ])
 
     return {
@@ -94,6 +103,7 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
         driver,
         vehicle,
         bookings,
+        fares,
       },
     }
   })
