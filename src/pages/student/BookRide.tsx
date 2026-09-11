@@ -94,9 +94,10 @@ const BookRide: React.FC = () => {
           destinationLng: destinationPlace.lng,
           seats,
         })
-        .then((res) => {
-          if (res.success && res.data) {
-            setFareEstimate(res.data);
+        .then((res: any) => {
+          const fareData = res?.data || res
+          if (fareData && typeof fareData.estimatedFare === 'number') {
+            setFareEstimate(fareData);
           }
         })
         .catch((err) => {

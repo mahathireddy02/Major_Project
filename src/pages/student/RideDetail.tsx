@@ -102,9 +102,10 @@ export default function RideDetail() {
 
     // Load full fare breakdown from backend
     if (isPassenger) {
-      api.getRideFares(ride.id).then((res) => {
-        if (res.success && res.data) {
-          const myFare = res.data.passengers.find((p) => p.studentId === currentStudentId)
+      api.getRideFares(ride.id).then((res: any) => {
+        const fareData = res?.data || res
+        if (fareData?.passengers) {
+          const myFare = fareData.passengers.find((p: any) => p.studentId === currentStudentId)
           if (myFare) {
             setFareAmount(myFare.fare)
             setFareBreakdown(myFare.fareBreakdown)
@@ -128,10 +129,11 @@ export default function RideDetail() {
         destinationLng: dLng,
         seats: 1,
         rideId: ride.id,
-      }).then((res) => {
-        if (res.success && res.data) {
-          setFareAmount(res.data.estimatedFare)
-          setFareBreakdown(res.data.breakdown)
+      }).then((res: any) => {
+        const fareData = res?.data || res
+        if (fareData && typeof fareData.estimatedFare === 'number') {
+          setFareAmount(fareData.estimatedFare)
+          setFareBreakdown(fareData.breakdown)
           setIsLockedFare(false)
         }
       }).catch((err) => console.warn('[RideDetail] Fare estimate error:', err))

@@ -5,7 +5,7 @@ import {
   AlertCircle, ArrowLeft, Car, Zap, ChevronDown, ChevronUp,
   Sparkles, ShieldCheck, ArrowRight
 } from 'lucide-react'
-import { findMatches, type RideMatch } from '../../engine/matchingEngine'
+import { findMatches, haversineKm, type RideMatch } from '../../engine/matchingEngine'
 import { useAppStore } from '../../store/appStore'
 import MatchingAnimation from '../../components/matching/MatchingAnimation'
 import Card from '../../components/ui/Card'
@@ -18,6 +18,15 @@ import { getScoreColor, getScoreBg, getRideStatusBadge, getRideStatusLabel } fro
 import { getCurrentRealTime } from '../../components/booking/DepartureTimeSelector'
 import { api } from '../../services/api'
 import type { FareEstimateResult } from '../../types'
+
+function getEstimatedFallbackFare(pickupLat: number, pickupLng: number, destLat: number, destLng: number, seats: number = 1): number {
+  if (!pickupLat || !pickupLng || !destLat || !destLng) return 30 * seats
+  const directDist = haversineKm(pickupLat, pickupLng, destLat, destLng)
+  const roadDist = Math.max(1, directDist * 1.25)
+  const estTimeMin = Math.max(2, Math.round(roadDist * 1.3))
+  const calculated = Math.round(20 + roadDist * 8 + estTimeMin * 1)
+  return Math.max(30, Math.min(500, calculated)) * seats
+}
 
 export default function MatchingResults() {
   const navigate = useNavigate()
@@ -65,9 +74,10 @@ export default function MatchingResults() {
             seats,
             rideId: m.ride.id,
           })
-          .then((res) => {
-            if (res.success && res.data) {
-              setFaresByRideId((prev) => ({ ...prev, [m.ride.id]: res.data }))
+          .then((res: any) => {
+            const fareData = res?.data || res
+            if (fareData && typeof fareData.estimatedFare === 'number') {
+              setFaresByRideId((prev) => ({ ...prev, [m.ride.id]: fareData }))
             }
           })
           .catch((e) => console.warn('[MatchingResults] Fare estimate fetch failed:', e?.message))
@@ -270,15 +280,18 @@ export default function MatchingResults() {
 
                   {(() => {
                     const topFare = faresByRideId[topMatch.ride.id]
+                    const fallbackFare = getEstimatedFallbackFare(pickupLat, pickupLng, destinationLat, destinationLng, seats)
                     return (
                       <div className="text-right">
                         <p className="text-xl font-heading font-bold text-slate-900">
-                          ₹{topFare ? topFare.estimatedFare : topMatch.ride.fare}
+                          ₹{topFare ? topFare.estimatedFare : fallbackFare}
                         </p>
                         <p className="text-[10px] text-emerald-600 font-semibold">
                           {topFare && topFare.sharedSavings > 0
                             ? `Save ₹${topFare.sharedSavings} pooled`
-                            : 'Route-calculated fare'}
+                            : topFare
+                            ? `${topFare.distanceKm} km · OSRM Road Fare`
+                            : 'Estimating road fare…'}
                         </p>
                       </div>
                     )
@@ -408,15 +421,18 @@ export default function MatchingResults() {
                       <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
                         {(() => {
                           const matchFare = faresByRideId[m.ride.id]
+                          const fallbackFare = getEstimatedFallbackFare(pickupLat, pickupLng, destinationLat, destinationLng, seats)
                           return (
                             <div>
                               <p className="font-heading font-bold text-slate-900">
-                                ₹{matchFare ? matchFare.estimatedFare : m.ride.fare}
+                                ₹{matchFare ? matchFare.estimatedFare : fallbackFare}
                               </p>
                               {matchFare && matchFare.sharedSavings > 0 ? (
                                 <span className="text-[10px] text-emerald-600 font-semibold block">
                                   -₹{matchFare.sharedSavings} saved
                                 </span>
+                              ) : matchFare ? (
+                                <span className="text-[10px] text-slate-400 block">{matchFare.distanceKm} km · OSRM</span>
                               ) : (
                                 <span className="text-[10px] text-slate-400 block">Personal Fare</span>
                               )}

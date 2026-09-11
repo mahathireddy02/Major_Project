@@ -477,7 +477,9 @@ export default function RideMatching() {
                             {m.ride.bookedSeats}/{m.ride.capacity} seats filled ({m.availableSeats} open)
                           </span>
                         </div>
-                        <span className="text-xs font-bold text-[#0F9F8F]">₹{m.ride.fare}</span>
+                        <span className="text-xs font-bold text-[#0F9F8F]">
+                          {m.ride.averageFare ? `avg ₹${m.ride.averageFare}` : m.ride.distanceKm ? `₹${Math.round(20 + m.ride.distanceKm * 8)}` : 'Dynamic'}
+                        </span>
                       </div>
 
                       <div className="flex items-center gap-2">
