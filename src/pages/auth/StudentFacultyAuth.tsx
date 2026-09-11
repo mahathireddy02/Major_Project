@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   fuzzyMatch, fuzzyMatchName,
-  preprocessImage, extractStudentFields,
+  preprocessImage, extractStudentFields, extractFacultyFields,
 } from '../../lib/ocrUtils'
 import {
   Navigation, User, GraduationCap, ArrowLeft, ArrowRight, CheckCircle2,
@@ -44,7 +44,7 @@ export default function StudentFacultyAuth() {
   const [collegeEmail, setCollegeEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
-  const [gender, setGender] = useState<'Female' | 'Male' | 'Other' | 'Prefer not to say'>('Female')
+  const [gender, setGender] = useState<'' | 'Female' | 'Male' | 'Other' | 'Prefer not to say'>('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
@@ -150,22 +150,31 @@ export default function StudentFacultyAuth() {
     setIsScanningOcr(true)
     try {
       const processed = await preprocessImage(fileDataUri)
-      const { name, roll, college } = await extractStudentFields(processed)
+
+      let name = '', idField = '', college = ''
+      if (userType === 'faculty') {
+        const res = await extractFacultyFields(processed)
+        name = res.name; idField = res.facultyId; college = res.college
+      } else {
+        const res = await extractStudentFields(processed)
+        name = res.name; idField = res.roll; college = res.college
+      }
 
       setDetectedName(name)
-      setDetectedRoll(roll)
+      setDetectedRoll(idField)
       setDetectedCollege(college)
 
+      const enteredId = userType === 'faculty' ? collegeId : rollNumber
       const nameOk = name ? fuzzyMatchName(fullName, name) : false
-      const rollOk = roll ? roll.trim().toUpperCase() === rollNumber.trim().toUpperCase() : false
+      const idOk = idField ? idField.trim().toUpperCase() === enteredId.trim().toUpperCase() : false
       const collegeOk = college ? fuzzyMatch(collegeName, college) : false
 
       setOcrResult({
-        matchScore: (nameOk ? 34 : 0) + (rollOk ? 33 : 0) + (collegeOk ? 33 : 0),
-        isMatch: nameOk && rollOk && collegeOk,
-        status: nameOk && rollOk && collegeOk ? 'MATCHED' : 'MISMATCH',
+        matchScore: (nameOk ? 34 : 0) + (idOk ? 33 : 0) + (collegeOk ? 33 : 0),
+        isMatch: nameOk && idOk && collegeOk,
+        status: nameOk && idOk && collegeOk ? 'MATCHED' : 'MISMATCH',
         statusLabel: nameOk ? '✓ Name Matched' : '✗ Name Mismatch',
-        explanation: `Name: ${nameOk ? 'OK' : 'FAIL'}, Roll: ${rollOk ? 'OK' : 'FAIL'}, College: ${collegeOk ? 'OK' : 'FAIL'}`,
+        explanation: `Name: ${nameOk ? 'OK' : 'FAIL'}, ID: ${idOk ? 'OK' : 'FAIL'}, College: ${collegeOk ? 'OK' : 'FAIL'}`,
       })
     } catch {
       setDetectedName('')
@@ -185,7 +194,7 @@ export default function StudentFacultyAuth() {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!fullName || !collegeEmail || !password) {
+    if (!fullName || !collegeEmail || !password || (userType === 'student' && !gender)) {
       toast.error('Please complete all required fields.')
       return
     }
@@ -260,6 +269,34 @@ export default function StudentFacultyAuth() {
     }
   }
 
+  // Reset all signup form state
+  const resetSignupForm = () => {
+    setStep(1)
+    setFullName('')
+    setRollNumber('')
+    setCollegeId('')
+    setCollegeName('')
+    setCollegeEmail('')
+    setPhone('')
+    setPassword('')
+    setGender('')
+    setConfirmPassword('')
+    setShowPassword(false)
+    setEmailChecked(false)
+    setEmailValid(false)
+    setEmailExists(false)
+    setDomainMessage('')
+    setDemoCode('')
+    setInputCode('')
+    setIsCodeVerified(false)
+    setIdCardFile(null)
+    setIdCardPreview(null)
+    setDetectedName('')
+    setDetectedCollege('')
+    setDetectedRoll('')
+    setOcrResult(null)
+  }
+
   // Quick Demo Login Handler
   const handleDemoStudentLogin = async (studentId: string) => {
     setLoading(true)
@@ -320,7 +357,7 @@ export default function StudentFacultyAuth() {
             <div className="flex bg-slate-100 p-1 rounded-xl">
               <button
                 type="button"
-                onClick={() => setUserType('student')}
+                onClick={() => { if (userType !== 'student') { setUserType('student'); resetSignupForm() } }}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                   userType === 'student' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
                 }`}
@@ -330,7 +367,7 @@ export default function StudentFacultyAuth() {
               </button>
               <button
                 type="button"
-                onClick={() => setUserType('faculty')}
+                onClick={() => { if (userType !== 'faculty') { setUserType('faculty'); resetSignupForm() } }}
                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
                   userType === 'faculty' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
                 }`}
@@ -574,6 +611,7 @@ export default function StudentFacultyAuth() {
                       onChange={(e) => setGender(e.target.value as any)}
                       className="input-field text-sm font-medium text-slate-800"
                     >
+                      <option value="">Choose your gender</option>
                       <option value="Female">Female</option>
                       <option value="Male">Male</option>
                       <option value="Other">Other</option>
@@ -591,6 +629,7 @@ export default function StudentFacultyAuth() {
                       if (!collegeName.trim()) { toast.error('Please enter your college name.'); return }
                       const digits = phone.replace(/^\+91/, '')
                       if (digits.length !== 10) { toast.error('Enter a valid 10-digit mobile number.'); return }
+                      if (!gender) { toast.error('Please choose your gender.'); return }
                       setStep(2)
                     }}
                   >
@@ -789,17 +828,17 @@ export default function StudentFacultyAuth() {
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                            <span className="text-slate-500">Roll / Hall Ticket Entered:</span>
-                            <span className="font-bold text-slate-800">{rollNumber}</span>
+                            <span className="text-slate-500">{userType === 'faculty' ? 'Faculty ID Entered:' : 'Roll / Hall Ticket Entered:'}</span>
+                            <span className="font-bold text-slate-800">{userType === 'faculty' ? collegeId : rollNumber}</span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-500">Roll / Hall Ticket on ID:</span>
+                            <span className="text-slate-500">{userType === 'faculty' ? 'Faculty ID on ID:' : 'Roll / Hall Ticket on ID:'}</span>
                             <span className="font-bold text-slate-800">{detectedRoll || '—'}</span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                            <span className="text-slate-500">Roll Match:</span>
-                            <span className={`font-bold ${detectedRoll && detectedRoll.trim().toLowerCase() === rollNumber.trim().toLowerCase() ? 'text-green-600' : 'text-red-500'}`}>
-                              {detectedRoll ? (detectedRoll.trim().toLowerCase() === rollNumber.trim().toLowerCase() ? '✓ Matched' : '✗ Mismatch') : '— Pending'}
+                            <span className="text-slate-500">{userType === 'faculty' ? 'Faculty ID Match:' : 'Roll Match:'}</span>
+                            <span className={`font-bold ${detectedRoll && detectedRoll.trim().toLowerCase() === (userType === 'faculty' ? collegeId : rollNumber).trim().toLowerCase() ? 'text-green-600' : 'text-red-500'}`}>
+                              {detectedRoll ? (detectedRoll.trim().toLowerCase() === (userType === 'faculty' ? collegeId : rollNumber).trim().toLowerCase() ? '✓ Matched' : '✗ Mismatch') : '— Pending'}
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
@@ -851,8 +890,9 @@ export default function StudentFacultyAuth() {
                           toast.error('Name on ID card does not match what you entered.')
                           return
                         }
-                        if (detectedRoll.trim().toUpperCase() !== rollNumber.trim().toUpperCase()) {
-                          toast.error('Roll number on ID card does not match what you entered.')
+                        const enteredId = userType === 'faculty' ? collegeId : rollNumber
+                        if (detectedRoll.trim().toUpperCase() !== enteredId.trim().toUpperCase()) {
+                          toast.error(`${userType === 'faculty' ? 'Faculty ID' : 'Roll number'} on ID card does not match what you entered.`)
                           return
                         }
                         if (!fuzzyMatch(collegeName, detectedCollege)) {
