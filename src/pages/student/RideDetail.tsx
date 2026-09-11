@@ -72,9 +72,21 @@ export default function RideDetail() {
     )
   }
 
-  const driver = drivers.find((d) => d.id === ride.driverId)
+  const driver =
+    drivers.find((d) => d.id === ride.driverId) ||
+    (ride.driverId
+      ? {
+          id: ride.driverId,
+          name: (ride as any).driverName || 'Campus Driver',
+          phone: (ride as any).driverPhone || '+91 98765 43210',
+          rating: 4.9,
+          totalTrips: 150,
+        }
+      : undefined)
   const vehicle = vehicles.find((v) => v.id === ride.vehicleId)
-  const isPassenger = ride.passengers.some((p) => p.studentId === currentStudentId)
+  const isPassenger = ride.passengers.some(
+    (p) => p.studentId === currentStudentId || p.studentId === currentStudent?.id
+  )
   const isFull = ride.bookedSeats >= ride.capacity
   const availableSeats = ride.capacity - ride.bookedSeats
   const requestedPickup = searchParams.get('pickup') || ride.pickupPoints[0]?.name || 'Pickup Point'
@@ -315,6 +327,14 @@ export default function RideDetail() {
                   <span className="font-semibold text-slate-700">{driver.rating}</span>
                   <span>({driver.totalTrips} campus trips)</span>
                 </div>
+                {isPassenger && (
+                  <button
+                    onClick={() => navigate(`/student/confirmation/${ride.id}`)}
+                    className="mt-2 text-xs font-semibold text-primary-600 hover:text-primary-700 bg-primary-50 hover:bg-primary-100 px-2.5 py-1 rounded-lg transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <span>Message Driver</span>
+                  </button>
+                )}
               </div>
             </div>
           </Card>

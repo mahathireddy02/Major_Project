@@ -39,6 +39,7 @@ export type RealtimeEventType =
   | 'NETWORK_OPTIMIZED'
   | 'RIDE_FULL'
   | 'NOTIFICATION_ADDED'
+  | 'RIDE_MESSAGE'
   | 'DEMO_RESET'
   | 'FLEET_RESET'
   | 'PRICING_UPDATED'

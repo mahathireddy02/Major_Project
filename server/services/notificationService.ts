@@ -211,6 +211,10 @@ class NotificationService {
 
       case 'PASSENGER_ADDED':
       case 'BOOKING_CREATED': {
+        const bookingTime =
+          payload.time ||
+          new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
         // 1. Student
         if (payload.studentId) {
           notificationsToCreate.push({
@@ -222,6 +226,19 @@ class NotificationService {
             title: 'Booking Confirmed',
             message: `You joined ${routeName}. Pickup at ${pickup}, ${payload.departureTime || 'soon'}. Individual fare: ₹${payload.fare || 25}.`,
             rideId,
+            metadata: {
+              rideId,
+              routeName,
+              driverId: payload.driverId,
+              driverName,
+              studentId: payload.studentId,
+              studentName,
+              pickup,
+              destination,
+              departureTime: payload.departureTime,
+              bookingTime,
+              fare: payload.fare,
+            },
           })
         }
         // 2. Driver
@@ -229,12 +246,26 @@ class NotificationService {
           notificationsToCreate.push({
             userId: payload.driverId,
             driverId: payload.driverId,
+            studentId: payload.studentId,
             role: 'DRIVER',
             type: 'boarding',
             priority: 'NORMAL',
             title: 'New Passenger Added',
             message: `${studentName} booked a seat on ${routeName} for pickup at ${pickup}.`,
             rideId,
+            metadata: {
+              rideId,
+              routeName,
+              driverId: payload.driverId,
+              driverName,
+              studentId: payload.studentId,
+              studentName,
+              pickup,
+              destination,
+              departureTime: payload.departureTime,
+              bookingTime,
+              fare: payload.fare,
+            },
           })
         }
         // 3. Dispatcher
@@ -246,6 +277,15 @@ class NotificationService {
           title: 'Passenger Joined Trip',
           message: `${studentName} joined ${routeName} (Driver: ${driverName}, Pickup: ${pickup}).`,
           rideId,
+          metadata: {
+            rideId,
+            routeName,
+            driverId: payload.driverId,
+            studentId: payload.studentId,
+            studentName,
+            pickup,
+            destination,
+          },
         })
         break
       }

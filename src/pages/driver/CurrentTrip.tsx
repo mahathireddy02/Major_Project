@@ -17,6 +17,7 @@ import {
   ArrowUp,
   CornerUpRight,
   CornerUpLeft,
+  MessageCircle,
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { useLiveTrip } from '../../hooks/useLiveTrip'
@@ -694,6 +695,15 @@ export default function CurrentTrip() {
                   >
                     {passenger.status === 'boarded' ? 'On Board' : passenger.status === 'dropped' ? 'Dropped Off' : 'Waiting'}
                   </Badge>
+
+                  <button
+                    type="button"
+                    onClick={() => navigate(`/driver/passengers?rideId=${activeRide.id}&tab=messages`)}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
+                    title={`Message ${passenger.name}`}
+                  >
+                    <MessageCircle size={14} />
+                  </button>
 
                   {passenger.status === 'waiting' && (
                     <Button
