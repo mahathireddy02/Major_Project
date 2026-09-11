@@ -12,21 +12,28 @@ import { GlobalSosModal } from '../../components/safety/GlobalSosModal'
 export default function Safety() {
   const navigate = useNavigate()
   const [sosModalOpen, setSosModalOpen] = useState(false)
-  const [contact, setContact] = useState<EmergencyContact | null>(null)
+  const storeEmergencyContact = useAppStore((s) => s.emergencyContact)
+  const [contact, setContact] = useState<EmergencyContact | null>(storeEmergencyContact || null)
   const rides = useAppStore((s) => s.rides)
   const safetyEvents = useAppStore((s) => s.safetyEvents)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
   const currentUser = useAppStore((s) => s.currentUser)
 
-  const activeUserId = currentUser?.id || currentStudentId
+  const activeUserId = currentUser?.id || currentStudentId || 's1'
 
   useEffect(() => {
+    if (storeEmergencyContact) {
+      setContact(storeEmergencyContact)
+    }
     if (activeUserId) {
       api.getEmergencyContact(activeUserId).then((ec) => {
-        if (ec) setContact(ec)
+        if (ec) {
+          setContact(ec)
+          useAppStore.getState().setEmergencyContact(ec)
+        }
       }).catch(() => {})
     }
-  }, [activeUserId])
+  }, [activeUserId, storeEmergencyContact])
 
   const activeRide = rides.find(
     (r) =>

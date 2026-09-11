@@ -21,17 +21,32 @@ export default function PassengerList() {
   const messages = useAppStore((s) => s.messages)
   const replyToMessage = useAppStore((s) => s.replyToMessage)
   const markMessagesRead = useAppStore((s) => s.markMessagesRead)
+  const fetchRideMessages = useAppStore((s) => s.fetchRideMessages)
+  const refreshRides = useAppStore((s) => s.refreshRides)
 
-  const [activeTab, setActiveTab] = useState<'roster' | 'messages'>('roster')
+  const initialTab = searchParams.get('tab') === 'messages' ? 'messages' : 'roster'
+  const [activeTab, setActiveTab] = useState<'roster' | 'messages'>(initialTab)
   const [replyDraft, setReplyDraft] = useState('')
+  const [isReplying, setIsReplying] = useState(false)
   const chatEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    refreshRides()
+  }, [refreshRides])
+
+  useEffect(() => {
+    if (searchParams.get('tab') === 'messages') {
+      setActiveTab('messages')
+    }
+  }, [searchParams])
 
   const [backendBookings, setBackendBookings] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [updatingStudentId, setUpdatingStudentId] = useState<string | null>(null)
 
+  const driverIds = new Set([currentDriverId, currentUser?.id].filter(Boolean) as string[])
   const driverRides = rides.filter(
-    (r) => r.driverId === currentDriverId || r.driverId === currentUser?.id || r.driverId === 'd1'
+    (r) => driverIds.has(r.driverId) || (driverIds.size === 0 && r.driverId === 'd1')
   )
   const sortedRides = [...driverRides].sort((a, b) => {
     const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
@@ -41,30 +56,43 @@ export default function PassengerList() {
   })
 
   const activeRide = targetRideId
-    ? sortedRides.find((r) => r.id === targetRideId)
+    ? (driverRides.find((r) => r.id === targetRideId) || rides.find((r) => r.id === targetRideId))
     : (
-        sortedRides.find((r) => r.status === 'active') ||
-        sortedRides.find((r) => r.status === 'boarding') ||
-        sortedRides.find((r) => (r.status === 'waiting' || r.status === 'full') && (r.bookedSeats > 0 || (r.passengers && r.passengers.length > 0))) ||
-        sortedRides.find((r) => r.status === 'waiting') ||
-        sortedRides[0]
+        driverRides.find((r) => r.status === 'boarding' || r.status === 'active' || r.status === 'waiting') ||
+        driverRides[0] ||
+        rides[0]
       )
 
   const rideMessages = activeRide ? messages.filter((m) => m.rideId === activeRide.id) : []
   const unreadFromStudents = rideMessages.filter((m) => m.fromRole === 'student' && !m.read).length
 
   useEffect(() => {
+    if (activeRide?.id) fetchRideMessages(activeRide.id)
+  }, [activeRide?.id])
+
+  useEffect(() => {
     if (activeTab === 'messages' && activeRide) {
       markMessagesRead(activeRide.id, 'student')
+      fetchRideMessages(activeRide.id)
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }, [activeTab, rideMessages.length])
 
-  const handleReply = () => {
-    if (!replyDraft.trim() || !activeRide) return
-    replyToMessage(activeRide.id, replyDraft)
+  const handleReply = async (customText?: string, targetStudentId?: string) => {
+    const textToSend = (typeof customText === 'string' ? customText : replyDraft).trim()
+    if (!textToSend || !activeRide || isReplying) return
+    setIsReplying(true)
     setReplyDraft('')
-    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    const recipientStudentId =
+      targetStudentId ||
+      rideMessages.filter((m) => m.fromRole === 'student').pop()?.fromId ||
+      passengers[0]?.studentId
+    try {
+      await replyToMessage(activeRide.id, textToSend, recipientStudentId)
+    } finally {
+      setIsReplying(false)
+      setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    }
   }
 
   const loadBookings = async () => {
@@ -285,6 +313,17 @@ export default function PassengerList() {
                       <Badge variant={isBoarded ? 'green' : isDropped ? 'slate' : 'yellow'}>
                         {isBoarded ? 'Boarded' : isDropped ? 'Dropped off' : 'Waiting'}
                       </Badge>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setActiveTab('messages')
+                          setReplyDraft(`Hi ${passenger.name}, `)
+                        }}
+                        className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:text-primary-600 hover:bg-primary-50 transition-colors cursor-pointer"
+                        title={`Message ${passenger.name}`}
+                      >
+                        <MessageCircle size={14} />
+                      </button>
                       {isWaiting && activeRide && (
                         <Button size="sm" variant="green" disabled={isUpdating} onClick={() => handleBoard(passenger.studentId)} className="text-xs gap-1 cursor-pointer">
                           <CheckCircle size={14} className={isUpdating ? 'animate-spin' : ''} />
@@ -315,7 +354,7 @@ export default function PassengerList() {
               <p className="text-xs mt-1 text-slate-400">Passengers can message you from their booking screen.</p>
             </Card>
           ) : (
-            <div className="space-y-2 mb-4 overflow-y-auto flex-1">
+            <div className="space-y-2 mb-3 overflow-y-auto flex-1">
               {rideMessages.map((msg) => {
                 const isDriver = msg.fromRole === 'driver'
                 return (
@@ -336,21 +375,46 @@ export default function PassengerList() {
             </div>
           )}
 
-          <div className="mt-auto pt-3 border-t border-slate-100 flex gap-2">
+          {/* Quick chips */}
+          <div className="flex flex-wrap gap-1.5 pb-2">
+            {['On my way! 🚗', 'At pickup point 📍', 'Be there in 2 mins ⏱️', 'Boarding now 🚌'].map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                disabled={isReplying}
+                onClick={() => handleReply(chip)}
+                className="px-2.5 py-1 text-xs bg-slate-100 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-full border border-slate-200 hover:border-emerald-300 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
+
+          <div className="mt-auto pt-2 border-t border-slate-100 flex gap-2">
             <input
               type="text"
               value={replyDraft}
               onChange={(e) => setReplyDraft(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleReply()}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !isReplying && replyDraft.trim()) {
+                  e.preventDefault()
+                  handleReply()
+                }
+              }}
+              disabled={isReplying}
               placeholder="Reply to passengers..."
-              className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400"
+              className="flex-1 text-sm border border-slate-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-emerald-400 disabled:bg-slate-50"
             />
             <button
-              onClick={handleReply}
-              disabled={!replyDraft.trim()}
+              onClick={() => handleReply()}
+              disabled={!replyDraft.trim() || isReplying}
               className="w-9 h-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition-colors"
             >
-              <Send size={15} />
+              {isReplying ? (
+                <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <Send size={15} />
+              )}
             </button>
           </div>
         </div>

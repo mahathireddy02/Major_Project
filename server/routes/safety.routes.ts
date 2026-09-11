@@ -10,12 +10,23 @@ export const safetyRoutes: FastifyPluginAsync = async (fastify) => {
       userId?: string
       lat?: number
       lng?: number
+      emergencyPhone?: string
+      emergencyName?: string
+      forceNew?: boolean
     }
 
     const authUser = (request as any).user
     const userId = body.userId || authUser?.id || (request.headers['x-user-id'] as string) || (request.headers['x-driver-id'] as string) || 's1'
 
-    const event = await safetyService.triggerSOS(body.rideId, userId, body.lat, body.lng)
+    const event = await safetyService.triggerSOS(
+      body.rideId,
+      userId,
+      body.lat,
+      body.lng,
+      body.emergencyPhone,
+      body.emergencyName,
+      body.forceNew
+    )
     const isExistingActive = Boolean((event as any)?.isExistingActive)
 
     return { success: true, isExistingActive, data: event }

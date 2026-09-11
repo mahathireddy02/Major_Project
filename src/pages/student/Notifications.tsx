@@ -1,7 +1,8 @@
+import { useEffect } from 'react'
 import { useAppStore } from '../../store/appStore'
 import {
   Bell, CheckCheck, MapPin, Car, Shield, Zap, Gift,
-  Navigation, Clock, XCircle, RefreshCw, AlertTriangle, Route
+  Navigation, Clock, XCircle, RefreshCw, AlertTriangle, Route, MessageCircle
 } from 'lucide-react'
 import { cn, formatDate } from '../../lib/utils'
 import Badge from '../../components/ui/Badge'
@@ -24,6 +25,7 @@ const iconMap: Record<string, any> = {
   emergency: AlertTriangle,
   alert: AlertTriangle,
   reassigned: RefreshCw,
+  message: MessageCircle,
 }
 
 const variantMap: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'slate' | 'purple'> = {
@@ -43,22 +45,34 @@ const variantMap: Record<string, 'blue' | 'green' | 'yellow' | 'red' | 'slate' |
   emergency:'red',
   alert:   'red',
   reassigned:'yellow',
+  message: 'blue',
 }
 
 export default function Notifications() {
   const navigate = useNavigate()
   const notifications = useAppStore((s) => s.notifications)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
+  const currentStudent = useAppStore((s) => s.currentStudent())
+  const currentUser = useAppStore((s) => s.currentUser)
   const markNotificationRead = useAppStore((s) => s.markNotificationRead)
   const markAllRead = useAppStore((s) => s.markAllRead)
+  const fetchNotifications = useAppStore((s) => s.fetchNotifications)
 
-  const myNotifs = notifications.filter((n) =>
-    n.studentId === currentStudentId ||
-    n.userId === currentStudentId ||
-    (n as any).role === 'student' ||
-    (n as any).role === 'faculty' ||
-    (n as any).targetRole === 'STUDENT'
-  )
+  useEffect(() => {
+    fetchNotifications()
+  }, [fetchNotifications])
+
+  const studentIds = new Set([currentStudentId, currentStudent?.id, currentUser?.id].filter(Boolean) as string[])
+
+  const myNotifs = notifications.filter((n: any) =>
+    (n.studentId && studentIds.has(n.studentId)) ||
+    (n.userId && studentIds.has(n.userId)) ||
+    (n.metadata?.studentId && studentIds.has(n.metadata.studentId)) ||
+    (n.metadata?.receiverId && studentIds.has(n.metadata.receiverId)) ||
+    n.role === 'student' ||
+    n.role === 'faculty' ||
+    n.targetRole === 'STUDENT'
+  ).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
   const unread = myNotifs.filter((n) => !n.read).length
 
   return (
@@ -99,7 +113,11 @@ export default function Notifications() {
                 key={notif.id}
                 onClick={() => {
                   markNotificationRead(notif.id)
-                  if (notif.rideId) navigate(`/student/rides`)
+                  if (notif.type === 'message' || (notif as any).eventType === 'RIDE_MESSAGE') {
+                    navigate(notif.rideId ? `/student/confirmation/${notif.rideId}` : '/student/rides')
+                  } else if (notif.rideId) {
+                    navigate(`/student/live?rideId=${notif.rideId}`)
+                  }
                 }}
                 className={cn(
                   'flex gap-3 p-4 rounded-xl border cursor-pointer transition-all duration-150',

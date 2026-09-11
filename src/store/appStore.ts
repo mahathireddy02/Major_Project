@@ -8,8 +8,10 @@ import type {
   SafetyEvent,
   AdminUser,
   Vehicle,
+  EmergencyContact,
 } from '../types'
 import { api } from '../services/api'
+import { sosAlarmPlayer } from '../utils/alarmSound'
 
 import { showNotificationToast } from '../components/notifications/NotificationToast'
 
@@ -79,6 +81,7 @@ interface AppState {
   currentStudentId: string
   currentDriverId: string
   backendReady: boolean
+  emergencyContact: EmergencyContact | null
 
   // Data
   students: Student[]
@@ -106,7 +109,7 @@ interface AppState {
   setRole: (role: Role) => void
   loginAsStudent: (studentId: string) => void
   loginAsDriver: (driverId: string) => void
-  login: (credentials: { email?: string; username?: string; phone?: string; password?: string; role?: string; userId?: string }) => Promise<{ success: boolean; role: Role; user: any }>
+  login: (credentials: { email?: string; username?: string; phone?: string; password?: string; otp?: string; code?: string; role?: string; userId?: string }) => Promise<{ success: boolean; role: Role; user: any }>
   registerStudent: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   registerFaculty: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   registerDriver: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
@@ -149,17 +152,21 @@ interface AppState {
   loadAuditLog: () => Promise<void>
 
   // Actions — Safety
-  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => Promise<any>
+  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string } | string, studentId?: string) => Promise<any>
   acknowledgeSafetyEvent: (eventId: string) => Promise<void>
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
+  setEmergencyContact: (contact: EmergencyContact | null) => void
+  loadEmergencyContact: () => Promise<EmergencyContact | null>
 
   // Actions — Messaging
-  sendMessage: (rideId: string, text: string) => void
-  replyToMessage: (rideId: string, text: string) => void
-  markMessagesRead: (rideId: string, role: 'student' | 'driver') => void
+  sendMessage: (rideId: string, text: string, driverId?: string, bookingId?: string) => Promise<void>
+  replyToMessage: (rideId: string, text: string, studentId?: string, bookingId?: string) => Promise<void>
+  markMessagesRead: (rideId: string, role: 'student' | 'driver') => Promise<void>
+  fetchRideMessages: (rideId: string) => Promise<void>
 
   // Actions — Notifications
+  fetchNotifications: () => Promise<void>
   markNotificationRead: (notifId: string) => Promise<void>
   markAllRead: () => Promise<void>
   addNotification: (n: Omit<Notification, 'id' | 'createdAt'>) => void
@@ -180,6 +187,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentStudentId: localStorage.getItem('campusflow_user_id') || '',
   currentDriverId: localStorage.getItem('campusflow_driver_id') || '',
   backendReady: false,
+  emergencyContact: null,
   students: [],
   drivers: [],
   vehicles: [],
@@ -212,13 +220,38 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       // Listen to real-time events from Fastify backend
       api.onRealtimeEvent((event, payload) => {
-        if (event === 'NOTIFICATION_ADDED' && payload) {
-          const notif = payload.notification || payload
-          if (notif && notif.id) {
+        if ((event === 'NOTIFICATION_ADDED' || event === 'RIDE_MESSAGE') && payload) {
+          const notif = payload.notification || payload.message || payload
+          if (notif && (notif.id || notif._id)) {
+            const notifId = notif.id || notif._id
             // 1. Save notification to persist in notification history & update unread badges
             set((state) => ({
-              notifications: [notif, ...state.notifications.filter((n) => n.id !== notif.id)],
+              notifications: [{ ...notif, id: notifId }, ...state.notifications.filter((n) => n.id !== notifId)],
             }))
+
+            // If it's a ride message, also push into messages state for live chat
+            if ((notif.type === 'message' || notif.eventType === 'RIDE_MESSAGE') && notif.rideId) {
+              const senderRole = (notif.metadata?.senderRole || (notif.role === 'student' ? 'driver' : 'student')) as 'student' | 'driver'
+              const senderName = notif.metadata?.senderName || (senderRole === 'driver' ? 'Driver' : 'Student')
+              const msg: RideMessage = {
+                id: notifId,
+                rideId: notif.rideId,
+                fromId: notif.metadata?.senderId || (senderRole === 'driver' ? notif.driverId : notif.studentId) || '',
+                fromName: senderName,
+                fromRole: senderRole,
+                text: notif.message,
+                sentAt: notif.createdAt || new Date().toISOString(),
+                read: Boolean(notif.read),
+              }
+              set((state) => {
+                const existingWithoutThis = state.messages.filter(
+                  (m) => m.id !== msg.id && !(m.id.startsWith('temp-') && m.text === msg.text && m.rideId === msg.rideId)
+                )
+                return {
+                  messages: [...existingWithoutThis, msg],
+                }
+              })
+            }
 
             // 2. Determine if the active user should receive a real-time toast popup
             const currentState = get()
@@ -254,6 +287,23 @@ export const useAppStore = create<AppState>((set, get) => ({
 
             if (isRelevant) {
               showNotificationToast(notif)
+            }
+          }
+        }
+            set((state) => ({
+              notifications: [{ ...notif, id: notifId }, ...state.notifications.filter((n) => n.id !== notifId)],
+            }))
+            // Fetch fresh notifications with authenticated credentials
+            const freshNotifs = await api.getNotifications().catch(() => [])
+            if (Array.isArray(freshNotifs)) {
+              set({ notifications: freshNotifs })
+            }
+            const activeId = profile.id || (isStudent ? get().currentStudentId : get().currentDriverId)
+            if (activeId) {
+              api.getEmergencyContact(activeId).then((ec) => {
+                if (ec) set({ emergencyContact: ec })
+              }).catch(() => {})
+            }
             }
           }
         } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
@@ -319,6 +369,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
+            // Immediately play loud emergency siren alarm across listening devices
+            sosAlarmPlayer.play().catch(() => {})
           }
           if (payload?.ride) {
             set((state) => ({
@@ -329,6 +381,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           event === 'SAFETY_EVENT_ACKNOWLEDGED' ||
           event === 'SOS_ACKNOWLEDGED'
         ) {
+          sosAlarmPlayer.stop()
           const rawEvent = payload?.safetyEvent || payload?.event || payload
           if (rawEvent?.id) {
             const normalized = normalizeSafetyEvent(rawEvent)
@@ -340,6 +393,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           event === 'SAFETY_EVENT_RESOLVED' ||
           event === 'SOS_RESOLVED'
         ) {
+          sosAlarmPlayer.stop()
           const rawEvent = payload?.safetyEvent || payload?.event || payload
           if (rawEvent?.id) {
             const normalized = normalizeSafetyEvent(rawEvent)
@@ -486,11 +540,27 @@ export const useAppStore = create<AppState>((set, get) => ({
           if (profile) {
             const isDriver = profile.role?.toUpperCase() === 'DRIVER'
             const isStudent = profile.role?.toUpperCase() === 'STUDENT' || profile.role?.toUpperCase() === 'FACULTY'
+            const activeDriverId = isDriver ? profile.id : (get().currentDriverId || 'd1')
+            const activeStudentId = isStudent ? profile.id : get().currentStudentId
+            api.setAuth(profile.id, activeDriverId, get().token)
             set({
               currentUser: profile,
-              currentStudentId: isStudent ? profile.id : get().currentStudentId,
-              currentDriverId: isDriver ? profile.id : get().currentDriverId,
+              currentStudentId: activeStudentId,
+              currentDriverId: activeDriverId,
+              role: isDriver ? 'driver' : 'student',
             })
+            // Fetch fresh notifications with authenticated credentials
+            const freshNotifs = await api.getNotifications().catch(() => [])
+            if (Array.isArray(freshNotifs)) {
+              set({ notifications: freshNotifs })
+            }
+            const activeId = profile.id || (isStudent ? get().currentStudentId : get().currentDriverId)
+            if (activeId) {
+              api.getEmergencyContact(activeId).then((ec) => {
+                if (ec) set({ emergencyContact: ec })
+              }).catch(() => {})
+            }
+            }
           }
         } catch {
           // token expired or invalid — don't overwrite
@@ -530,6 +600,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       localStorage.setItem('campusflow_role', mappedRole)
       localStorage.setItem('campusflow_token', res.token)
       if (res.user?.id) localStorage.setItem('campusflow_user_id', res.user.id)
+      if (mappedRole === 'driver' && res.user?.id) localStorage.setItem('campusflow_driver_id', res.user.id)
       api.setAuth(res.user?.id || get().currentStudentId, mappedRole === 'driver' ? res.user?.id : get().currentDriverId, res.token)
 
       set({
@@ -539,6 +610,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         currentStudentId: res.user?.id || get().currentStudentId,
         currentDriverId: mappedRole === 'driver' ? res.user?.id : get().currentDriverId,
       })
+
+      get().fetchNotifications()
+      if (res.user?.id) {
+        api.getEmergencyContact(res.user.id).then((ec) => {
+          if (ec) set({ emergencyContact: ec })
+        }).catch(() => {})
+      }
 
       return { success: true, role: mappedRole, user: res.user }
     } catch (err: any) {
@@ -621,7 +699,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   registerDriver: async (data) => {
     try {
       const res = await api.registerDriver(data)
-      api.setAuth(get().currentStudentId, res.user.id, res.token)
+      localStorage.setItem('campusflow_role', 'driver')
+      localStorage.setItem('campusflow_token', res.token)
+      if (res.user?.id) {
+        localStorage.setItem('campusflow_user_id', res.user.id)
+        localStorage.setItem('campusflow_driver_id', res.user.id)
+      }
+      api.setAuth(res.user.id, res.user.id, res.token)
       set((state) => ({
         drivers: [res.user, ...state.drivers],
         currentUser: res.user,
@@ -629,6 +713,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         token: res.token,
         role: 'driver',
       }))
+      get().fetchNotifications()
       return res
     } catch (err: any) {
       console.error('[Store] registerDriver error:', err)
@@ -1023,7 +1108,18 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Safety Actions
   triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
     try {
-      let payload: { rideId?: string; userId?: string; lat?: number; lng?: number } = {}
+      // Immediately start sounding loud siren alarm upon user gesture
+      sosAlarmPlayer.play().catch(() => {})
+
+      let payload: {
+        rideId?: string
+        userId?: string
+        lat?: number
+        lng?: number
+        emergencyPhone?: string
+        emergencyName?: string
+      } = {}
+
       if (typeof params === 'string') {
         payload = { rideId: params, userId: studentId || get().currentStudentId || get().currentUser?.id }
       } else if (params && typeof params === 'object') {
@@ -1035,6 +1131,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         payload = {
           userId: get().role === 'driver' ? (get().currentDriverId || get().currentUser?.id) : (get().currentStudentId || get().currentUser?.id)
         }
+      }
+
+      const isDummy = (p?: string) =>
+        !p ||
+        p.replace(/\D/g, '').includes('9876543210') ||
+        p.replace(/\D/g, '').includes('9876543219') ||
+        p.replace(/\D/g, '').length < 10
+
+      // Auto-attach stored emergency contact if not explicitly provided or if payload has dummy fallback
+      const storeContact = get().emergencyContact
+      if ((!payload.emergencyPhone || isDummy(payload.emergencyPhone)) && storeContact?.phone) {
+        payload.emergencyPhone = storeContact.phone
+        payload.emergencyName = storeContact.name
       }
 
       const res = await api.triggerSOS(payload)
@@ -1050,6 +1159,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err: any) {
       console.error('[Store] triggerSOS error:', err.message)
       throw err
+    }
+  },
+
+  setEmergencyContact: (contact: EmergencyContact | null) => {
+    set({ emergencyContact: contact })
+  },
+
+  loadEmergencyContact: async () => {
+    const userId = get().currentUser?.id || get().currentStudentId || get().currentDriverId
+    if (!userId) return null
+    try {
+      const contact = await api.getEmergencyContact(userId)
+      set({ emergencyContact: contact || null })
+      return contact
+    } catch {
+      return null
     }
   },
 
@@ -1090,45 +1215,169 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Messaging
-  sendMessage: (rideId, text) => {
-    const { currentUser, currentStudentId, students } = get()
+  // Messaging — persisted via backend Notification model
+  sendMessage: async (rideId, text, driverId, bookingId) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    const { currentUser, currentStudentId, students, rides, bookings } = get()
     const sender = currentUser || students.find((s) => s.id === currentStudentId)
-    const msg: RideMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    const senderId = sender?.id || currentStudentId || 's1'
+    const senderName = sender?.name || (senderId !== 's1' ? `Student (${senderId})` : 'Student')
+    const ride = rides.find((r) => r.id === rideId)
+    const targetDriverId = driverId || ride?.driverId || (ride as any)?.driver?.id || ''
+    const booking = bookings.find(
+      (b) => b.rideId === rideId && (b.studentId === senderId || b.studentId === currentStudentId)
+    )
+    const activeBookingId = bookingId || booking?.id
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const optimisticMsg: RideMessage = {
+      id: tempId,
       rideId,
-      fromId: sender?.id || currentStudentId,
-      fromName: sender?.name || 'Student',
+      fromId: senderId,
+      fromName: senderName,
       fromRole: 'student',
-      text: text.trim(),
+      text: trimmed,
       sentAt: new Date().toISOString(),
       read: false,
     }
-    set((state) => ({ messages: [...state.messages, msg] }))
+    // Optimistically add to local messages immediately so UI updates with zero delay
+    set((state) => ({ messages: [...state.messages, optimisticMsg] }))
+
+    try {
+      const doc = await api.sendRideMessage({
+        rideId,
+        bookingId: activeBookingId,
+        senderId,
+        senderName,
+        senderRole: 'student',
+        driverId: targetDriverId,
+        receiverId: targetDriverId,
+        text: trimmed,
+      })
+      const finalId = doc?.id || doc?._id || tempId
+      const finalCreatedAt = doc?.createdAt || optimisticMsg.sentAt
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m.id === tempId ? { ...m, id: finalId, sentAt: finalCreatedAt } : m
+        ),
+      }))
+      get().fetchNotifications()
+    } catch (err: any) {
+      console.error('[Store] sendMessage error:', err.message)
+    }
   },
 
-  replyToMessage: (rideId, text) => {
-    const { currentUser, currentDriverId, drivers } = get()
+  replyToMessage: async (rideId, text, studentId, bookingId) => {
+    const trimmed = text.trim()
+    if (!trimmed) return
+
+    const { currentUser, currentDriverId, drivers, rides } = get()
     const driver = currentUser || drivers.find((d) => d.id === currentDriverId)
-    const msg: RideMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+    const senderId = driver?.id || currentDriverId || 'd1'
+    const senderName = driver?.name || 'Driver'
+    const ride = rides.find((r) => r.id === rideId)
+    const targetDriverId = senderId || ride?.driverId || ''
+    const targetStudentId = studentId || ''
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
+    const optimisticMsg: RideMessage = {
+      id: tempId,
       rideId,
-      fromId: driver?.id || currentDriverId,
-      fromName: driver?.name || 'Driver',
+      fromId: senderId,
+      fromName: senderName,
       fromRole: 'driver',
-      text: text.trim(),
+      text: trimmed,
       sentAt: new Date().toISOString(),
       read: false,
     }
-    set((state) => ({ messages: [...state.messages, msg] }))
+    // Optimistically add to local messages immediately
+    set((state) => ({ messages: [...state.messages, optimisticMsg] }))
+
+    try {
+      const doc = await api.sendRideMessage({
+        rideId,
+        bookingId,
+        senderId,
+        senderName,
+        senderRole: 'driver',
+        driverId: targetDriverId,
+        studentId: targetStudentId,
+        receiverId: targetStudentId,
+        text: trimmed,
+      })
+      const finalId = doc?.id || doc?._id || tempId
+      const finalCreatedAt = doc?.createdAt || optimisticMsg.sentAt
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m.id === tempId ? { ...m, id: finalId, sentAt: finalCreatedAt } : m
+        ),
+      }))
+      get().fetchNotifications()
+    } catch (err: any) {
+      console.error('[Store] replyToMessage error:', err.message)
+    }
   },
 
-  markMessagesRead: (rideId, role) => {
-    set((state) => ({
-      messages: state.messages.map((m) =>
-        m.rideId === rideId && m.fromRole !== role ? { ...m, read: true } : m
-      ),
-    }))
+  fetchRideMessages: async (rideId) => {
+    try {
+      const docs = await api.getRideMessages(rideId)
+      const msgs: RideMessage[] = (docs || []).map((doc: any) => {
+        const role = (doc.metadata?.senderRole || (doc.role === 'student' ? 'driver' : 'student')) as 'student' | 'driver'
+        const name = doc.metadata?.senderName || (role === 'driver' ? 'Driver' : 'Student')
+        return {
+          id: doc.id || doc._id,
+          rideId: doc.rideId,
+          fromId: doc.metadata?.senderId || (role === 'driver' ? doc.driverId : doc.studentId) || '',
+          fromName: name,
+          fromRole: role,
+          text: doc.message,
+          sentAt: doc.createdAt,
+          read: Boolean(doc.read),
+        }
+      })
+      set((state) => {
+        const backendIds = new Set(msgs.map((m) => m.id))
+        const optimistic = state.messages.filter(
+          (m) =>
+            m.rideId === rideId &&
+            !backendIds.has(m.id) &&
+            !msgs.some((bm) => bm.text === m.text && bm.fromRole === m.fromRole)
+        )
+        const otherRides = state.messages.filter((m) => m.rideId !== rideId)
+        return { messages: [...otherRides, ...msgs, ...optimistic] }
+      })
+    } catch (err: any) {
+      console.error('[Store] fetchRideMessages error:', err.message)
+    }
+  },
+
+  markMessagesRead: async (rideId, role) => {
+    try {
+      set((state) => ({
+        messages: state.messages.map((m) =>
+          m.rideId === rideId && m.fromRole !== role ? { ...m, read: true } : m
+        ),
+        notifications: state.notifications.map((n) =>
+          n.rideId === rideId && n.type === 'message' ? { ...n, read: true } : n
+        ),
+      }))
+      await api.markRideMessagesRead(rideId)
+    } catch (err: any) {
+      console.error('[Store] markMessagesRead error:', err.message)
+    }
+  },
+
+  fetchNotifications: async () => {
+    try {
+      const notifs = await api.getNotifications()
+      if (Array.isArray(notifs)) {
+        set({ notifications: notifs })
+      }
+    } catch (err: any) {
+      console.error('[Store] fetchNotifications error:', err.message)
+    }
   },
 
   // Notifications
