@@ -77,10 +77,38 @@ export class RouteProgressService {
     const pickupStops: IRouteStop[] = []
     const processedPickups = new Set<string>()
 
+    // Check if originName should be the initial stop
+    const originPassenger = (ride.passengers || []).find((p) => p.pickup.toLowerCase() === originName.toLowerCase())
+    const originBooking = bookings.find((b) => b.pickup?.toLowerCase() === originName.toLowerCase())
+
+    pickupStops.push({
+      id: `stop-${ride.id}-origin`,
+      bookingId: originBooking?.id,
+      studentId: originPassenger?.studentId || originBooking?.studentId,
+      type: 'PICKUP',
+      name: originName,
+      latitude: originLat,
+      longitude: originLng,
+      sequence: 1,
+      status: ride.status === 'active'
+        ? (originPassenger?.status === 'boarded' ? 'BOARDED' : originPassenger ? 'ARRIVED' : 'COMPLETED')
+        : 'UPCOMING',
+      estimatedArrival: 'Departed',
+    })
+    processedPickups.add(originName.toLowerCase())
+
     // First from ride.pickupPoints (official predefined stops)
     for (const pp of ride.pickupPoints || []) {
+      if (processedPickups.has(pp.name.toLowerCase())) continue
+
       const passenger = (ride.passengers || []).find((p) => p.pickup.toLowerCase() === pp.name.toLowerCase())
       const b = bookings.find((item) => item.pickup?.toLowerCase() === pp.name.toLowerCase())
+
+      // Skip unbooked template pickup points if driver has a custom start location
+      if (!passenger && !b && (customStartName || ride.startLocation)) {
+        continue
+      }
+
       const stopId = `stop-${ride.id}-pickup-${pp.id || pp.name.toLowerCase().replace(/\s+/g, '-')}`
 
       pickupStops.push({
@@ -559,6 +587,16 @@ export class RouteProgressService {
         lat,
         lng,
         estimatedPickupTime: '8:20 AM',
+      })
+    }
+
+    // Clean up unbooked template placeholder stops (e.g. Railway Station) that have no passenger assigned
+    if (ride.startLocation && ride.pickupPoints && ride.pickupPoints.length > 1) {
+      ride.pickupPoints = ride.pickupPoints.filter((pp) => {
+        const hasPax = (ride.passengers || []).some((p: any) => p.pickup?.toLowerCase() === pp.name.toLowerCase())
+        const isStart = pp.name.toLowerCase() === ride.startLocation?.toLowerCase()
+        const isNewPickup = pp.name.toLowerCase() === pickup.toLowerCase()
+        return hasPax || isStart || isNewPickup
       })
     }
 

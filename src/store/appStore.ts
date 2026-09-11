@@ -226,7 +226,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
           if (payload?.ride) {
             set((state) => ({
-              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r)),
+              rides: state.rides.some((r) => r.id === payload.ride.id)
+                ? state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r))
+                : [payload.ride, ...state.rides],
             }))
           }
         } else if (event === 'BOOKING_UPDATED') {

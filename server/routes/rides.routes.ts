@@ -566,6 +566,30 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
+    if (startLocation && typeof startLat === 'number' && typeof startLng === 'number') {
+      const firstPP = ride.pickupPoints?.[0]
+      const hasPaxAtFirst = firstPP && (ride.passengers || []).some((p: any) => p.pickup?.toLowerCase() === firstPP.name?.toLowerCase())
+      if (!hasPaxAtFirst) {
+        if (!ride.pickupPoints || ride.pickupPoints.length === 0) {
+          ride.pickupPoints = [{
+            id: `pp-start-${ride.id}`,
+            name: startLocation,
+            lat: startLat,
+            lng: startLng,
+            estimatedPickupTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }]
+        } else {
+          ride.pickupPoints[0] = {
+            id: ride.pickupPoints[0].id || `pp-start-${ride.id}`,
+            name: startLocation,
+            lat: startLat,
+            lng: startLng,
+            estimatedPickupTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          }
+        }
+      }
+    }
+
     await routeProgressService.buildTripRoute(ride, startLat, startLng, startLocation)
     if (ride.tripRoute) {
       ride.tripRoute.status = 'NAVIGATING'

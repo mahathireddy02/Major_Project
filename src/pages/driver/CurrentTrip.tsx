@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   MapPin,
@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { useLiveTrip } from '../../hooks/useLiveTrip'
+import { api } from '../../services/api'
 import Card from '../../components/ui/Card'
 import Badge from '../../components/ui/Badge'
 import Button from '../../components/ui/Button'
@@ -58,12 +59,43 @@ export default function CurrentTrip() {
   const students = useAppStore((s) => s.students)
   const currentUser = useAppStore((s) => s.currentUser)
   const currentDriverId = useAppStore((s) => s.currentDriverId)
+  const currentDriver = useAppStore((s) => s.currentDriver())
   const completeRideInStore = useAppStore((s) => s.completeRide)
   const refreshRides = useAppStore((s) => s.refreshRides)
 
-  // Find active ride
+  // Fetch freshest rides from server on mount
+  useEffect(() => {
+    refreshRides()
+  }, [refreshRides])
+
+  // Real-time synchronization for passenger bookings & ride status updates
+  useEffect(() => {
+    const unsub = api.onRealtimeEvent((event) => {
+      if (
+        event === 'BOOKING_CREATED' ||
+        event === 'BOOKING_UPDATED' ||
+        event === 'BOOKING_CANCELLED' ||
+        event === 'PASSENGER_ADDED' ||
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED' ||
+        event === 'RIDE_UPDATED' ||
+        event === 'RIDE_STARTED' ||
+        event === 'ROUTE_UPDATED'
+      ) {
+        refreshRides()
+      }
+    })
+    return unsub
+  }, [refreshRides])
+
+  // Find active ride with priority matching
   const filteredRides = rides.filter(
-    (r) => r.driverId === currentDriverId || r.driverId === currentUser?.id || r.driverId === 'd1'
+    (r) =>
+      r.driverId === currentDriverId ||
+      r.driverId === currentDriver?.id ||
+      r.driverId === currentUser?.id ||
+      r.driverId === 'd1' ||
+      (currentDriver?.name && (r as any).driverName === currentDriver.name)
   )
   const sortedRides = [...filteredRides].sort((a, b) => {
     const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
@@ -72,14 +104,56 @@ export default function CurrentTrip() {
     return b.id.localeCompare(a.id)
   })
 
-  const activeRide = targetRideId
-    ? sortedRides.find((r) => r.id === targetRideId)
-    : (
-        sortedRides.find((r) => r.status === 'active') ||
-        sortedRides.find((r) => r.status === 'boarding') ||
-        sortedRides.find((r) => (r.status === 'waiting' || r.status === 'full') && (r.bookedSeats > 0 || (r.passengers && r.passengers.length > 0))) ||
-        sortedRides.find((r) => r.status === 'waiting')
-      )
+  // Prioritize rides that actually have booked passengers or active status
+  const activeRide = (targetRideId ? (rides.find((r) => r.id === targetRideId) || sortedRides.find((r) => r.id === targetRideId)) : null) ||
+    // Priority 1: In-progress ride that has passengers
+    sortedRides.find((r) => (r.status === 'active' || r.status === 'boarding') && ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0))) ||
+    // Priority 2: Waiting/full ride that has passengers
+    sortedRides.find((r) => (r.status === 'waiting' || r.status === 'full') && ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0))) ||
+    // Priority 3: Any ride with passengers regardless of status
+    sortedRides.find((r) => ((r.bookedSeats && r.bookedSeats > 0) || (r.passengers && r.passengers.length > 0)) && r.status !== 'completed' && r.status !== 'cancelled') ||
+    // Priority 4: Active or boarding ride even if empty
+    sortedRides.find((r) => r.status === 'active' || r.status === 'boarding') ||
+    // Priority 5: Waiting ride
+    sortedRides.find((r) => r.status === 'waiting') ||
+    sortedRides[0]
+
+  // Directly fetch authoritative ride bookings from backend for instantaneous passenger sync
+  const [rideBookings, setRideBookings] = useState<any[]>([])
+
+  const loadRideBookings = useCallback(async () => {
+    if (!activeRide?.id) return
+    try {
+      const data = await api.getRideBookings(activeRide.id)
+      if (Array.isArray(data)) {
+        setRideBookings(data.filter((b: any) => b.status !== 'cancelled'))
+      }
+    } catch {
+      // ignore
+    }
+  }, [activeRide?.id])
+
+  useEffect(() => {
+    loadRideBookings()
+  }, [loadRideBookings])
+
+  useEffect(() => {
+    const unsub = api.onRealtimeEvent((event, payload) => {
+      if (
+        event === 'BOOKING_CREATED' ||
+        event === 'BOOKING_UPDATED' ||
+        event === 'BOOKING_CANCELLED' ||
+        event === 'PASSENGER_ADDED' ||
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED'
+      ) {
+        if (!payload?.rideId || payload.rideId === activeRide?.id) {
+          loadRideBookings()
+        }
+      }
+    })
+    return unsub
+  }, [activeRide?.id, loadRideBookings])
 
   // Live Trip Hook
   const {
@@ -106,6 +180,80 @@ export default function CurrentTrip() {
 
   // Authoritative synced ride state
   const effectiveRide = tripState?.ride ? { ...activeRide, ...tripState.ride } : activeRide
+
+  // Complete passenger manifest merging ride.passengers with authoritative bookings
+  const manifestPassengers = useMemo(() => {
+    const list = [...(effectiveRide?.passengers || [])]
+    const existingStudentIds = new Set(list.map((p) => p.studentId))
+
+    for (const b of rideBookings) {
+      if (!existingStudentIds.has(b.studentId)) {
+        list.push({
+          studentId: b.studentId,
+          name: b.studentName || 'Student Passenger',
+          pickup: b.pickupName || b.pickup,
+          destination: b.destinationName || b.destination || effectiveRide?.destination || 'Destination Hub',
+          status: b.status === 'in_transit' ? 'boarded' : b.status === 'completed' ? 'dropped' : 'waiting',
+          seatNo: b.seatNo || list.length + 1,
+        })
+        existingStudentIds.add(b.studentId)
+      }
+    }
+    return list
+  }, [effectiveRide?.passengers, effectiveRide?.destination, rideBookings])
+
+  // Computed route stops ensuring driver origin is stop 1 and omitting unbooked placeholder stops
+  const routeStops = useMemo(() => {
+    const baseStops = (tripState?.stops && tripState.stops.length > 0)
+      ? tripState.stops
+      : (effectiveRide?.stops || [])
+
+    const originName = effectiveRide?.startLocation || effectiveRide?.pickupPoints?.[0]?.name || 'Driver Start Location'
+    const originLat = effectiveRide?.startLocationLat || effectiveRide?.currentLat || 17.4934
+    const originLng = effectiveRide?.startLocationLng || effectiveRide?.currentLng || 78.3995
+
+    let result = [...baseStops]
+
+    // If driver started at a custom location, filter out any unbooked template "Railway Station" stops
+    if (originName.toLowerCase() !== 'railway station') {
+      result = result.filter((s) => {
+        if (s.name.toLowerCase() === 'railway station' && !s.studentId && !s.bookingId) {
+          return false
+        }
+        return true
+      })
+    }
+
+    const hasOrigin = result.some((s) => s.name.toLowerCase() === originName.toLowerCase() || s.id?.includes('origin'))
+    if (!hasOrigin && originName) {
+      result.unshift({
+        id: `stop-${effectiveRide?.id || 'curr'}-origin`,
+        type: 'PICKUP',
+        name: originName,
+        latitude: originLat,
+        longitude: originLng,
+        sequence: 1,
+        status: effectiveRide?.status === 'active' ? 'COMPLETED' : 'UPCOMING',
+        estimatedArrival: 'Departed',
+      })
+    }
+
+    return result.map((s, i) => ({
+      ...s,
+      sequence: i + 1,
+    }))
+  }, [
+    tripState?.stops,
+    effectiveRide?.stops,
+    effectiveRide?.startLocation,
+    effectiveRide?.startLocationLat,
+    effectiveRide?.startLocationLng,
+    effectiveRide?.currentLat,
+    effectiveRide?.currentLng,
+    effectiveRide?.pickupPoints,
+    effectiveRide?.status,
+    effectiveRide?.id,
+  ])
 
   // Real Browser GPS Tracking state
   const [isGpsActive, setIsGpsActive] = useState<boolean>(false)
@@ -571,7 +719,7 @@ export default function CurrentTrip() {
       {/* Stop Sequence Progression Checklist */}
       <Card padding="md">
         <h3 className="font-heading font-bold text-slate-900 text-sm mb-3 flex items-center justify-between">
-          <span>Route Stops ({tripState?.stops?.length || (effectiveRide.pickupPoints?.length || 0) + 1})</span>
+          <span>Route Stops ({routeStops.length})</span>
           <span className="text-xs font-semibold text-primary-600">
             {progress?.percent ? `${progress.percent}% Completed` : '0% Completed'}
           </span>
@@ -586,7 +734,7 @@ export default function CurrentTrip() {
         </div>
 
         <div className="space-y-3">
-          {(tripState?.stops || []).map((stop, idx) => {
+          {(routeStops || []).map((stop, idx) => {
             const isDone = stop.status === 'BOARDED' || stop.status === 'COMPLETED'
             const isCurrent = currentStop?.id === stop.id
 
@@ -613,7 +761,13 @@ export default function CurrentTrip() {
                     <p className={`text-xs font-bold ${isDone ? 'line-through text-slate-400' : 'text-slate-800'}`}>
                       {stop.name}
                     </p>
-                    <p className="text-[10px] text-slate-400">{stop.type === 'DROPOFF' ? 'Destination' : 'Pickup Bay'}</p>
+                    <p className="text-[10px] text-slate-400">
+                      {stop.type === 'DROPOFF'
+                        ? 'Destination'
+                        : (stop.id?.includes('origin') || idx === 0)
+                        ? 'Start Location (Origin)'
+                        : 'Pickup Bay'}
+                    </p>
                   </div>
                 </div>
 
@@ -656,19 +810,19 @@ export default function CurrentTrip() {
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-primary-600" />
             <h3 className="font-heading font-bold text-slate-900 text-sm">
-              Pooled Passengers ({effectiveRide.passengers?.length || 0})
+              Pooled Passengers ({manifestPassengers.length})
             </h3>
           </div>
           <span className="text-xs font-semibold text-slate-500">
-            {effectiveRide.passengers?.filter((p) => p.status === 'boarded').length || 0} on board
+            {manifestPassengers.filter((p) => p.status === 'boarded').length} on board
           </span>
         </div>
 
         <div className="divide-y divide-slate-100">
-          {(effectiveRide.passengers || []).length === 0 ? (
+          {manifestPassengers.length === 0 ? (
             <p className="text-xs text-slate-400 py-3 text-center">No passengers booked yet.</p>
           ) : (
-            (effectiveRide.passengers || []).map((passenger) => (
+            manifestPassengers.map((passenger) => (
               <div key={passenger.studentId} className="py-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <Avatar name={passenger.name} size="sm" />
