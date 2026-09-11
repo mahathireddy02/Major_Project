@@ -735,6 +735,8 @@ export default function CurrentTrip() {
           interactive
           alertMode={progress?.isOffRoute || effectiveRide.hasDeviation}
           showRecenterButton={isRecenterNeeded}
+          rideBookedSeats={effectiveRide.bookedSeats ?? manifestPassengers.length}
+          rideCapacity={effectiveRide.capacity}
         />
 
         {/* Floating Telematics Simulation & GPS Controls */}

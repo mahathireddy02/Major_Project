@@ -73,10 +73,26 @@ export function normalizeRide(r: Ride): Ride {
   let cleanName = r.routeName
   if (typeof cleanName === 'string') {
     cleanName = cleanName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim()
+    cleanName = cleanName
+      .replace(/Hostel A/g, 'Sri Indu Boys Hostel')
+      .replace(/Hostel B/g, 'Sri Indu Girls Hostel')
+      .replace(/Hostel C/g, 'Campus Transit Terminal')
+    const arrowParts = cleanName.split('→').map((s) => s.trim())
+    if (arrowParts.length === 2 && arrowParts[0].toLowerCase() === arrowParts[1].toLowerCase()) {
+      cleanName = `${arrowParts[0]} → SRI INDU College`
+    }
+  }
+  let cleanDest = r.destination
+  if (typeof cleanDest === 'string') {
+    cleanDest = cleanDest
+      .replace(/Hostel A/g, 'Sri Indu Boys Hostel')
+      .replace(/Hostel B/g, 'Sri Indu Girls Hostel')
+      .replace(/Hostel C/g, 'Campus Transit Terminal')
   }
   return {
     ...r,
     routeName: cleanName || 'Campus Shuttle',
+    destination: cleanDest || 'SRI INDU College',
   }
 }
 

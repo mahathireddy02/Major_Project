@@ -343,6 +343,20 @@ class ApiClient {
   }
 
 
+  private cleanRideName(name?: string): string {
+    if (!name) return 'Campus Shuttle'
+    let clean = name.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim()
+    clean = clean
+      .replace(/Hostel A/g, 'Sri Indu Boys Hostel')
+      .replace(/Hostel B/g, 'Sri Indu Girls Hostel')
+      .replace(/Hostel C/g, 'Campus Transit Terminal')
+    const arrowParts = clean.split('→').map((s) => s.trim())
+    if (arrowParts.length === 2 && arrowParts[0].toLowerCase() === arrowParts[1].toLowerCase()) {
+      clean = `${arrowParts[0]} → SRI INDU College`
+    }
+    return clean || 'Campus Shuttle'
+  }
+
   // --- Rides ---
   async getRides(query?: { status?: string; date?: string }): Promise<Ride[]> {
     const params = new URLSearchParams()
@@ -352,7 +366,7 @@ class ApiClient {
     const rides = await this.request<Ride[]>(`/rides${qs}`)
     return (rides || []).map((r) => ({
       ...r,
-      routeName: r.routeName ? r.routeName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim() : r.routeName,
+      routeName: this.cleanRideName(r.routeName),
     }))
   }
 
@@ -361,7 +375,7 @@ class ApiClient {
     if (!r) return r
     return {
       ...r,
-      routeName: r.routeName ? r.routeName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim() : r.routeName,
+      routeName: this.cleanRideName(r.routeName),
     }
   }
 

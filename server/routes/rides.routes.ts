@@ -19,6 +19,9 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
     const filter: any = {}
     if (query.status && query.status !== 'all') {
       filter.status = query.status.toLowerCase()
+    } else if (!query.status) {
+      // Default: exclude completed rides from the browse/available list
+      filter.status = { $ne: 'completed' }
     }
     if (query.date) {
       filter.date = query.date
@@ -193,8 +196,13 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
 
 
   // Create new ride
-  fastify.post('/', async (request) => {
+  fastify.post('/', async (request, reply) => {
     const body = request.body as any
+    const startLoc = (body.startLocation || body.pickupPoints?.[0]?.name || '').trim().toLowerCase()
+    const destLoc = (body.destination || '').trim().toLowerCase()
+    if (startLoc && destLoc && startLoc === destLoc) {
+      return reply.status(400).send({ success: false, error: { message: 'Pickup and destination cannot be the same location.' } })
+    }
     const rideId = body.id || `ride-${Date.now().toString().slice(-4)}`
 
     // Generate initial OSRM route if coordinates exist
@@ -278,6 +286,12 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
 
     const requestedSeats = body.seats || 1
     const studentId = body.studentId || (request.headers['x-user-id'] as string) || 's1'
+
+    const pLoc = (body.pickupName || body.pickup || '').trim().toLowerCase()
+    const dLoc = (body.destinationName || body.destination || '').trim().toLowerCase()
+    if (pLoc && dLoc && pLoc === dLoc) {
+      return reply.status(400).send({ success: false, error: { message: 'Pickup and destination cannot be the same location.' } })
+    }
 
     // Fetch student info
     const student = await UserModel.findOne({ id: studentId })

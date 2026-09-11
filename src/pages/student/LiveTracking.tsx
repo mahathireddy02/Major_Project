@@ -371,6 +371,8 @@ export default function LiveTracking() {
           interactive
           alertMode={progress?.isOffRoute || effectiveRide.hasDeviation}
           showRecenterButton={isRecenterNeeded}
+          rideBookedSeats={effectiveRide.bookedSeats}
+          rideCapacity={effectiveRide.capacity}
         />
       </div>
 
@@ -397,7 +399,13 @@ export default function LiveTracking() {
           <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-2">
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
               <span>Your Trip Route</span>
-              <span className="text-primary-700 font-semibold">{effectiveRide.routeName || `${myPickup} → ${myDestination}`}</span>
+              <span className="text-primary-700 font-semibold">
+                {myPickup && myDestination && myPickup.toLowerCase() !== myDestination.toLowerCase()
+                  ? `${myPickup} → ${myDestination}`
+                  : effectiveRide.routeName && !effectiveRide.routeName.includes('→')
+                    ? effectiveRide.routeName
+                    : `${myPickup} → SRI INDU College`}
+              </span>
             </div>
 
             <div className="grid grid-cols-3 gap-2 relative">
