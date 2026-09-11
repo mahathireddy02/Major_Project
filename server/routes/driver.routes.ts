@@ -7,6 +7,7 @@ import { VehicleLocationHistoryModel } from '../models/VehicleLocationHistory.js
 import { realtimeService } from '../services/realtimeService.js'
 import { notificationService } from '../services/notificationService.js'
 import { routeProgressService } from '../services/routeProgressService.js'
+import { recoveryService } from '../services/recoveryService.js'
 import { requireRoles } from '../middleware/auth.js'
 
 export const driverRoutes: FastifyPluginAsync = async (fastify) => {
@@ -491,6 +492,32 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     realtimeService.broadcast('PASSENGER_BOARDED', { rideId, studentId, status })
 
     return { success: true, data: ride }
+  })
+
+  // Driver reports vehicle breakdown (automated ride recovery)
+  fastify.post('/breakdown', async (request, reply) => {
+    const driverId = request.user?.id || (request.headers['x-driver-id'] as string) || 'd1'
+    const body = (request.body as any) || {}
+
+    try {
+      const result = await recoveryService.reportBreakdown({
+        vehicleId: body.vehicleId,
+        driverId,
+        location: body.location,
+        reason: body.reason || 'Driver reported vehicle breakdown / malfunction',
+        trigger: 'DRIVER_REPORTED',
+      })
+
+      return reply.status(200).send({
+        success: true,
+        data: result,
+      })
+    } catch (err: any) {
+      return reply.status(400).send({
+        success: false,
+        error: { message: err.message || 'Breakdown reporting failed' },
+      })
+    }
   })
 }
 

@@ -17,6 +17,7 @@ import { demoRoutes } from './routes/demo.routes.js'
 import { geocodingRoutes } from './routes/geocoding.routes.js'
 import { optimizationRoutes } from './routes/optimization.routes.js'
 import { pricingRoutes } from './routes/pricing.routes.js'
+import { recoveryRoutes } from './routes/recovery.routes.js'
 import { pythonOptimizerService } from './services/pythonOptimizerService.js'
 
 import { UserModel } from './models/User.js'
@@ -79,6 +80,7 @@ export async function buildServer() {
   await fastify.register(geocodingRoutes, { prefix: '/api/geocoding' })
   await fastify.register(optimizationRoutes, { prefix: '/api/optimization' })
   await fastify.register(pricingRoutes, { prefix: '/api/pricing' })
+  await fastify.register(recoveryRoutes, { prefix: '/api' })
 
   // Error Handler
   fastify.setErrorHandler((error: any, request, reply) => {
