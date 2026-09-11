@@ -32,6 +32,9 @@ export default function RideDetail() {
 
   const [remoteRide, setRemoteRide] = useState<Ride | null>(null)
   const [loadingRide, setLoadingRide] = useState(!rides.some((r) => r.id === id))
+  const [fareBreakdown, setFareBreakdown] = useState<FareBreakdown | null>(null)
+  const [fareAmount, setFareAmount] = useState<number | null>(null)
+  const [isLockedFare, setIsLockedFare] = useState<boolean>(false)
 
   useEffect(() => {
     if (id && !rides.some((r) => r.id === id)) {
@@ -51,52 +54,15 @@ export default function RideDetail() {
   }, [id, rides])
 
   const ride = rides.find((r) => r.id === id) || remoteRide
-
-  if (loadingRide && !ride) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-sm font-semibold text-slate-700">Loading ride details...</p>
-      </div>
-    )
-  }
-
-  if (!ride) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-12 text-center">
-        <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
-        <h2 className="text-xl font-heading font-bold text-slate-800 mb-2">Ride Not Found</h2>
-        <p className="text-sm text-slate-500 mb-6">The ride you're looking for does not exist or has finished.</p>
-        <Button onClick={() => navigate('/student/home')}>Return Home</Button>
-      </div>
-    )
-  }
-
-  const driver = drivers.find((d) => d.id === ride.driverId)
-  const vehicle = vehicles.find((v) => v.id === ride.vehicleId)
-  const isPassenger = ride.passengers.some((p) => p.studentId === currentStudentId)
-  const isFull = ride.bookedSeats >= ride.capacity
-  const availableSeats = ride.capacity - ride.bookedSeats
-  const requestedPickup = searchParams.get('pickup') || ride.pickupPoints[0]?.name || 'Pickup Point'
-  const requestedDestination = searchParams.get('destination') || ride.destination
+  const isPassenger = Boolean(ride?.passengers?.some((p) => p.studentId === currentStudentId))
+  const requestedPickup = searchParams.get('pickup') || ride?.pickupPoints?.[0]?.name || 'Pickup Point'
+  const requestedDestination = searchParams.get('destination') || ride?.destination || 'Destination'
   const requestedPickupLat = Number(searchParams.get('pickupLat')) || undefined
   const requestedPickupLng = Number(searchParams.get('pickupLng')) || undefined
   const requestedDestLat = Number(searchParams.get('destinationLat')) || undefined
   const requestedDestLng = Number(searchParams.get('destinationLng')) || undefined
   const requestedPickupAddress = searchParams.get('pickupAddress') || requestedPickup
   const requestedDestAddress = searchParams.get('destinationAddress') || requestedDestination
-
-  const isFemaleOnlyRide = Boolean(
-    ride.isFemaleOnly ||
-    ride.genderPreference === 'FEMALE_ONLY' ||
-    ride.passengers?.some((p) => p.genderPreference === 'FEMALE_ONLY')
-  )
-  const isMaleStudent = currentStudent?.gender?.toLowerCase() === 'male'
-  const isGenderRestricted = isFemaleOnlyRide && isMaleStudent
-
-  const [fareBreakdown, setFareBreakdown] = useState<FareBreakdown | null>(null)
-  const [fareAmount, setFareAmount] = useState<number | null>(null)
-  const [isLockedFare, setIsLockedFare] = useState<boolean>(false)
 
   // Fetch individual fare: from existing booking if passenger, or backend estimate if joining
   useEffect(() => {
@@ -148,6 +114,39 @@ export default function RideDetail() {
       }).catch((err) => console.warn('[RideDetail] Dynamic fare estimate failed:', err))
     }
   }, [ride?.id, currentStudentId, isPassenger, requestedPickupLat, requestedPickupLng, requestedDestLat, requestedDestLng])
+
+  if (loadingRide && !ride) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-16 text-center">
+        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4" />
+        <p className="text-sm font-semibold text-slate-700">Loading ride details...</p>
+      </div>
+    )
+  }
+
+  if (!ride) {
+    return (
+      <div className="max-w-lg mx-auto px-4 py-12 text-center">
+        <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
+        <h2 className="text-xl font-heading font-bold text-slate-800 mb-2">Ride Not Found</h2>
+        <p className="text-sm text-slate-500 mb-6">The ride you're looking for does not exist or has finished.</p>
+        <Button onClick={() => navigate('/student/home')}>Return Home</Button>
+      </div>
+    )
+  }
+
+  const driver = drivers.find((d) => d.id === ride.driverId)
+  const vehicle = vehicles.find((v) => v.id === ride.vehicleId)
+  const isFull = ride.bookedSeats >= ride.capacity
+  const availableSeats = ride.capacity - ride.bookedSeats
+
+  const isFemaleOnlyRide = Boolean(
+    ride.isFemaleOnly ||
+    ride.genderPreference === 'FEMALE_ONLY' ||
+    ride.passengers?.some((p) => p.genderPreference === 'FEMALE_ONLY')
+  )
+  const isMaleStudent = currentStudent?.gender?.toLowerCase() === 'male'
+  const isGenderRestricted = isFemaleOnlyRide && isMaleStudent
 
   const mapPoints = [
     {
