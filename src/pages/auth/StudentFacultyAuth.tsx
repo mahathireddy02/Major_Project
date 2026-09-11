@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  fuzzyMatchCollege, fuzzyMatchId, fuzzyMatchName,
+  fuzzyMatchId,
   preprocessImage, extractStudentFields, verifyCollegeInOcrText,
+  searchNameInFullText,
 } from '../../lib/ocrUtils'
 import { validateInstitutionalEmail } from '../../lib/emailValidation'
 import {
@@ -157,17 +158,27 @@ export default function StudentFacultyAuth() {
       const { name, roll, college, fullText } = await extractStudentFields(processed, fileDataUri)
 
       const targetId = userType === 'student' ? rollNumber : collegeId
-      const nameOk = Boolean(name && fullName && fuzzyMatchName(fullName, name))
+
+      // Name: search entered name across the FULL OCR text, not just extracted field
+      const nameSearch = searchNameInFullText(fullName, fullText)
+      const nameOk = nameSearch.found
+      const detectedNameValue = nameSearch.detectedValue || name
+
+      // Roll: exact/normalized match only — mismatch stays mismatch
       const rollOk = Boolean(roll && targetId && fuzzyMatchId(targetId, roll))
 
-      // College verification: check whether entered college is present anywhere in complete OCR text
+      // College: search entered college anywhere in full OCR text
       const collegeCheck = verifyCollegeInOcrText(collegeName, fullText)
       const collegeOk = collegeCheck.isMatch
 
       const collegeFound = collegeCheck.matchedText || college || ''
-      setDetectedName(name)
+      setDetectedName(detectedNameValue)
       setDetectedRoll(roll)
       setDetectedCollege(collegeFound)
+
+      console.debug('[OCR] nameSearch:', nameSearch)
+      console.debug('[OCR] rollOk:', rollOk, '| entered:', targetId, '| detected:', roll)
+      console.debug('[OCR] collegeOk:', collegeOk, '| matched:', collegeFound)
 
       const hasOcrText = Boolean(fullText && fullText.trim().length >= 3)
       const isMatch = nameOk && rollOk && collegeOk
