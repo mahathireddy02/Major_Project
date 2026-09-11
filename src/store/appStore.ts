@@ -377,17 +377,52 @@ export const useAppStore = create<AppState>((set, get) => ({
           event === 'DRIVER_SOS_TRIGGERED' ||
           event === 'SOS_TRIGGERED'
         ) {
+          const rawEvent = payload?.safetyEvent || payload?.event || payload
+          const eventStatus = payload?.status || rawEvent?.status
+          const isAckOrResolved =
+            eventStatus === 'ACKNOWLEDGED' ||
+            eventStatus === 'RESOLVED' ||
+            rawEvent?.status === 'ACKNOWLEDGED' ||
+            rawEvent?.status === 'RESOLVED' ||
+            rawEvent?.resolved === true
+
+          if (isAckOrResolved) {
+            sosAlarmPlayer.stop()
+          }
+
           if (payload?.safetyEvent) {
             const normalized = normalizeSafetyEvent(payload.safetyEvent)
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
-            // Immediately play loud emergency siren alarm across listening devices
-            sosAlarmPlayer.play().catch(() => {})
+
+            // Siren alarm must ONLY sound in Dispatcher Portal for unacknowledged, unresolved SOS events!
+            // Never in Student Portal or Driver Portal.
+            const currentRole = get().role
+            const currentUserRole = get().currentUser?.role
+            const isDispatcher =
+              currentRole === 'admin' ||
+              (currentUserRole && (currentUserRole.toLowerCase() === 'dispatcher' || currentUserRole.toLowerCase() === 'admin'))
+
+            const isUnacknowledgedSos =
+              !isAckOrResolved &&
+              normalized.status !== 'ACKNOWLEDGED' &&
+              normalized.status !== 'RESOLVED' &&
+              !normalized.resolved &&
+              (normalized.eventType === 'SOS' ||
+                normalized.eventType === 'STUDENT_SOS_TRIGGERED' ||
+                normalized.eventType === 'DRIVER_SOS_TRIGGERED' ||
+                (normalized.type && normalized.type.includes('SOS')))
+
+            if (isDispatcher && isUnacknowledgedSos) {
+              sosAlarmPlayer.play().catch(() => {})
+            } else {
+              sosAlarmPlayer.stop()
+            }
           }
           if (payload?.ride) {
             set((state) => ({
-              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride, hasSosAlert: true } : r)),
+              rides: state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride, hasSosAlert: !isAckOrResolved } : r)),
             }))
           }
         } else if (
@@ -1118,6 +1153,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   resolveSafetyEvent: async (eventId: string) => {
     try {
+      sosAlarmPlayer.stop()
       const res = await api.resolveSafetyEvent(eventId)
       const resolvedEvent: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
@@ -1127,7 +1163,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...resolvedEvent, resolved: true, status: 'RESOLVED' } : e)),
         auditLogs: (res as any)?.auditLog ? [(res as any).auditLog, ...state.auditLogs] : state.auditLogs,
       }))
+      sosAlarmPlayer.stop()
     } catch (err: any) {
+      sosAlarmPlayer.stop()
       console.error('[Store] resolveSafetyEvent error:', err.message)
       throw err
     }
@@ -1164,9 +1202,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Safety Actions
   triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
     try {
-      // Immediately start sounding loud siren alarm upon user gesture
-      sosAlarmPlayer.play().catch(() => {})
-
+      // NOTE: Loud siren alarm is intentionally NOT played on Student or Driver portal devices.
+      // Emergency siren sounds strictly at Dispatcher Command Center upon reception.
       let payload: {
         rideId?: string
         userId?: string
@@ -1236,12 +1273,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   acknowledgeSafetyEvent: async (eventId: string) => {
     try {
+      sosAlarmPlayer.stop()
+      // Optimistically mark as ACKNOWLEDGED immediately so all listeners and UI instantly silence
+      set((state) => ({
+        safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, status: 'ACKNOWLEDGED' } : e)),
+      }))
+
       const res = await api.acknowledgeSafetyEvent(eventId)
       const acknowledged: SafetyEvent = normalizeSafetyEvent((res as any)?.data || (res as any)?.event || res)
       set((state) => ({
         safetyEvents: state.safetyEvents.map((e) => (e.id === eventId ? { ...e, ...acknowledged, status: 'ACKNOWLEDGED' } : e)),
       }))
+      sosAlarmPlayer.stop()
     } catch (err: any) {
+      sosAlarmPlayer.stop()
       console.error('[Store] acknowledgeSafetyEvent error:', err.message)
       throw err
     }
