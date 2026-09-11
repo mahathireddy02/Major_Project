@@ -141,25 +141,40 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       routeCoords = osrmRoute.geometry
     }
 
+    const startLocationName = body.startLocation || (body.pickupPoints?.[0]?.name) || 'Current Position'
+    const startLat = typeof body.startLocationLat === 'number' ? body.startLocationLat : (body.pickupPoints?.[0]?.lat ?? body.currentLat ?? 17.3616)
+    const startLng = typeof body.startLocationLng === 'number' ? body.startLocationLng : (body.pickupPoints?.[0]?.lng ?? body.currentLng ?? 78.4747)
+
     const newRide = await RideModel.create({
       id: rideId,
       routeName: body.routeName || `Campus Route #${rideId}`,
       driverId: body.driverId || 'd1',
       vehicleId: body.vehicleId || 'v1',
-      pickupPoints: body.pickupPoints || [],
-      destination: body.destination,
-      destinationLat: body.destinationLat,
-      destinationLng: body.destinationLng,
-      departureTime: body.departureTime,
+      startLocation: startLocationName,
+      startLocationLat: startLat,
+      startLocationLng: startLng,
+      pickupPoints: body.pickupPoints && body.pickupPoints.length > 0 ? body.pickupPoints : [
+        {
+          id: `pp-${Date.now()}`,
+          name: startLocationName,
+          lat: startLat,
+          lng: startLng,
+          estimatedPickupTime: body.departureTime || 'Immediate',
+        }
+      ],
+      destination: body.destination || 'SRI INDU Campus Main Gate',
+      destinationLat: body.destinationLat || 17.2063,
+      destinationLng: body.destinationLng || 78.6015,
+      departureTime: body.departureTime || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       estimatedArrival: body.estimatedArrival || '',
       capacity: body.capacity || 6,
-      bookedSeats: body.bookedSeats || 1,
+      bookedSeats: body.bookedSeats || 0,
       passengers: body.passengers || [],
-      status: body.status || 'waiting',
+      status: body.status || 'active',
       fare: body.fare || 25,
       routeCoordinates: routeCoords,
-      currentLat: body.currentLat || body.destinationLat,
-      currentLng: body.currentLng || body.destinationLng,
+      currentLat: startLat,
+      currentLng: startLng,
       distanceKm: body.distanceKm || 4.2,
       hasDeviation: false,
       hasSosAlert: false,
@@ -168,9 +183,10 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       date: body.date || 'today',
     })
 
-    // Initialize TripRoute and stops
-    await routeProgressService.buildTripRoute(newRide)
+    // Initialize TripRoute and stops starting at startLocation
+    await routeProgressService.buildTripRoute(newRide, startLat, startLng, startLocationName)
 
+    realtimeService.broadcast('RIDE_STARTED', { rideId: newRide.id, ride: newRide })
     realtimeService.broadcast('RIDE_UPDATED', { ride: newRide })
 
     return { success: true, data: newRide }

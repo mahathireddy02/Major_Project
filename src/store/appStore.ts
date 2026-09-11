@@ -114,6 +114,12 @@ interface AppState {
   // Actions — Driver
   acceptRide: (rideId: string) => Promise<void>
   startRide: (rideId: string, startLocation?: { name?: string; lat: number; lng: number }) => Promise<void>
+  createAndActivateRide: (payload: {
+    startLocation: { name: string; lat: number; lng: number; address?: string }
+    destination?: string
+    destinationLat?: number
+    destinationLng?: number
+  }) => Promise<Ride>
   completeRide: (rideId: string) => Promise<void>
   refreshRides: () => Promise<void>
   updatePassengerStatus: (rideId: string, studentId: string, status: 'boarded' | 'dropped') => Promise<void>
@@ -679,6 +685,51 @@ export const useAppStore = create<AppState>((set, get) => ({
       }))
     } catch (err: any) {
       console.error('[Store] startRide error:', err.message)
+      throw err
+    }
+  },
+
+  createAndActivateRide: async (payload: {
+    startLocation: { name: string; lat: number; lng: number; address?: string }
+    destination?: string
+    destinationLat?: number
+    destinationLng?: number
+  }) => {
+    try {
+      const cu = get().currentUser
+      const driverId = get().currentDriverId || cu?.id || 'd1'
+      const vehicle = get().vehicles.find((v) => v.driverId === driverId) || get().vehicles[0]
+      const destName = payload.destination || 'SRI INDU Campus Main Gate'
+      const destLat = payload.destinationLat || 17.2063
+      const destLng = payload.destinationLng || 78.6015
+
+      const newRide = await api.createRide({
+        routeName: `Campus Route #${Math.floor(100 + Math.random() * 900)} [From ${payload.startLocation.name.split(',')[0].trim()}]`,
+        driverId,
+        vehicleId: vehicle?.id || 'v1',
+        startLocation: payload.startLocation.name,
+        startLocationLat: payload.startLocation.lat,
+        startLocationLng: payload.startLocation.lng,
+        currentLat: payload.startLocation.lat,
+        currentLng: payload.startLocation.lng,
+        destination: destName,
+        destinationLat: destLat,
+        destinationLng: destLng,
+        departureTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        capacity: vehicle?.capacity || 6,
+        bookedSeats: 0,
+        passengers: [],
+        status: 'active',
+        fare: 25,
+      })
+
+      set((state) => ({
+        rides: [newRide, ...state.rides.filter((r) => r.id !== newRide.id)],
+      }))
+
+      return newRide
+    } catch (err: any) {
+      console.error('[Store] createAndActivateRide error:', err.message)
       throw err
     }
   },

@@ -29,7 +29,7 @@ export interface SelectedStartPoint {
 
 interface StartPointSelectorModalProps {
   isOpen: boolean
-  ride: Ride
+  ride?: Ride | null
   onConfirm: (startPoint: SelectedStartPoint) => void
   onClose: () => void
   isStarting?: boolean
@@ -56,11 +56,11 @@ export const StartPointSelectorModal: React.FC<StartPointSelectorModalProps> = (
   const markerRef = useRef<L.Marker | null>(null)
 
   const defaultInitialLat =
-    ride.currentLat || ride.startLocationLat || ride.pickupPoints[0]?.lat || 17.3616
+    ride?.currentLat || ride?.startLocationLat || ride?.pickupPoints?.[0]?.lat || 17.3616
   const defaultInitialLng =
-    ride.currentLng || ride.startLocationLng || ride.pickupPoints[0]?.lng || 78.4747
+    ride?.currentLng || ride?.startLocationLng || ride?.pickupPoints?.[0]?.lng || 78.4747
   const defaultInitialName =
-    ride.startLocation || ride.pickupPoints[0]?.name || 'Current Position'
+    ride?.startLocation || ride?.pickupPoints?.[0]?.name || 'My Current Location'
 
   const [selectedPoint, setSelectedPoint] = useState<SelectedStartPoint>({
     name: defaultInitialName,
@@ -145,14 +145,14 @@ export const StartPointSelectorModal: React.FC<StartPointSelectorModalProps> = (
       markerRef.current = marker
 
       // Map click places marker
-      map.on('click', (e: L.LeafletMouseEvent) => {
+      ;(map as any).on('click', (e: any) => {
         const { lat, lng } = e.latlng
         marker.setLatLng([lat, lng])
         resolveCoordinates(lat, lng)
       })
 
       // Add other ride stops as small reference markers
-      ride.pickupPoints.forEach((pp, idx) => {
+      ;(ride?.pickupPoints || []).forEach((pp: any, idx: number) => {
         const stopIcon = L.divIcon({
           className: 'custom-stop-pin',
           html: `<div style="background: #2563eb; color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: bold; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">${idx + 1}</div>`,
@@ -164,14 +164,17 @@ export const StartPointSelectorModal: React.FC<StartPointSelectorModalProps> = (
       })
 
       // Destination marker
+      const destLat = ride?.destinationLat || 17.2063
+      const destLng = ride?.destinationLng || 78.6015
+      const destName = ride?.destination || 'SRI INDU Campus Main Gate'
       const destIcon = L.divIcon({
         className: 'custom-dest-pin',
         html: `<div style="background: #dc2626; color: white; width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.2);">🏁</div>`,
         iconSize: [22, 22],
       })
-      L.marker([ride.destinationLat, ride.destinationLng], { icon: destIcon })
+      L.marker([destLat, destLng], { icon: destIcon })
         .addTo(map)
-        .bindTooltip(`Destination: ${ride.destination}`)
+        .bindTooltip(`Destination: ${destName}`)
 
       mapInstanceRef.current = map
     } else {
@@ -339,7 +342,7 @@ export const StartPointSelectorModal: React.FC<StartPointSelectorModalProps> = (
             </span>
             <div className="flex flex-wrap gap-1.5">
               {/* Predefined pickup 1 */}
-              {ride.pickupPoints[0] && (
+              {ride?.pickupPoints?.[0] && (
                 <button
                   type="button"
                   onClick={() =>
@@ -420,11 +423,11 @@ export const StartPointSelectorModal: React.FC<StartPointSelectorModalProps> = (
             <div className="border-l-2 border-dashed border-slate-300 ml-3 pl-4 py-1 space-y-1">
               <div className="flex items-center gap-1.5 text-slate-600">
                 <ArrowRight size={11} className="text-emerald-600" />
-                <span>Next: Pickup at <strong>{ride.pickupPoints[0]?.name || 'Stop 1'}</strong></span>
+                <span>Next: Pickup at <strong>{ride?.pickupPoints?.[0]?.name || 'Campus Corridor Hub'}</strong></span>
               </div>
               <div className="flex items-center gap-1.5 text-slate-600">
                 <ArrowRight size={11} className="text-emerald-600" />
-                <span>Final destination: <strong>{ride.destination}</strong></span>
+                <span>Final destination: <strong>{ride?.destination || 'SRI INDU Campus Main Gate'}</strong></span>
               </div>
             </div>
           </div>
