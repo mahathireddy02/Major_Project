@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  fuzzyMatchName, preprocessImage, extractLicenseFields,
+  fuzzyMatchId, fuzzyMatchName, preprocessImage, extractLicenseFields,
 } from '../../lib/ocrUtils'
 import {
   Navigation, Car, User, Phone, Mail, Lock, Eye, EyeOff, ArrowLeft, ArrowRight,
@@ -22,11 +22,15 @@ export default function DriverAuth() {
   const registerDriver = useAppStore((s) => s.registerDriver)
   const drivers = useAppStore((s) => s.drivers)
 
+  // Auth Mode: 'signin' | 'signup'
   const [mode, setMode] = useState<'signin' | 'signup'>(initialMode)
+
+  // Multi-step Registration Wizard
   const [step, setStep] = useState<number>(1)
 
   // Registration Fields
   const [fullName, setFullName] = useState('')
+  const [collegeName, setCollegeName] = useState('Sri Indu College of Eng & Tech')
   const [phone, setPhone] = useState('+91 ')
   const [email, setEmail] = useState('')
   const [vehicleReg, setVehicleReg] = useState('')
@@ -45,6 +49,7 @@ export default function DriverAuth() {
   const [rcPhoto, setRcPhoto] = useState<string | null>(null)
   const [passportPhoto, setPassportPhoto] = useState<string | null>(null)
   const [detectedName, setDetectedName] = useState('')
+  const [detectedLicense, setDetectedLicense] = useState('')
   const [ocrResult, setOcrResult] = useState<{
     matchScore: number
     isMatch: boolean
@@ -94,30 +99,37 @@ export default function DriverAuth() {
     setIsScanning(true)
     try {
       const processed = await preprocessImage(imageUri)
-      const { name: extracted, dlNumber } = await extractLicenseFields(processed)
+      const { name: extracted, dlNumber } = await extractLicenseFields(processed, imageUri)
 
       setDetectedName(extracted)
-      const nameOk = extracted ? fuzzyMatchName(fullName, extracted) : false
-      const dlOk = dlNumber
-        ? dlNumber.replace(/[\s\-]/g, '').toUpperCase() === licenseNo.replace(/[\s\-]/g, '').toUpperCase()
-        : false
+      setDetectedLicense(dlNumber)
+
+      const nameOk = Boolean(extracted && fullName && fuzzyMatchName(fullName, extracted))
+      const dlOk = Boolean(dlNumber && licenseNo && fuzzyMatchId(licenseNo, dlNumber))
+      const isMatch = nameOk && dlOk
 
       setOcrResult({
         matchScore: (nameOk ? 50 : 0) + (dlOk ? 50 : 0),
-        isMatch: nameOk && dlOk,
+        isMatch,
         nameOk,
         dlOk,
-        status: nameOk && dlOk ? 'MATCHED' : 'MISMATCH',
-        statusLabel: nameOk && dlOk ? '✓ Verified' : '✗ Mismatch',
-        explanation: `Name: ${nameOk ? 'OK' : 'FAIL'}, DL No: ${dlOk ? 'OK' : `FAIL (detected: ${dlNumber || 'not found'})`}`,
+        status: isMatch ? 'MATCHED' : 'MISMATCH',
+        statusLabel: isMatch ? '✓ Verified' : '✗ Verification Mismatch',
+        explanation: `Name: ${nameOk ? 'Match' : 'Mismatch'}, DL No: ${dlOk ? 'Match' : 'Mismatch'}`,
       })
     } catch {
       setDetectedName('')
+      setDetectedLicense('')
       setOcrResult({
-        matchScore: 0, isMatch: false, status: 'MISMATCH',
-        statusLabel: '⚠️ Could not read license — please upload a clearer photo',
-        explanation: 'OCR could not extract text from the uploaded image.',
+        matchScore: 0,
+        isMatch: false,
+        nameOk: false,
+        dlOk: false,
+        status: 'MISMATCH',
+        statusLabel: '⚠️ Unable to read ID card. Please upload a clearer image.',
+        explanation: 'Unable to read ID card. Please upload a clearer image.',
       })
+      toast.error('Unable to read ID card. Please upload a clearer image.')
     } finally {
       setIsScanning(false)
     }
@@ -688,22 +700,26 @@ export default function DriverAuth() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-500">Name on License:</span>
-                            <span className="font-bold text-slate-800">{detectedName || '—'}</span>
+                            <span className="font-bold text-slate-800">{detectedName || 'Not detected'}</span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                             <span className="text-slate-500">Name Match:</span>
                             <span className={`font-bold ${ocrResult.nameOk ? 'text-green-600' : 'text-red-500'}`}>
-                              {ocrResult.nameOk ? '✓ Matched' : '✗ Mismatch'}
+                              {isScanning ? '— Pending' : (ocrResult.nameOk ? '✓ Match' : '✕ Mismatch')}
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                             <span className="text-slate-500">License No. Entered:</span>
                             <span className="font-bold text-slate-800">{licenseNo}</span>
                           </div>
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-500">License No. on ID:</span>
+                            <span className="font-bold text-slate-800">{detectedLicense || 'Not detected'}</span>
+                          </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                             <span className="text-slate-500">DL No. Match:</span>
                             <span className={`font-bold ${ocrResult.dlOk ? 'text-green-600' : 'text-red-500'}`}>
-                              {ocrResult.dlOk ? '✓ Matched' : '✗ Mismatch'}
+                              {isScanning ? '— Pending' : (ocrResult.dlOk ? '✓ Match' : '✕ Mismatch')}
                             </span>
                           </div>
                         </div>
@@ -728,16 +744,16 @@ export default function DriverAuth() {
                           toast.error('Please wait, scanning is in progress.')
                           return
                         }
-                        if (!ocrResult) {
-                          toast.error('License scan not complete. Please wait or re-upload.')
-                          return
-                        }
-                        if (!ocrResult.nameOk) {
-                          toast.error('Name on license does not match. Please upload the correct license.')
-                          return
-                        }
-                        if (!ocrResult.dlOk) {
-                          toast.error('License number on the document does not match what you entered.')
+                        if (!ocrResult || !ocrResult.isMatch) {
+                          if (!ocrResult) {
+                            toast.error('License scan not complete. Please wait or re-upload.')
+                          } else if (!ocrResult.nameOk) {
+                            toast.error('Name on license does not match what you entered.')
+                          } else if (!ocrResult.dlOk) {
+                            toast.error('License number on the document does not match what you entered.')
+                          } else {
+                            toast.error('License verification failed. Details do not match.')
+                          }
                           return
                         }
                         setStep(4)

@@ -93,30 +93,37 @@ export class OcrService {
     }
 
     // Tokenize names
-    const enteredTokens = normEntered.split(' ')
-    const detectedTokens = normDetected.split(' ')
+    const enteredTokens = normEntered.split(' ').filter(Boolean)
+    const detectedTokens = normDetected.split(' ').filter(Boolean)
 
-    // Check token subset (e.g. "Rahul Kumar Varma" vs "Rahul Varma" or "Rahul Kumar")
-    const commonTokens = enteredTokens.filter((t) => detectedTokens.includes(t))
-    const tokenOverlapRatio = (commonTokens.length * 2) / (enteredTokens.length + detectedTokens.length)
+    // Check reordered tokens (e.g. "Wilson Olivia" vs "Olivia Wilson")
+    const isReordered =
+      enteredTokens.length === detectedTokens.length &&
+      [...enteredTokens].sort().join(' ') === [...detectedTokens].sort().join(' ')
 
-    // Check initials match (e.g. "Uday Kiran" vs "U. Kiran" or "U Kiran")
-    const firstInitialMatches =
-      enteredTokens[0].charAt(0) === detectedTokens[0].charAt(0) &&
-      (enteredTokens[enteredTokens.length - 1] === detectedTokens[detectedTokens.length - 1] ||
-        enteredTokens[0] === detectedTokens[0])
+    // Check token containment & initials (e.g. "Aarav Sharma" vs "Aarav K Sharma" or "Olivia Wilson" vs "Olivia M Wilson")
+    const checkTokenContainment = (source: string[], target: string[]) => {
+      return source.every((sToken) => {
+        if (target.includes(sToken)) return true
+        if (sToken.length === 1 && target.some((t) => t.startsWith(sToken))) return true
+        if (target.some((t) => t.length === 1 && sToken.startsWith(t))) return true
+        if (sToken.length >= 5 && target.some((t) => t.length >= 5 && levenshtein(sToken, t) <= 1)) return true
+        return false
+      })
+    }
+
+    const tokenMatch =
+      isReordered ||
+      checkTokenContainment(enteredTokens, detectedTokens) ||
+      checkTokenContainment(detectedTokens, enteredTokens)
 
     // Levenshtein similarity
     const maxLen = Math.max(normEntered.length, normDetected.length)
     const dist = levenshtein(normEntered, normDetected)
     const levScore = Math.max(0, Math.round(((maxLen - dist) / maxLen) * 100))
 
-    let finalScore = Math.max(levScore, Math.round(tokenOverlapRatio * 100))
-    if (firstInitialMatches && finalScore < 80) {
-      finalScore = Math.min(88, finalScore + 20)
-    }
-
-    const isMatch = finalScore >= 70 || (commonTokens.length >= 2 && tokenOverlapRatio >= 0.6)
+    const isMatch = tokenMatch || (maxLen >= 8 && dist <= 2)
+    const finalScore = isMatch ? Math.max(85, levScore) : Math.min(45, levScore)
 
     return {
       enteredName,
@@ -125,10 +132,10 @@ export class OcrService {
       isMatch,
       status: isMatch ? 'MATCHED' : 'MISMATCH',
       statusLabel: isMatch ? '✓ Name Matched' : '⚠️ Name Mismatch — Manual Verification Required',
-      confidence: isMatch ? 0.92 : 0.65,
+      confidence: isMatch ? 0.95 : 0.65,
       explanation: isMatch
-        ? `High consistency detected (${finalScore}% token & phonetic similarity).`
-        : `Discrepancy detected between "${enteredName}" and "${detectedName}". Manual reviewer will verify.`,
+        ? `High consistency detected (${finalScore}% token & name similarity).`
+        : `Discrepancy detected between "${enteredName}" and "${detectedName}".`,
     }
   }
 

@@ -1,8 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
-  fuzzyMatch, fuzzyMatchName,
-  preprocessImage, extractStudentFields, extractFacultyFields,
+  fuzzyMatchCollege, fuzzyMatchId, fuzzyMatchName,
+  preprocessImage, extractStudentFields, verifyCollegeInOcrText,
 } from '../../lib/ocrUtils'
 import {
   Navigation, User, GraduationCap, ArrowLeft, ArrowRight, CheckCircle2,
@@ -66,6 +66,10 @@ export default function StudentFacultyAuth() {
   const [ocrResult, setOcrResult] = useState<{
     matchScore: number
     isMatch: boolean
+    nameOk: boolean
+    rollOk: boolean
+    collegeOk: boolean
+    hasOcrText: boolean
     status: 'MATCHED' | 'MISMATCH'
     statusLabel: string
     explanation: string
@@ -150,41 +154,51 @@ export default function StudentFacultyAuth() {
     setIsScanningOcr(true)
     try {
       const processed = await preprocessImage(fileDataUri)
+      const { name, roll, college, fullText } = await extractStudentFields(processed, fileDataUri)
 
-      let name = '', idField = '', college = ''
-      if (userType === 'faculty') {
-        const res = await extractFacultyFields(processed)
-        name = res.name; idField = res.facultyId; college = res.college
-      } else {
-        const res = await extractStudentFields(processed)
-        name = res.name; idField = res.roll; college = res.college
-      }
+      const targetId = userType === 'student' ? rollNumber : collegeId
+      const nameOk = Boolean(name && fullName && fuzzyMatchName(fullName, name))
+      const rollOk = Boolean(roll && targetId && fuzzyMatchId(targetId, roll))
 
+      // College verification: check whether entered college is present anywhere in complete OCR text
+      const collegeCheck = verifyCollegeInOcrText(collegeName, fullText)
+      const collegeOk = collegeCheck.isMatch
+
+      const collegeFound = collegeCheck.matchedText || college || ''
       setDetectedName(name)
-      setDetectedRoll(idField)
-      setDetectedCollege(college)
+      setDetectedRoll(roll)
+      setDetectedCollege(collegeFound)
 
-      const enteredId = userType === 'faculty' ? collegeId : rollNumber
-      const nameOk = name ? fuzzyMatchName(fullName, name) : false
-      const idOk = idField ? idField.trim().toUpperCase() === enteredId.trim().toUpperCase() : false
-      const collegeOk = college ? fuzzyMatch(collegeName, college) : false
+      const hasOcrText = Boolean(fullText && fullText.trim().length >= 3)
+      const isMatch = nameOk && rollOk && collegeOk
 
       setOcrResult({
-        matchScore: (nameOk ? 34 : 0) + (idOk ? 33 : 0) + (collegeOk ? 33 : 0),
-        isMatch: nameOk && idOk && collegeOk,
-        status: nameOk && idOk && collegeOk ? 'MATCHED' : 'MISMATCH',
-        statusLabel: nameOk ? '✓ Name Matched' : '✗ Name Mismatch',
-        explanation: `Name: ${nameOk ? 'OK' : 'FAIL'}, ID: ${idOk ? 'OK' : 'FAIL'}, College: ${collegeOk ? 'OK' : 'FAIL'}`,
+        matchScore: (nameOk ? 34 : 0) + (rollOk ? 33 : 0) + (collegeOk ? 33 : 0),
+        isMatch,
+        nameOk,
+        rollOk,
+        collegeOk,
+        hasOcrText,
+        status: isMatch ? 'MATCHED' : 'MISMATCH',
+        statusLabel: isMatch ? '✓ Verified' : '✗ Verification Mismatch',
+        explanation: `Name: ${nameOk ? 'Match' : (name ? 'Mismatch' : 'Not detected')}, Roll/ID: ${rollOk ? 'Match' : (roll ? 'Mismatch' : 'Not detected')}, College: ${collegeOk ? 'Match' : (hasOcrText ? 'Mismatch' : 'Not detected')}`,
       })
     } catch {
       setDetectedName('')
       setDetectedRoll('')
       setDetectedCollege('')
       setOcrResult({
-        matchScore: 0, isMatch: false, status: 'MISMATCH',
-        statusLabel: '⚠️ Could not read ID — upload a clearer image',
-        explanation: 'OCR failed to extract text from the uploaded image.',
+        matchScore: 0,
+        isMatch: false,
+        nameOk: false,
+        rollOk: false,
+        collegeOk: false,
+        hasOcrText: false,
+        status: 'MISMATCH',
+        statusLabel: '⚠️ Unable to read ID card. Please upload a clearer image.',
+        explanation: 'Unable to read ID card. Please upload a clearer image.',
       })
+      toast.error('Unable to read ID card. Please upload a clearer image.')
     } finally {
       setIsScanningOcr(false)
     }
@@ -386,9 +400,8 @@ export default function StudentFacultyAuth() {
                 setMode('signin')
                 setStep(1)
               }}
-              className={`py-2 rounded-lg transition-all cursor-pointer ${
-                mode === 'signin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-              }`}
+              className={`py-2 rounded-lg transition-all cursor-pointer ${mode === 'signin' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                }`}
             >
               Sign In
             </button>
@@ -398,9 +411,8 @@ export default function StudentFacultyAuth() {
                 setMode('signup')
                 setStep(1)
               }}
-              className={`py-2 rounded-lg transition-all cursor-pointer ${
-                mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
-              }`}
+              className={`py-2 rounded-lg transition-all cursor-pointer ${mode === 'signup' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-900'
+                }`}
             >
               Sign Up
             </button>
@@ -500,13 +512,12 @@ export default function StudentFacultyAuth() {
                 ].map((s) => (
                   <div key={s.num} className="flex items-center gap-1.5 text-xs font-semibold">
                     <div
-                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        step === s.num
+                      className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${step === s.num
                           ? 'bg-primary-600 text-white'
                           : step > s.num
-                          ? 'bg-green-500 text-white'
-                          : 'bg-slate-200 text-slate-600'
-                      }`}
+                            ? 'bg-green-500 text-white'
+                            : 'bg-slate-200 text-slate-600'
+                        }`}
                     >
                       {step > s.num ? '✓' : s.num}
                     </div>
@@ -819,26 +830,32 @@ export default function StudentFacultyAuth() {
                           </div>
                           <div className="flex items-center justify-between">
                             <span className="text-slate-500">Name on ID:</span>
-                            <span className="font-bold text-slate-800">{detectedName}</span>
+                            <span className="font-bold text-slate-800">{detectedName || 'Not detected'}</span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                             <span className="text-slate-500">Name Match:</span>
-                            <span className={`font-bold ${detectedName && fuzzyMatchName(fullName, detectedName) ? 'text-green-600' : 'text-red-500'}`}>
-                              {detectedName ? (fuzzyMatchName(fullName, detectedName) ? '✓ Matched' : '✗ Mismatch') : '— Pending'}
+                            <span className={`font-bold ${ocrResult.nameOk ? 'text-green-600' : (detectedName ? 'text-red-500' : 'text-amber-500')}`}>
+                              {isScanningOcr ? '— Pending' : (ocrResult.nameOk ? '✓ Match' : (detectedName ? '✕ Mismatch' : 'Not detected'))}
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                            <span className="text-slate-500">{userType === 'faculty' ? 'Faculty ID Entered:' : 'Roll / Hall Ticket Entered:'}</span>
-                            <span className="font-bold text-slate-800">{userType === 'faculty' ? collegeId : rollNumber}</span>
+                            <span className="text-slate-500">
+                              {userType === 'student' ? 'Roll / Hall Ticket Entered:' : 'Faculty ID Entered:'}
+                            </span>
+                            <span className="font-bold text-slate-800">{userType === 'student' ? rollNumber : collegeId}</span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-500">{userType === 'faculty' ? 'Faculty ID on ID:' : 'Roll / Hall Ticket on ID:'}</span>
-                            <span className="font-bold text-slate-800">{detectedRoll || '—'}</span>
+                            <span className="text-slate-500">
+                              {userType === 'student' ? 'Roll / Hall Ticket on ID:' : 'Faculty ID on ID:'}
+                            </span>
+                            <span className="font-bold text-slate-800">{detectedRoll || 'Not detected'}</span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
-                            <span className="text-slate-500">{userType === 'faculty' ? 'Faculty ID Match:' : 'Roll Match:'}</span>
-                            <span className={`font-bold ${detectedRoll && detectedRoll.trim().toLowerCase() === (userType === 'faculty' ? collegeId : rollNumber).trim().toLowerCase() ? 'text-green-600' : 'text-red-500'}`}>
-                              {detectedRoll ? (detectedRoll.trim().toLowerCase() === (userType === 'faculty' ? collegeId : rollNumber).trim().toLowerCase() ? '✓ Matched' : '✗ Mismatch') : '— Pending'}
+                            <span className="text-slate-500">
+                              {userType === 'student' ? 'Roll Match:' : 'ID Match:'}
+                            </span>
+                            <span className={`font-bold ${ocrResult.rollOk ? 'text-green-600' : (detectedRoll ? 'text-red-500' : 'text-amber-500')}`}>
+                              {isScanningOcr ? '— Pending' : (ocrResult.rollOk ? '✓ Match' : (detectedRoll ? '✕ Mismatch' : 'Not detected'))}
                             </span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
@@ -846,18 +863,13 @@ export default function StudentFacultyAuth() {
                             <span className="font-bold text-slate-800 text-right max-w-[55%]">{collegeName}</span>
                           </div>
                           <div className="flex items-center justify-between">
-                            <span className="text-slate-500">College on ID:</span>
-                            <span className="font-bold text-slate-800 text-right max-w-[55%]">{detectedCollege || '—'}</span>
+                            <span className="text-slate-500">College Found in ID:</span>
+                            <span className="font-bold text-slate-800 text-right max-w-[55%]">{detectedCollege || 'Not detected'}</span>
                           </div>
                           <div className="flex items-center justify-between pt-1 border-t border-slate-100">
                             <span className="text-slate-500">College Match:</span>
-                            <span className={`font-bold ${
-                              detectedCollege && fuzzyMatch(collegeName, detectedCollege)
-                                ? 'text-green-600' : 'text-red-500'
-                            }`}>
-                              {detectedCollege
-                                ? fuzzyMatch(collegeName, detectedCollege) ? '✓ Matched' : '✗ Mismatch'
-                                : '— Pending'}
+                            <span className={`font-bold ${ocrResult.collegeOk ? 'text-green-600' : (ocrResult.hasOcrText ? 'text-red-500' : 'text-amber-500')}`}>
+                              {isScanningOcr ? '— Pending' : (ocrResult.collegeOk ? '✓ Match' : (ocrResult.hasOcrText ? '✕ Mismatch' : 'Not detected'))}
                             </span>
                           </div>
                         </div>
@@ -882,21 +894,18 @@ export default function StudentFacultyAuth() {
                           toast.error('Please wait, scanning in progress.')
                           return
                         }
-                        if (!ocrResult) {
-                          toast.error('Please wait for the scan to complete.')
-                          return
-                        }
-                        if (!fuzzyMatchName(fullName, detectedName)) {
-                          toast.error('Name on ID card does not match what you entered.')
-                          return
-                        }
-                        const enteredId = userType === 'faculty' ? collegeId : rollNumber
-                        if (detectedRoll.trim().toUpperCase() !== enteredId.trim().toUpperCase()) {
-                          toast.error(`${userType === 'faculty' ? 'Faculty ID' : 'Roll number'} on ID card does not match what you entered.`)
-                          return
-                        }
-                        if (!fuzzyMatch(collegeName, detectedCollege)) {
-                          toast.error('College name on ID card does not match what you entered.')
+                        if (!ocrResult || !ocrResult.isMatch) {
+                          if (!ocrResult) {
+                            toast.error('Please wait for the scan to complete.')
+                          } else if (!ocrResult.nameOk) {
+                            toast.error('Name on ID card does not match what you entered.')
+                          } else if (!ocrResult.rollOk) {
+                            toast.error(`${userType === 'student' ? 'Roll number' : 'Faculty ID'} on ID card does not match what you entered.`)
+                          } else if (!ocrResult.collegeOk) {
+                            toast.error('College name on ID card does not match what you entered.')
+                          } else {
+                            toast.error('ID card verification failed. Details do not match.')
+                          }
                           return
                         }
                         setStep(4)
@@ -909,7 +918,7 @@ export default function StudentFacultyAuth() {
                 </div>
               )}
 
-                  {/* Step 4: Password & Submit */}
+              {/* Step 4: Password & Submit */}
               {step === 4 && (
                 <form onSubmit={handleRegister} className="space-y-4">
                   {(() => {
@@ -943,7 +952,7 @@ export default function StudentFacultyAuth() {
                         {password.length > 0 && (
                           <div className="mt-2 space-y-1.5">
                             <div className="flex gap-1">
-                              {[1,2,3,4,5].map((i) => (
+                              {[1, 2, 3, 4, 5].map((i) => (
                                 <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i <= passed ? strengthColor : 'bg-slate-200'}`} />
                               ))}
                             </div>
