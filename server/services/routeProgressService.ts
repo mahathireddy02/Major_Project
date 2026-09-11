@@ -562,8 +562,38 @@ export class RouteProgressService {
       })
     }
 
+    // If destination provided, update ride destination if generic/campus or single passenger
+    if (destination) {
+      const isGenericCampus =
+        !ride.destination ||
+        ride.destination.toLowerCase().includes('campus main gate') ||
+        ride.destination.toLowerCase().includes('sri indu campus') ||
+        ride.passengers.length <= 1
+
+      if (isGenericCampus || ride.destination.toLowerCase() === destination.toLowerCase()) {
+        ride.destination = destination
+        if (destinationCoords?.lat && destinationCoords?.lng) {
+          ride.destinationLat = destinationCoords.lat
+          ride.destinationLng = destinationCoords.lng
+        }
+        ride.routeName = `${pickup} → ${destination}`
+      }
+    }
+
+    // Ensure passenger record in ride has the passenger's destination
+    const passengerItem = (ride.passengers || []).find((p: any) => p.studentId === studentId)
+    if (passengerItem && destination) {
+      passengerItem.destination = destination
+    }
+
     // Rebuild stops and route
     await this.buildTripRoute(ride)
+
+    ride.markModified('passengers')
+    ride.markModified('pickupPoints')
+    ride.markModified('stops')
+    if (ride.tripRoute) ride.markModified('tripRoute')
+    await ride.save()
 
     realtimeService.broadcast('ROUTE_UPDATED', {
       rideId: ride.id,
@@ -571,6 +601,7 @@ export class RouteProgressService {
       stops: ride.stops,
       action: 'PASSENGER_JOINED',
     })
+    realtimeService.broadcast('RIDE_UPDATED', { ride })
   }
 
   /**
@@ -635,6 +666,11 @@ export class RouteProgressService {
         }
       }
     }
+
+    ride.markModified('passengers')
+    ride.markModified('stops')
+    if (ride.tripRoute) ride.markModified('tripRoute')
+    await ride.save()
 
     const driverUser = await UserModel.findOne({ id: ride.driverId })
 

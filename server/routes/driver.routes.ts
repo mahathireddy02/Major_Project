@@ -434,6 +434,8 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       stop.status = status === 'boarded' ? 'BOARDED' : 'UPCOMING'
     }
 
+    ride.markModified('passengers')
+    ride.markModified('stops')
     await ride.save()
 
     // Also update BookingModel in MongoDB

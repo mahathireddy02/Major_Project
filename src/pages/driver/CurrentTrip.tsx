@@ -104,6 +104,9 @@ export default function CurrentTrip() {
     defaultCameraMode: 'FOLLOW',
   })
 
+  // Authoritative synced ride state
+  const effectiveRide = tripState?.ride ? { ...activeRide, ...tripState.ride } : activeRide
+
   // Real Browser GPS Tracking state
   const [isGpsActive, setIsGpsActive] = useState<boolean>(false)
   const watchIdRef = useRef<number | null>(null)
@@ -240,7 +243,7 @@ export default function CurrentTrip() {
     }
   }
 
-  if (!activeRide || (!targetRideId && (activeRide.status === 'completed' || activeRide.status === 'cancelled'))) {
+  if (!effectiveRide || (!targetRideId && (effectiveRide.status === 'completed' || effectiveRide.status === 'cancelled'))) {
     return (
       <div className="max-w-md mx-auto px-4 pt-16 pb-20 text-center">
         <div className="w-16 h-16 bg-slate-100 text-slate-400 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -322,7 +325,7 @@ export default function CurrentTrip() {
               {nextManeuver ? `In ${nextManeuver.distanceMeters}m` : 'Navigation Active'}
             </div>
             <div className="font-bold text-base text-white line-clamp-1">
-              {nextManeuver?.instruction || `Head towards ${currentStop?.name || activeRide.destination}`}
+              {nextManeuver?.instruction || `Head towards ${currentStop?.name || effectiveRide.destination}`}
             </div>
           </div>
         </div>
@@ -330,12 +333,12 @@ export default function CurrentTrip() {
         {/* ETA & Distance Telematics */}
         <div className="text-right flex-shrink-0 border-l border-slate-700/80 pl-4">
           <div className="text-lg font-extrabold text-emerald-400">
-            {progress?.etaString || activeRide.estimatedArrival || '8:35 AM'}
+            {progress?.etaString || effectiveRide.estimatedArrival || '8:35 AM'}
           </div>
           <div className="text-xs text-slate-300 font-medium">
             {progress?.remainingDistanceMeters
               ? `${(progress.remainingDistanceMeters / 1000).toFixed(1)} km · ${Math.round(progress.remainingDurationSeconds / 60)} min`
-              : `${activeRide.distanceKm} km`}
+              : `${effectiveRide.distanceKm} km`}
           </div>
         </div>
       </div>
@@ -349,11 +352,11 @@ export default function CurrentTrip() {
           <div>
             <span className="text-[10px] text-slate-400 font-bold uppercase block">Vehicle Start Point</span>
             <span className="font-bold text-slate-800">
-              {activeRide.startLocation || tripState?.route?.origin?.name || activeRide.pickupPoints[0]?.name || 'Origin'}
+              {effectiveRide.startLocation || tripState?.route?.origin?.name || effectiveRide.pickupPoints?.[0]?.name || 'Origin'}
             </span>
           </div>
         </div>
-        {activeRide.status !== 'completed' && (
+        {effectiveRide.status !== 'completed' && (
           <Button
             size="sm"
             variant="secondary"
@@ -381,17 +384,17 @@ export default function CurrentTrip() {
       {/* Map Card */}
       <div className="relative rounded-2xl overflow-hidden shadow-lg border border-slate-200">
         <CampusMap
-          stops={tripState?.stops || []}
-          routeCoordinates={tripState?.route?.geometry || activeRide.routeCoordinates || []}
-          vehicleLat={vehiclePosition ? vehiclePosition[0] : activeRide.currentLat}
-          vehicleLng={vehiclePosition ? vehiclePosition[1] : activeRide.currentLng}
+          stops={tripState?.stops || effectiveRide.stops || []}
+          routeCoordinates={tripState?.route?.geometry || effectiveRide.routeCoordinates || []}
+          vehicleLat={vehiclePosition ? vehiclePosition[0] : effectiveRide.currentLat}
+          vehicleLng={vehiclePosition ? vehiclePosition[1] : effectiveRide.currentLng}
           vehicleHeading={vehicleHeading}
           cameraMode={cameraMode}
           onCameraModeChange={setCameraMode}
           onRecenter={recenter}
           height="h-72"
           interactive
-          alertMode={progress?.isOffRoute || activeRide.hasDeviation}
+          alertMode={progress?.isOffRoute || effectiveRide.hasDeviation}
           showRecenterButton={isRecenterNeeded}
         />
 
@@ -508,7 +511,7 @@ export default function CurrentTrip() {
               </Button>
             )}
 
-            {currentStop.type === 'DROPOFF' && (tripState?.stops || activeRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length > 1 && (
+            {currentStop.type === 'DROPOFF' && (tripState?.stops || effectiveRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length > 1 && (
               <Button
                 variant="green"
                 size="sm"
@@ -536,7 +539,7 @@ export default function CurrentTrip() {
               </Button>
             )}
 
-            {currentStop.type === 'DROPOFF' && (tripState?.stops || activeRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length <= 1 && (
+            {currentStop.type === 'DROPOFF' && (tripState?.stops || effectiveRide.stops || []).filter((s: any) => s.type === 'DROPOFF' && s.status !== 'COMPLETED').length <= 1 && (
               <Button
                 variant="green"
                 size="sm"
@@ -549,7 +552,7 @@ export default function CurrentTrip() {
               </Button>
             )}
 
-            {activeRide.status !== 'active' && (
+            {effectiveRide.status !== 'active' && (
               <Button
                 variant="primary"
                 size="sm"
@@ -568,7 +571,7 @@ export default function CurrentTrip() {
       {/* Stop Sequence Progression Checklist */}
       <Card padding="md">
         <h3 className="font-heading font-bold text-slate-900 text-sm mb-3 flex items-center justify-between">
-          <span>Route Stops ({tripState?.stops?.length || activeRide.pickupPoints.length + 1})</span>
+          <span>Route Stops ({tripState?.stops?.length || (effectiveRide.pickupPoints?.length || 0) + 1})</span>
           <span className="text-xs font-semibold text-primary-600">
             {progress?.percent ? `${progress.percent}% Completed` : '0% Completed'}
           </span>
@@ -653,19 +656,19 @@ export default function CurrentTrip() {
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-primary-600" />
             <h3 className="font-heading font-bold text-slate-900 text-sm">
-              Pooled Passengers ({activeRide.passengers?.length || 0})
+              Pooled Passengers ({effectiveRide.passengers?.length || 0})
             </h3>
           </div>
           <span className="text-xs font-semibold text-slate-500">
-            {activeRide.passengers?.filter((p) => p.status === 'boarded').length || 0} on board
+            {effectiveRide.passengers?.filter((p) => p.status === 'boarded').length || 0} on board
           </span>
         </div>
 
         <div className="divide-y divide-slate-100">
-          {(activeRide.passengers || []).length === 0 ? (
+          {(effectiveRide.passengers || []).length === 0 ? (
             <p className="text-xs text-slate-400 py-3 text-center">No passengers booked yet.</p>
           ) : (
-            (activeRide.passengers || []).map((passenger) => (
+            (effectiveRide.passengers || []).map((passenger) => (
               <div key={passenger.studentId} className="py-3 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <Avatar name={passenger.name} size="sm" />
@@ -676,7 +679,7 @@ export default function CurrentTrip() {
                     </div>
                     <p className="text-[11px] text-slate-500">
                       <span>Pickup: <strong>{passenger.pickup}</strong></span> →{' '}
-                      <span>Dropoff: <strong className="text-emerald-700">{passenger.destination || activeRide.destination}</strong></span>
+                      <span>Dropoff: <strong className="text-emerald-700">{passenger.destination || effectiveRide.destination}</strong></span>
                     </p>
                   </div>
                 </div>
@@ -732,10 +735,10 @@ export default function CurrentTrip() {
       </Card>
 
       {/* Driver Start Point Selector Modal */}
-      {showStartPointModal && activeRide && (
+      {showStartPointModal && effectiveRide && (
         <StartPointSelectorModal
           isOpen={showStartPointModal}
-          ride={activeRide}
+          ride={effectiveRide}
           isStarting={isSubmitting}
           onClose={() => setShowStartPointModal(false)}
           onConfirm={(startPoint) => handleStartTripAction(startPoint)}

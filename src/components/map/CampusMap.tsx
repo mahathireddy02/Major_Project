@@ -58,6 +58,8 @@ export default function CampusMap({
   alertMode = false,
   showRouteInfo = true,
   autoFit = true,
+  origin,
+  highlightStopStudentId,
 }: CampusMapProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<L.Map | null>(null)
@@ -578,7 +580,8 @@ export default function CampusMap({
   // 10. Render Stop & Fleet Markers
   // ---------------------------------------------------------------------------
   const vehiclesKey = vehicles.map((v) => `${v.id}-${v.lat.toFixed(4)}-${v.lng.toFixed(4)}`).join(';')
-  const currentMarkersKey = `${pointsHash}|${stopsHash}|${vehiclesKey}|${alertMode}`
+  const originKey = origin ? `${origin.lat.toFixed(4)},${origin.lng.toFixed(4)},${origin.name || ''}` : ''
+  const currentMarkersKey = `${pointsHash}|${stopsHash}|${vehiclesKey}|${alertMode}|${originKey}|${highlightStopStudentId || ''}`
 
   useEffect(() => {
     const map = mapInstanceRef.current
@@ -592,15 +595,51 @@ export default function CampusMap({
 
     group.clearLayers()
 
+    // 10-origin: Dedicated Vehicle/Driver Origin Marker
+    if (origin && origin.lat && origin.lng) {
+      const originIcon = L.divIcon({
+        className: '',
+        html: `<div style="
+          width: 28px; height: 28px;
+          background: #059669;
+          border: 2.5px solid white;
+          border-radius: 50%;
+          display: flex; align-items: center; justify-content: center;
+          color: white; font-size: 13px; font-weight: 800;
+          box-shadow: 0 3px 10px rgba(5,150,105,0.45);
+        ">📍</div>`,
+        iconSize: [28, 28],
+        iconAnchor: [14, 14],
+        popupAnchor: [0, -16],
+      })
+      const originMarker = L.marker([origin.lat, origin.lng], { icon: originIcon, zIndexOffset: 750 })
+      originMarker.bindPopup(`
+        <div style="font-family: sans-serif; min-width: 140px;">
+          <strong style="color: #0f172a; font-size: 13px;">${origin.name || 'Driver Starting Point'}</strong>
+          <br/>
+          <span style="font-size: 11px; color: #059669; font-weight: 700;">
+            📍 Vehicle Start Location
+          </span>
+          <div style="font-size: 10px; color: #64748b; margin-top: 2px;">Driver journey originated here</div>
+        </div>
+      `)
+      group.addLayer(originMarker)
+    }
+
     // 10a. Render RouteStops with Live Status if available
     if (stops && stops.length > 0) {
       stops.forEach((stop, idx) => {
+        const isMyPickup = stop.type === 'PICKUP' && highlightStopStudentId && stop.studentId === highlightStopStudentId
+        const isMyDropoff = stop.type === 'DROPOFF' && highlightStopStudentId && stop.studentId === highlightStopStudentId
+
         const marker = L.marker([stop.latitude, stop.longitude], {
           icon: createRouteStopIcon(stop, idx),
-          zIndexOffset: 700 + idx,
+          zIndexOffset: isMyPickup || isMyDropoff ? 950 : 700 + idx,
         })
         marker.bindPopup(`
           <div style="font-family: sans-serif; min-width: 140px;">
+            ${isMyPickup ? '<div style="background:#eff6ff;color:#1d4ed8;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:800;margin-bottom:3px;display:inline-block;border:1px solid #bfdbfe;">📍 YOUR PICKUP</div><br/>' : ''}
+            ${isMyDropoff ? '<div style="background:#ecfdf5;color:#047857;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:800;margin-bottom:3px;display:inline-block;border:1px solid #a7f3d0;">🏁 YOUR DESTINATION</div><br/>' : ''}
             <strong style="color: #0f172a; font-size: 13px;">${stop.name}</strong>
             <br/>
             <span style="font-size: 11px; color: ${stop.type === 'DROPOFF' ? '#16a34a' : '#0284c7'}; font-weight: 600;">

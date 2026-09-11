@@ -302,14 +302,38 @@ export default function DriverDashboard() {
                       </span>
                     )}
                   </div>
-                  <p className="text-xs text-slate-500 flex items-center gap-1">
-                    <MapPin size={11} className="flex-shrink-0" />
-                    <span>
-                      <strong>{ride.startLocation || ride.pickupPoints[0]?.name || 'Origin'}</strong>
-                      {ride.pickupPoints.length > 1 && ` → ${ride.pickupPoints.slice(1).map((p) => p.name).join(' → ')}`}
-                      {' → '}{ride.destination}
-                    </span>
-                  </p>
+                  {(() => {
+                    const startPt = ride.startLocation || ride.pickupPoints[0]?.name || 'Driver Start'
+                    const intermediateStops = (ride.pickupPoints || [])
+                      .map((p) => p.name)
+                      .filter((name) => Boolean(name && name.trim().toLowerCase() !== startPt.trim().toLowerCase()))
+                    const dest = ride.destination || 'Destination'
+                    const fullRoute = [startPt, ...intermediateStops, dest].filter(Boolean)
+                    const cleanRoute = fullRoute.filter((pt, i) => i === 0 || pt.toLowerCase() !== fullRoute[i - 1].toLowerCase())
+
+                    return (
+                      <p className="text-xs text-slate-600 flex items-center gap-1.5 flex-wrap">
+                        <MapPin size={12} className="flex-shrink-0 text-primary-600" />
+                        <span>
+                          <strong className="text-slate-900">{cleanRoute[0]}</strong>
+                          {cleanRoute.length > 2 && (
+                            <>
+                              {' → '}
+                              <span className="text-primary-700 font-medium">
+                                {cleanRoute.slice(1, -1).join(' → ')}
+                              </span>
+                            </>
+                          )}
+                          {cleanRoute.length > 1 && (
+                            <>
+                              {' → '}
+                              <strong className="text-emerald-700">{cleanRoute[cleanRoute.length - 1]}</strong>
+                            </>
+                          )}
+                        </span>
+                      </p>
+                    )
+                  })()}
                 </div>
                 <ChevronRight size={16} className="text-slate-400 flex-shrink-0" />
               </div>
