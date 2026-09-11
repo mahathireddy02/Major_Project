@@ -36,16 +36,11 @@ export const EmergencyAlarmBanner: React.FC = () => {
   const currentSos = isDispatcher ? activeSosEvents[0] : undefined
 
   useEffect(() => {
-    if (isDispatcher && currentSos && !isMuted) {
-      sosAlarmPlayer.play().catch(() => {})
-    } else {
-      sosAlarmPlayer.stop()
-    }
-
+    // Only cleanup audio on unmount if any tone was playing
     return () => {
       sosAlarmPlayer.stop()
     }
-  }, [isDispatcher, currentSos, isMuted])
+  }, [])
 
   if (!isDispatcher || !currentSos) return null
 
@@ -70,7 +65,7 @@ export const EmergencyAlarmBanner: React.FC = () => {
   const handleToggleMute = () => {
     if (isMuted) {
       setIsMuted(false)
-      sosAlarmPlayer.play().catch(() => {})
+      sosAlarmPlayer.playSingleShot().catch(() => {})
     } else {
       setIsMuted(true)
       sosAlarmPlayer.stop()

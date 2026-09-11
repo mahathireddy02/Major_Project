@@ -395,14 +395,18 @@ export const useAppStore = create<AppState>((set, get) => ({
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
-
-            // Siren alarm must ONLY sound in Dispatcher Portal for unacknowledged, unresolved SOS events!
-            // Never in Student Portal or Driver Portal.
-            const currentRole = get().role
-            const currentUserRole = get().currentUser?.role
+            // Siren alarm must ONLY sound in Dispatcher Portal for a new,
+            // unacknowledged, unresolved SOS event. Never in Student or Driver Portal.
+            const currentRole = (get().role || '').toLowerCase()
+            const currentUserRole = (get().currentUser?.role || '').toLowerCase()
             const isDispatcher =
               currentRole === 'admin' ||
-              (currentUserRole && (currentUserRole.toLowerCase() === 'dispatcher' || currentUserRole.toLowerCase() === 'admin'))
+              currentRole === 'dispatcher' ||
+              currentUserRole === 'admin' ||
+              currentUserRole === 'dispatcher' ||
+              (typeof window !== 'undefined' &&
+                (window.location.pathname.startsWith('/admin') ||
+                  window.location.pathname.startsWith('/dispatcher')))
 
             const isUnacknowledgedSos =
               !isAckOrResolved &&
@@ -414,9 +418,10 @@ export const useAppStore = create<AppState>((set, get) => ({
                 normalized.eventType === 'DRIVER_SOS_TRIGGERED' ||
                 (normalized.type && normalized.type.includes('SOS')))
 
-            if (isDispatcher && isUnacknowledgedSos) {
-              sosAlarmPlayer.play().catch(() => {})
-            } else {
+            if (isDispatcher && isUnacknowledgedSos && normalized.id) {
+              // Play only once for this event to prevent duplicate sirens from repeated realtime events.
+              sosAlarmPlayer.playOnceForEvent(normalized.id).catch(() => {})
+            } else if (isAckOrResolved || !isUnacknowledgedSos) {
               sosAlarmPlayer.stop()
             }
           }
@@ -1200,7 +1205,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Safety Actions
-  triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
+  triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string; emergencyEmail?: string } | string, studentId?: string) => {
     try {
       // NOTE: Loud siren alarm is intentionally NOT played on Student or Driver portal devices.
       // Emergency siren sounds strictly at Dispatcher Command Center upon reception.
@@ -1211,6 +1216,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         lng?: number
         emergencyPhone?: string
         emergencyName?: string
+        emergencyEmail?: string
       } = {}
 
       if (typeof params === 'string') {

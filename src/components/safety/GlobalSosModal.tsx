@@ -43,6 +43,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
   const [isEditingContact, setIsEditingContact] = useState(false)
   const [gpsCoords, setGpsCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isMuted, setIsMuted] = useState(false)
 
   const user = currentUser || (role === 'driver' ? currentDriver : currentStudent)
   const effectiveUserId = user?.id || (role === 'driver' ? currentDriverId || 'd1' : currentStudentId || 's1')
@@ -172,7 +173,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
       })
 
       toast.success(
-        `Emergency SOS Dispatched! Automated Voice Call and SMS placed to ${nameToSend} (${phoneToSend}). Dispatch alerted.`,
+        `Emergency SOS Dispatched! Automated Voice Call, SMS, and Email alert placed to ${nameToSend} (${phoneToSend}). Dispatcher notified.`,
         { icon: '🚨', duration: 7000 }
       )
     } catch (err: any) {
