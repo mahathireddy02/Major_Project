@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   MapPin, Clock, Users, Shield, Star, ChevronLeft, Car, CheckCircle2,
-  AlertCircle, ArrowRight, DollarSign, Calendar, Sparkles, Info, ShieldCheck
+  AlertCircle, ArrowRight, DollarSign, Calendar, Sparkles, Info, ShieldCheck, Phone
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
@@ -252,7 +252,16 @@ export default function RideDetail() {
                   <p className="text-sm font-semibold text-slate-900 truncate">{driver.name}</p>
                   <Shield size={13} className="text-green-600" />
                 </div>
-                <div className="flex items-center gap-1 text-xs text-slate-500">
+                {driver.phone && (
+                  <a
+                    href={`tel:${driver.phone}`}
+                    className="flex items-center gap-1 text-xs text-primary-600 font-medium hover:underline mt-0.5"
+                  >
+                    <Phone size={11} className="flex-shrink-0" />
+                    {driver.phone}
+                  </a>
+                )}
+                <div className="flex items-center gap-1 text-xs text-slate-500 mt-0.5">
                   <Star size={12} className="text-amber-400 fill-amber-400" />
                   <span className="font-semibold text-slate-700">{driver.rating}</span>
                   <span>({driver.totalTrips} campus trips)</span>
