@@ -34,7 +34,13 @@ const getWsBase = () => {
   if ((import.meta as any).env?.VITE_WS_BASE_URL) {
     return (import.meta as any).env.VITE_WS_BASE_URL
   }
-  if (typeof window !== 'undefined' && window.location?.host) {
+  if (typeof window !== 'undefined' && window.location) {
+    const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    if (isDev) {
+      // In local dev, connect directly to backend port 5000 to bypass Vite dev server proxy errors
+      const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+      return `${proto}//${window.location.hostname}:5000/realtime`
+    }
     const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     return `${proto}//${window.location.host}/realtime`
   }
