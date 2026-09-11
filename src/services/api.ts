@@ -349,11 +349,20 @@ class ApiClient {
     if (query?.status) params.set('status', query.status)
     if (query?.date) params.set('date', query.date)
     const qs = params.toString() ? `?${params.toString()}` : ''
-    return this.request<Ride[]>(`/rides${qs}`)
+    const rides = await this.request<Ride[]>(`/rides${qs}`)
+    return (rides || []).map((r) => ({
+      ...r,
+      routeName: r.routeName ? r.routeName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim() : r.routeName,
+    }))
   }
 
   async getRide(id: string): Promise<Ride> {
-    return this.request<Ride>(`/rides/${id}`)
+    const r = await this.request<Ride>(`/rides/${id}`)
+    if (!r) return r
+    return {
+      ...r,
+      routeName: r.routeName ? r.routeName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim() : r.routeName,
+    }
   }
 
   async createRide(data: any): Promise<Ride> {

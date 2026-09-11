@@ -104,12 +104,12 @@ const VEHICLES_SEED = [
   { id: 'v20', name: 'Campus Auto 12', driverId: 'd20', vehicleType: 'Auto Rickshaw', registrationNumber: 'TS 09 GG 6931', capacity: 3, status: 'AVAILABLE', color: '#EAB308', rating: 4.7, totalTrips: 260 },
 ]
 
-// 11 Rides Seed Data (including Hackathon Demo Pooled Shuttle V1)
+// 11 Rides Seed Data (including Pooled Campus Shuttle V1)
 const RIDES_SEED = [
-  // Hackathon Demo: Vehicle V1 (12-capacity shuttle with 5 pooled passengers and individual fares)
+  // Pooled Campus Shuttle: Vehicle V1 (12-capacity shuttle with 5 pooled passengers and individual fares)
   {
     id: 'ride-demo-v1',
-    routeName: 'Campus Shuttle V1 [Hackathon Demo Pool]',
+    routeName: 'Campus Shuttle V1',
     driverId: 'd1',
     vehicleId: 'v1',
     pickupPoints: [
@@ -590,7 +590,7 @@ export async function seedDatabase() {
   await RideModel.insertMany(RIDES_SEED)
   console.log(`[Seed] Inserted ${RIDES_SEED.length} rides across various lifecycle states.`)
 
-  // Insert initial Bookings (Hackathon Demo Pool for Vehicle V1 with 5 passengers)
+  // Insert initial Bookings (Campus Shuttle Pool for Vehicle V1 with 5 passengers)
   const initialBookings = [
     {
       id: 'book_demo_a',
@@ -739,7 +739,7 @@ export async function seedDatabase() {
     },
   ]
   await BookingModel.insertMany(initialBookings)
-  console.log(`[Seed] Inserted ${initialBookings.length} initial bookings for Hackathon Demo Pool.`)
+  console.log(`[Seed] Inserted ${initialBookings.length} initial bookings for Campus Shuttle Pool.`)
 
   // Insert individual RideFare records
   const initialFares = initialBookings.map((b) => ({
