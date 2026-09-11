@@ -8,6 +8,7 @@ import { BookingModel } from '../models/Booking.js'
 import { AuditLogModel } from '../models/AuditLog.js'
 import { realtimeService } from '../services/realtimeService.js'
 import { notificationService } from '../services/notificationService.js'
+import { tripGroupingService } from '../services/tripGroupingService.js'
 
 export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
   // Check Python Service Health / Availability
@@ -199,13 +200,26 @@ export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const createdRideIds: string[] = []
+    const usedDriverIds: string[] = []
+    const usedVehicleIds: string[] = []
 
     for (const assignment of assignments) {
-      // Find or assign a driver
-      const availableDriver = await UserModel.findOne({
-        role: { $in: ['DRIVER', 'driver'] },
-        isDriverVerified: true,
-      })
+      // Find or assign a distinct driver & vehicle for each trip
+      const allocation = await tripGroupingService.findAvailableDriverAndVehicle(usedDriverIds, usedVehicleIds)
+      const assignedDriver = allocation?.driver
+      const assignedVehicle = allocation?.vehicle
+
+      if (assignedDriver) usedDriverIds.push(assignedDriver.id)
+      if (assignedVehicle) usedVehicleIds.push(assignedVehicle.id)
+
+      const driverId = assignedDriver?.id || 'd1'
+      const driverName = assignedDriver?.name || 'Rahul Kumar'
+      const driverPhone = assignedDriver?.phone || '+91 99887 76655'
+      const driverRating = assignedDriver?.rating || 4.8
+
+      const vehicleId = assignment.vehicle_id || assignedVehicle?.id || 'v1'
+      const vehicleName = assignment.vehicle_name || assignedVehicle?.name || 'Campus Shuttle'
+      const vehiclePlate = assignment.vehicle_name?.split('(')[1]?.replace(')', '') || assignedVehicle?.registrationNumber || 'TS 09 AB 1234'
 
       const stops = (assignment.stops || []).map((s: any) => ({
         locationName: s.location?.name || `${s.stop_type.toUpperCase()} Stop`,
@@ -218,13 +232,13 @@ export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
       const lastStop = stops[stops.length - 1]
 
       const ride = await RideModel.create({
-        driverId: availableDriver?.id || availableDriver?._id?.toString() || 'd1',
-        driverName: availableDriver?.name || 'Rahul Kumar',
-        driverPhone: availableDriver?.phone || '+91 99887 76655',
-        driverRating: availableDriver?.rating || 4.8,
-        vehicleId: assignment.vehicle_id,
-        vehicleName: assignment.vehicle_name,
-        vehiclePlate: assignment.vehicle_name?.split('(')[1]?.replace(')', '') || 'TS 09 AB 1234',
+        driverId,
+        driverName,
+        driverPhone,
+        driverRating,
+        vehicleId,
+        vehicleName,
+        vehiclePlate,
         pickupLocation: {
           name: firstStop?.locationName || 'Campus Hub',
           coordinates: firstStop?.coordinates || [78.4850, 17.3840],

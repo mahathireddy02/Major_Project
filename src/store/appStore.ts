@@ -336,9 +336,10 @@ export const useAppStore = create<AppState>((set, get) => ({
               showNotificationToast(notif)
             }
           }
-        } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
-          const isCompleted = event === 'RIDE_COMPLETED' || payload.ride.status === 'completed'
-          const normRide = normalizeRide(payload.ride)
+        } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED' || event === 'TRIP_CREATED' || event === 'TRIP_ROUTE_UPDATED') && (payload?.ride || payload?.trip)) {
+          const rawTrip = payload.ride || payload.trip
+          const isCompleted = event === 'RIDE_COMPLETED' || rawTrip.status === 'completed'
+          const normRide = normalizeRide(rawTrip)
           set((state) => ({
             rides: state.rides.some((r) => r.id === normRide.id)
               ? state.rides.map((r) => (r.id === normRide.id ? { ...r, ...normRide } : r))
@@ -350,6 +351,34 @@ export const useAppStore = create<AppState>((set, get) => ({
                   ),
                 }
               : {}),
+          }))
+        } else if (event === 'PASSENGER_JOINED_TRIP' && payload?.tripId && payload?.passenger) {
+          set((state) => ({
+            rides: state.rides.map((r) => {
+              if (r.id === payload.tripId) {
+                const passengers = r.passengers || []
+                const hasPax = passengers.some((p) => p.studentId === payload.passenger.studentId)
+                return {
+                  ...r,
+                  bookedSeats: payload.bookedSeats ?? r.bookedSeats + 1,
+                  passengers: hasPax ? passengers : [...passengers, payload.passenger],
+                }
+              }
+              return r
+            }),
+          }))
+        } else if (event === 'PASSENGER_REMOVED_FROM_TRIP' && payload?.tripId && payload?.studentId) {
+          set((state) => ({
+            rides: state.rides.map((r) => {
+              if (r.id === payload.tripId) {
+                return {
+                  ...r,
+                  bookedSeats: payload.bookedSeats ?? Math.max(0, r.bookedSeats - 1),
+                  passengers: (r.passengers || []).filter((p) => p.studentId !== payload.studentId),
+                }
+              }
+              return r
+            }),
           }))
         } else if (event === 'BOOKING_CREATED') {
           if (payload?.booking) {
@@ -880,7 +909,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Create Ride
+  // Create Ride (routed through intelligent Trip Grouping & Booking Placement)
   createRide: async (
     pickup: string,
     destination: string,
@@ -896,34 +925,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       const pLng = pickupCoords?.lng || 78.479
       const dLat = destinationCoords?.lat || 17.387
       const dLng = destinationCoords?.lng || 78.486
-      const student = get().students.find((s) => s.id === studentId)
-      const isFemaleOnly = genderPreference === 'FEMALE_ONLY'
-      const newRide = await api.createRide({
-        pickupPoints: [{ id: `pp-${Date.now()}`, name: pickup, lat: pLat, lng: pLng, estimatedPickupTime: time }],
+
+      const response = await api.createBooking({
+        studentId,
+        pickup,
+        pickupName: pickup,
+        pickupCoords: { lat: pLat, lng: pLng },
         destination,
-        destinationLat: dLat,
-        destinationLng: dLng,
-        departureTime: time,
-        bookedSeats: seats,
-        capacity: 6,
-        fare: 25,
-        isFemaleOnly,
-        genderPreference: isFemaleOnly ? 'FEMALE_ONLY' : 'ANYONE',
-        passengers: [{
-          studentId,
-          name: student?.name || 'Student',
-          pickup,
-          destination,
-          status: 'waiting',
-          seatNo: 1,
-          gender: student?.gender || 'Other',
-          genderPreference: isFemaleOnly ? 'FEMALE_ONLY' : 'ANYONE',
-        }],
+        destinationName: destination,
+        destinationCoords: { lat: dLat, lng: dLng },
+        time,
+        seats,
+        genderPreference: genderPreference || 'ANYONE',
       })
-      const normRide = normalizeRide(newRide)
-      set((state) => ({
-        rides: [normRide, ...state.rides],
-      }))
+
+      const normRide = normalizeRide(response.trip)
+      const booking = response.booking
+
+      set((state) => {
+        const rideExists = state.rides.some((r) => r.id === normRide.id)
+        const updatedRides = rideExists
+          ? state.rides.map((r) => (r.id === normRide.id ? { ...r, ...normRide } : r))
+          : [normRide, ...state.rides]
+
+        const updatedBookings = booking
+          ? [booking, ...state.bookings.filter((b) => b.id !== booking.id)]
+          : state.bookings
+
+        return {
+          rides: updatedRides,
+          bookings: updatedBookings,
+        }
+      })
+
       return normRide
     } catch (err: any) {
       console.error('[Store] createRide error:', err.message)

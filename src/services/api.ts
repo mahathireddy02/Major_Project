@@ -401,6 +401,51 @@ class ApiClient {
     }
   }
 
+  async createBooking(data: {
+    studentId: string
+    pickup: string
+    pickupName?: string
+    pickupAddress?: string
+    pickupCoords?: { lat: number; lng: number }
+    destination: string
+    destinationName?: string
+    destinationAddress?: string
+    destinationCoords?: { lat: number; lng: number }
+    time?: string
+    seats?: number
+    genderPreference?: string
+  }): Promise<{
+    booking: Booking
+    trip: Ride
+    matchingType: 'JOINED_EXISTING_TRIP' | 'NEW_TRIP' | 'QUEUED_FOR_DISPATCH'
+    driver?: any
+    vehicle?: any
+    metrics?: any
+  }> {
+    return this.request<any>('/bookings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getCurrentTripForDriver(driverId?: string): Promise<Ride | null> {
+    const query = driverId ? `?driverId=${encodeURIComponent(driverId)}` : ''
+    const res = await this.request<any>(`/driver/current-trip${query}`)
+    if (!res) return null
+    return {
+      ...res,
+      routeName: this.cleanRideName(res.routeName),
+    }
+  }
+
+  async getActiveTrips(): Promise<Ride[]> {
+    const res = await this.request<Ride[]>('/rides/active')
+    return (res || []).map((r) => ({
+      ...r,
+      routeName: this.cleanRideName(r.routeName),
+    }))
+  }
+
   async createRide(data: any): Promise<Ride> {
     return this.request<Ride>('/rides', {
       method: 'POST',
