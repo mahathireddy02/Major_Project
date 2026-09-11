@@ -274,6 +274,13 @@ export default function LiveTracking() {
       color: 'bg-emerald-600',
       badge: 'ARRIVED',
     }
+  } else if (effectiveRide.status === 'recovery_pending') {
+    statusBanner = {
+      title: 'Automated Vehicle Reassignment In Progress',
+      desc: 'Vehicle assistance active. Nearby replacement shuttle being assigned. Your booking and fare remain secured.',
+      color: 'bg-amber-600',
+      badge: 'REASSIGNING',
+    }
   } else if (isBoarded) {
     statusBanner = {
       title: 'On Trip to Your Destination',
@@ -318,6 +325,23 @@ export default function LiveTracking() {
           <Button size="sm" variant="secondary" className="text-xs py-1 h-7" onClick={() => navigate('/student/safety')}>
             Safety
           </Button>
+        </div>
+      )}
+
+      {/* Automated Breakdown Recovery Reassignment Banner */}
+      {Boolean(effectiveRide.recoveryId && effectiveRide.status === 'active') && (
+        <div className="absolute top-20 left-4 right-4 z-20 bg-emerald-600 text-white px-4 py-2.5 rounded-2xl shadow-xl flex items-center justify-between border border-emerald-400/50 animate-in fade-in">
+          <div className="flex items-center gap-2.5">
+            <CheckCircle2 size={18} className="text-white flex-shrink-0" />
+            <div>
+              <p className="text-xs font-extrabold leading-tight">
+                Ride Reassigned to {vehicle?.name || 'Replacement Shuttle'}
+              </p>
+              <p className="text-[11px] text-emerald-100 font-medium">
+                Driver: {driver?.name || 'Assigned Driver'} · Your booking & confirmed fare (₹{currentPassenger?.fare || myBooking?.fare || effectiveRide.fare}) remain secured.
+              </p>
+            </div>
+          </div>
         </div>
       )}
 

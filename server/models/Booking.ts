@@ -21,6 +21,8 @@ export interface IBooking extends Document {
   dropoffStopId?: string
   seats: number
   fare: number
+  originalFare?: number
+  recoveryPricingPolicy?: string
   fareId?: string
   fareBreakdown?: any
   isPriceLocked?: boolean
@@ -54,6 +56,8 @@ const BookingSchema = new Schema<IBooking>(
     dropoffStopId: { type: String },
     seats: { type: Number, default: 1 },
     fare: { type: Number, required: true },
+    originalFare: { type: Number },
+    recoveryPricingPolicy: { type: String, default: 'PRICE_LOCKED' },
     fareId: { type: String, index: true },
     fareBreakdown: { type: Schema.Types.Mixed },
     isPriceLocked: { type: Boolean, default: true },

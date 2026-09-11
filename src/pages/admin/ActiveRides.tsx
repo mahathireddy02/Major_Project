@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo } from 'react'
 import {
   Navigation, Search, RefreshCw, AlertTriangle, ChevronDown, ChevronUp,
   MapPin, Users, Clock, Shield, Car, RotateCw, UserCheck, Eye, Phone, CheckCircle2,
-  Sparkles, DollarSign, History, RefreshCcw, TrendingUp, ShieldCheck
+  Sparkles, DollarSign, History, RefreshCcw, TrendingUp, ShieldCheck,
+  Wrench, AlertOctagon, ArrowRight
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import DispatcherHeader from '../../components/admin/DispatcherHeader'
@@ -35,16 +36,28 @@ export default function AdminActiveRides() {
   const [selectedRideEvents, setSelectedRideEvents] = useState<PricingEvent[]>([])
   const [isPricingLoading, setIsPricingLoading] = useState(false)
 
+  // Vehicle Breakdown Recovery & Reassignment States
+  const [recoveryHistory, setRecoveryHistory] = useState<any[]>([])
+  const [isRecoveryModalOpen, setIsRecoveryModalOpen] = useState(false)
+  const [recoveryModalRide, setRecoveryModalRide] = useState<Ride | null>(null)
+  const [candidatesData, setCandidatesData] = useState<{ rideId: string; breakdownLocation: { lat: number; lng: number }; candidates: any[] } | null>(null)
+  const [loadingCandidates, setLoadingCandidates] = useState(false)
+  const [selectedCandidateVehicleId, setSelectedCandidateVehicleId] = useState<string>('')
+
   const refreshData = async () => {
     setIsRefreshing(true)
     try {
       await loadDispatcherData()
-      const metricRes = await api.getFleetPricingMetrics()
-      if (metricRes.success && metricRes.data) {
+      const metricRes = await api.getFleetPricingMetrics().catch(() => null)
+      if (metricRes && metricRes.success && metricRes.data) {
         setFleetMetrics(metricRes.data)
       }
+      const recRes = await api.getRecoveryHistory().catch(() => null)
+      if (recRes && recRes.success && recRes.data) {
+        setRecoveryHistory(recRes.data)
+      }
     } catch (err: any) {
-      console.warn('[ActiveRides] Failed to load fleet pricing metrics:', err?.message)
+      console.warn('[ActiveRides] Failed to load dispatcher metrics/recovery:', err?.message)
     } finally {
       setIsRefreshing(false)
     }
@@ -80,7 +93,8 @@ export default function AdminActiveRides() {
   // Filter and search
   const filteredRides = useMemo(() => {
     return rides.filter((r) => {
-      if (filter !== 'All' && r.status.toLowerCase() !== filter.toLowerCase()) return false
+      if (filter === 'Breakdown' && r.status !== 'recovery_pending') return false
+      if (filter !== 'All' && filter !== 'Breakdown' && r.status.toLowerCase() !== filter.toLowerCase()) return false
 
       if (!search.trim()) return true
       const q = search.toLowerCase().trim()
@@ -100,11 +114,84 @@ export default function AdminActiveRides() {
     return {
       all: rides.length,
       active: rides.filter((r) => r.status === 'active').length,
+      breakdown: rides.filter((r) => r.status === 'recovery_pending').length,
       boarding: rides.filter((r) => r.status === 'boarding').length,
       waiting: rides.filter((r) => r.status === 'waiting').length,
       completed: rides.filter((r) => r.status === 'completed').length,
     }
   }, [rides])
+
+  const handleOpenRecoveryModal = async (ride: Ride) => {
+    setRecoveryModalRide(ride)
+    setIsRecoveryModalOpen(true)
+    setLoadingCandidates(true)
+    setSelectedCandidateVehicleId('')
+    try {
+      const res = await api.getRecoveryCandidates(ride.id)
+      if (res.success && res.data) {
+        setCandidatesData(res.data)
+        if (res.data.candidates && res.data.candidates.length > 0) {
+          setSelectedCandidateVehicleId(res.data.candidates[0].vehicle.id)
+        }
+      }
+    } catch (err: any) {
+      toast.error(`Failed to load candidates: ${err?.message || 'Error'}`)
+    } finally {
+      setLoadingCandidates(false)
+    }
+  }
+
+  const handleExecuteManualRecovery = async (overrideVehicleId?: string) => {
+    if (!recoveryModalRide) return
+    const recId = recoveryModalRide.recoveryId
+    if (!recId) {
+      toast.error('No recovery tracking ID found on this ride.')
+      return
+    }
+
+    const targetVehicleId = overrideVehicleId || selectedCandidateVehicleId || undefined
+    setActionLoading(true)
+    try {
+      const res = await api.retryRecovery(recId, targetVehicleId)
+      if (res.success) {
+        toast.success(res.message || 'Vehicle successfully reassigned! Route recalculated.')
+        setIsRecoveryModalOpen(false)
+        setRecoveryModalRide(null)
+        await refreshData()
+      } else {
+        toast.error(res.message || 'Recovery failed')
+      }
+    } catch (err: any) {
+      toast.error(`Reassignment failed: ${err?.message || 'Error'}`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
+
+  const handleTriggerBreakdown = async (ride: Ride) => {
+    const confirm = window.confirm(
+      `Declare breakdown for vehicle ${ride.vehicleId} on route "${ride.routeName}"? This will mark the vehicle OUT_OF_SERVICE and immediately trigger automated reassignment.`
+    )
+    if (!confirm) return
+    setActionLoading(true)
+    try {
+      const res = await api.reportVehicleBreakdown(ride.vehicleId, {
+        location: {
+          lat: ride.currentLat,
+          lng: ride.currentLng,
+        },
+        reason: 'Dispatcher manual breakdown declaration',
+      })
+      if (res.success) {
+        toast.success(res.message || 'Vehicle breakdown registered. Recovery triggered!')
+        await refreshData()
+      }
+    } catch (err: any) {
+      toast.error(`Failed to report breakdown: ${err?.message || 'Error'}`)
+    } finally {
+      setActionLoading(false)
+    }
+  }
 
   const handleRecalculate = async (rideId: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -275,22 +362,62 @@ export default function AdminActiveRides() {
 
             {/* Filter pills */}
             <div className="flex items-center bg-[#F7F9FC] p-1 rounded-xl border border-[#E5EAF0] overflow-x-auto">
-              {(['All', 'Active', 'Boarding', 'Waiting', 'Completed'] as const).map((tab) => (
+              {(['All', 'Active', 'Breakdown', 'Boarding', 'Waiting', 'Completed'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setFilter(tab)}
-                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap ${
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${
                     filter === tab
                       ? 'bg-white text-[#2563EB] shadow-xs'
                       : 'text-[#5E6875] hover:text-[#17202A]'
                   }`}
                 >
                   {tab}
+                  {tab === 'Breakdown' && counts.breakdown > 0 && (
+                    <span className="px-1.5 py-0.2 rounded-full bg-red-600 text-white text-[10px] font-bold animate-pulse">
+                      {counts.breakdown}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
           </div>
         </Card>
+
+        {/* Active Breakdown Recovery Operations Alert */}
+        {counts.breakdown > 0 && (
+          <Card className="bg-red-50 border-2 border-red-300 p-4 shadow-md text-red-950">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-red-600 text-white flex items-center justify-center flex-shrink-0 animate-pulse shadow-sm">
+                  <Wrench className="w-6 h-6" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-red-700 bg-red-100 border border-red-200 px-2 py-0.5 rounded-md">
+                      CRITICAL FLEET EVENT
+                    </span>
+                    <span className="text-sm font-bold text-red-900">
+                      {counts.breakdown} Vehicle Breakdown(s) Awaiting Reassignment
+                    </span>
+                  </div>
+                  <p className="text-xs text-red-700 mt-0.5">
+                    Affected passengers are awaiting replacement pickup. Fares are locked with zero penalty. Dispatcher oversight active.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setFilter('Breakdown')}
+                  className="px-3.5 py-2 text-xs font-bold rounded-xl bg-red-600 hover:bg-red-700 text-white shadow-xs transition-colors flex items-center gap-1.5"
+                >
+                  <AlertOctagon className="w-4 h-4" /> Filter Breakdown Trips
+                </button>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Rides List */}
         <div className="space-y-3">
@@ -311,7 +438,11 @@ export default function AdminActiveRides() {
                 <Card
                   key={ride.id}
                   className={`bg-white border-[#E5EAF0] shadow-sm transition-all overflow-hidden ${
-                    hasAlert ? 'border-red-300 ring-1 ring-red-200' : ''
+                    ride.status === 'recovery_pending'
+                      ? 'border-red-400 ring-2 ring-red-300 bg-red-50/10'
+                      : hasAlert
+                      ? 'border-red-300 ring-1 ring-red-200'
+                      : ''
                   }`}
                 >
                   <div
@@ -334,12 +465,24 @@ export default function AdminActiveRides() {
                                 ? 'yellow'
                                 : ride.status === 'completed'
                                 ? 'slate'
+                                : ride.status === 'recovery_pending'
+                                ? 'red'
                                 : 'blue'
                             }
                             size="sm"
                           >
                             {getRideStatusLabel(ride.status)}
                           </Badge>
+                          {ride.status === 'recovery_pending' && (
+                            <Badge variant="red" size="sm" className="gap-1 animate-pulse bg-red-600 text-white font-bold">
+                              <Wrench className="w-3 h-3" /> BREAKDOWN RECOVERY
+                            </Badge>
+                          )}
+                          {ride.status === 'recovered' && (
+                            <Badge variant="green" size="sm" className="gap-1 font-semibold">
+                              <CheckCircle2 className="w-3 h-3" /> RECOVERED
+                            </Badge>
+                          )}
                           {ride.hasDeviation && (
                             <Badge variant="red" size="sm" className="gap-1 animate-pulse">
                               <AlertTriangle className="w-3 h-3" /> DEVIATION
@@ -386,6 +529,32 @@ export default function AdminActiveRides() {
 
                     {/* Right: Actions */}
                     <div className="flex items-center gap-2 self-end lg:self-center">
+                      {ride.status === 'recovery_pending' ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleOpenRecoveryModal(ride)
+                          }}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-red-600 hover:bg-red-700 shadow-xs transition-colors flex items-center gap-1.5 animate-pulse"
+                        >
+                          <Wrench className="w-3.5 h-3.5" /> Reassign Vehicle
+                        </button>
+                      ) : (
+                        (ride.status === 'active' || ride.status === 'boarding') && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleTriggerBreakdown(ride)
+                            }}
+                            disabled={actionLoading}
+                            title="Declare Vehicle Breakdown"
+                            className="p-1.5 rounded-lg text-amber-600 hover:text-red-700 hover:bg-red-50 border border-amber-200 transition-colors"
+                          >
+                            <Wrench className="w-4 h-4" />
+                          </button>
+                        )
+                      )}
+
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
@@ -735,6 +904,182 @@ export default function AdminActiveRides() {
           </div>
         )}
       </DetailDrawer>
+
+      {/* Vehicle Breakdown Emergency Recovery Modal */}
+      {isRecoveryModalOpen && recoveryModalRide && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl max-w-2xl w-full border border-[#E5EAF0] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-5 bg-gradient-to-r from-red-600 to-amber-600 text-white flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center text-white flex-shrink-0">
+                  <Wrench className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-lg">Vehicle Breakdown Recovery Console</h3>
+                  <p className="text-xs text-white/90 mt-0.5">
+                    Ride #{recoveryModalRide.id} • {recoveryModalRide.routeName}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setIsRecoveryModalOpen(false)
+                  setRecoveryModalRide(null)
+                }}
+                className="p-1 rounded-lg hover:bg-white/20 text-white/80 hover:text-white transition-colors text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Incident Context */}
+              <div className="p-3.5 bg-amber-50 rounded-xl border border-amber-200 text-xs space-y-1.5">
+                <div className="flex items-center justify-between font-semibold text-amber-900">
+                  <span>Impacted Passengers: {recoveryModalRide.passengers?.length || 0}</span>
+                  <span className="font-mono">
+                    GPS: {candidatesData?.breakdownLocation?.lat?.toFixed(5) || recoveryModalRide.currentLat?.toFixed(5)}, {candidatesData?.breakdownLocation?.lng?.toFixed(5) || recoveryModalRide.currentLng?.toFixed(5)}
+                  </span>
+                </div>
+                <p className="text-amber-800">
+                  All active bookings and passenger fares are strictly preserved (Zero cancellation policy). The replacement vehicle will start from its actual location and pick up stranded passengers.
+                </p>
+              </div>
+
+              {/* Scored Candidate Fleet List */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#5E6875]">
+                    Scored Replacement Candidates
+                  </h4>
+                  <span className="text-[11px] text-[#5E6875]">
+                    Scored by Proximity, Overlap & Spare Capacity
+                  </span>
+                </div>
+
+                {loadingCandidates ? (
+                  <div className="p-8 text-center bg-[#F7F9FC] rounded-xl border border-[#E5EAF0]">
+                    <RefreshCw className="w-6 h-6 mx-auto animate-spin text-[#2563EB] mb-2" />
+                    <p className="text-xs text-[#5E6875]">Calculating multi-metric candidate scores via OSRM...</p>
+                  </div>
+                ) : !candidatesData?.candidates || candidatesData.candidates.length === 0 ? (
+                  <div className="p-6 text-center bg-slate-50 rounded-xl border border-slate-200">
+                    <AlertTriangle className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                    <p className="font-bold text-sm text-slate-800">No Eligible Replacement Vehicles In Proximity</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      No online vehicles currently have enough spare capacity ({recoveryModalRide.passengers?.length || 1} seats).
+                      You can retry or wait for in-service vehicles to clear dropoffs.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {candidatesData.candidates.map((cand: any, idx: number) => {
+                      const isSelected = selectedCandidateVehicleId === cand.vehicle.id
+                      return (
+                        <div
+                          key={cand.vehicle.id}
+                          onClick={() => setSelectedCandidateVehicleId(cand.vehicle.id)}
+                          className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${
+                            isSelected
+                              ? 'bg-blue-50/70 border-[#2563EB] ring-2 ring-[#2563EB]/20'
+                              : 'bg-white border-[#E5EAF0] hover:border-slate-300'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="radio"
+                              name="candidateVehicle"
+                              checked={isSelected}
+                              onChange={() => setSelectedCandidateVehicleId(cand.vehicle.id)}
+                              className="w-4 h-4 text-[#2563EB] focus:ring-[#2563EB]"
+                            />
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-sm text-[#17202A]">{cand.vehicle.name}</span>
+                                <Badge variant="slate" size="sm" className="font-mono text-[10px]">
+                                  {cand.vehicle.registration}
+                                </Badge>
+                                {idx === 0 && (
+                                  <Badge variant="green" size="sm" className="text-[10px] font-bold">
+                                    TOP RECOMMENDATION
+                                  </Badge>
+                                )}
+                              </div>
+                              <p className="text-xs text-[#5E6875] mt-0.5">
+                                Driver: <strong>{cand.driver?.name || 'Assigned Driver'}</strong> • Status: {cand.vehicle.status || 'AVAILABLE'}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="text-right text-xs shrink-0 space-y-0.5">
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-[11px] text-[#5E6875]">ETA to breakdown:</span>
+                              <span className="font-bold font-mono text-[#17202A]">{cand.metrics?.etaMinutes || Math.round(cand.distanceKm * 2.5)} mins</span>
+                            </div>
+                            <div className="flex items-center justify-end gap-2">
+                              <span className="text-[11px] text-[#5E6875]">Available Seats:</span>
+                              <span className="font-bold text-emerald-700 font-mono">{cand.metrics?.availableSeats ?? cand.vehicle.capacity}</span>
+                            </div>
+                            <div className="text-[10px] font-bold text-indigo-700">
+                              Score: {cand.compositeScore} / 100
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 bg-[#F7F9FC] border-t border-[#E5EAF0] flex items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsRecoveryModalOpen(false)
+                  setRecoveryModalRide(null)
+                }}
+                className="px-4 py-2 text-xs font-semibold text-[#5E6875] hover:text-[#17202A] hover:bg-slate-200/50 rounded-xl transition-colors"
+              >
+                Dismiss
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExecuteManualRecovery()}
+                  disabled={actionLoading}
+                  className="px-4 py-2 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl transition-colors disabled:opacity-50"
+                >
+                  Autonomous Auto-Assign
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleExecuteManualRecovery(selectedCandidateVehicleId)}
+                  disabled={actionLoading || !selectedCandidateVehicleId}
+                  className="px-5 py-2 text-xs font-bold text-white bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 rounded-xl shadow-sm transition-all disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {actionLoading ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Reassigning & Recalculating...
+                    </>
+                  ) : (
+                    <>
+                      Assign Selected Vehicle
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

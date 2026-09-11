@@ -44,6 +44,10 @@ export type RealtimeEventType =
   | 'FLEET_RESET'
   | 'PRICING_UPDATED'
   | 'FARE_RECALCULATED'
+  | 'VEHICLE_BREAKDOWN'
+  | 'RECOVERY_STARTED'
+  | 'RECOVERY_COMPLETED'
+  | 'RECOVERY_FAILED'
 
 
 export interface RealtimeMessage {

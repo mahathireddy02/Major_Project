@@ -18,6 +18,7 @@ import {
   CornerUpRight,
   CornerUpLeft,
   MessageCircle,
+  Wrench,
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { useLiveTrip } from '../../hooks/useLiveTrip'
@@ -321,6 +322,74 @@ export default function CurrentTrip() {
     }
   }, [])
 
+  // Vehicle Breakdown & Automated Recovery State
+  const [showBreakdownModal, setShowBreakdownModal] = useState<boolean>(false)
+  const [isReportingBreakdown, setIsReportingBreakdown] = useState<boolean>(false)
+  const [breakdownReported, setBreakdownReported] = useState<boolean>(false)
+  const [recoveryInfo, setRecoveryInfo] = useState<any>(null)
+
+  // Realtime listeners for breakdown and recovery
+  useEffect(() => {
+    const unsub = api.onRealtimeEvent((event, payload) => {
+      if (
+        event === 'RECOVERY_COMPLETED' &&
+        (payload?.rideId === effectiveRide?.id || payload?.oldVehicleId === effectiveRide?.vehicleId)
+      ) {
+        setRecoveryInfo(payload)
+        setBreakdownReported(true)
+      } else if (
+        event === 'VEHICLE_BREAKDOWN' &&
+        (payload?.rideId === effectiveRide?.id || payload?.vehicleId === effectiveRide?.vehicleId)
+      ) {
+        setBreakdownReported(true)
+      }
+    })
+    return unsub
+  }, [effectiveRide?.id, effectiveRide?.vehicleId])
+
+  const handleReportBreakdownConfirm = async () => {
+    setIsReportingBreakdown(true)
+    try {
+      if (simIntervalRef.current) clearInterval(simIntervalRef.current)
+      if (watchIdRef.current !== null) navigator.geolocation.clearWatch(watchIdRef.current)
+      setIsGpsActive(false)
+      setIsSimulating(false)
+
+      let lat = vehiclePosition ? vehiclePosition[0] : effectiveRide?.currentLat || 17.385
+      let lng = vehiclePosition ? vehiclePosition[1] : effectiveRide?.currentLng || 78.486
+
+      if (navigator.geolocation) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((res, rej) =>
+            navigator.geolocation.getCurrentPosition(res, rej, { timeout: 3000, enableHighAccuracy: true })
+          )
+          lat = pos.coords.latitude
+          lng = pos.coords.longitude
+        } catch {
+          // fallback to last known
+        }
+      }
+
+      const res = await api.reportDriverBreakdown({
+        vehicleId: effectiveRide?.vehicleId,
+        location: { lat, lng },
+        reason: 'Driver reported vehicle breakdown / malfunction',
+      })
+
+      setShowBreakdownModal(false)
+      setBreakdownReported(true)
+      if (res?.data?.recoveryEvent) {
+        setRecoveryInfo(res.data.recoveryEvent)
+      }
+      toast.success('Vehicle breakdown reported! Automated recovery started.', { icon: '🚨' })
+      await refreshRides()
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to report breakdown')
+    } finally {
+      setIsReportingBreakdown(false)
+    }
+  }
+
   // Handle Real Device GPS Watch
   const toggleGpsTracking = () => {
     if (isGpsActive) {
@@ -505,6 +574,57 @@ export default function CurrentTrip() {
     return <ArrowUp className="w-5 h-5 text-white" />
   }
 
+  const isBrokenDown =
+    breakdownReported ||
+    effectiveRide.status === 'recovery_pending' ||
+    Boolean(effectiveRide.recoveryId && effectiveRide.status !== 'active')
+
+  if (isBrokenDown) {
+    return (
+      <div className="max-w-xl mx-auto px-4 pt-10 pb-16 text-center">
+        <div className="bg-red-50 border-2 border-red-300 rounded-3xl p-6 sm:p-8 text-center shadow-xl mb-6 animate-in fade-in zoom-in-95">
+          <div className="w-16 h-16 bg-red-100 text-red-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-sm">
+            <Wrench size={32} className="animate-bounce" />
+          </div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-600 text-white font-bold rounded-full text-xs uppercase tracking-wider mb-3">
+            Vehicle Breakdown Reported
+          </div>
+          <h2 className="text-xl sm:text-2xl font-heading font-extrabold text-slate-900 mb-2">
+            Automated Ride Recovery {recoveryInfo?.status === 'COMPLETED' ? 'Completed' : 'In Progress'}
+          </h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed max-w-md mx-auto">
+            {recoveryInfo?.status === 'COMPLETED'
+              ? `All passengers on ${effectiveRide.routeName} were automatically transferred to replacement vehicle ${recoveryInfo.replacementVehicleName || recoveryInfo.replacementVehicleId}. Your vehicle is marked OUT OF SERVICE.`
+              : 'Our automated recovery system is actively finding and reassigning a suitable replacement vehicle. Passenger bookings and locked fares are preserved without rebooking.'}
+          </p>
+
+          <div className="grid grid-cols-2 gap-3 text-left mb-6">
+            <div className="bg-white p-3.5 rounded-2xl border border-red-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Vehicle Status</span>
+              <span className="text-sm font-extrabold text-red-600 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                OUT OF SERVICE
+              </span>
+            </div>
+            <div className="bg-white p-3.5 rounded-2xl border border-red-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Passengers</span>
+              <span className="text-sm font-extrabold text-emerald-700 flex items-center gap-1.5">
+                <CheckCircle size={14} className="text-emerald-500" />
+                Transferred Automatically
+              </span>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button onClick={() => navigate('/driver/dashboard')}>
+              Return to Driver Dashboard
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-8 space-y-4">
       {/* Turn-by-Turn Navigation HUD (Rapido/Uber style) */}
@@ -534,6 +654,32 @@ export default function CurrentTrip() {
               : `${effectiveRide.distanceKm} km`}
           </div>
         </div>
+      </div>
+
+      {/* Vehicle Status & Automated Breakdown Recovery Action */}
+      <div className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between shadow-2xs">
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex h-3 w-3">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+          <div>
+            <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">Vehicle Status</span>
+            <span className="text-xs font-extrabold text-slate-800">
+              {tripState?.vehicle?.name || 'Assigned Vehicle'} · <span className="text-emerald-600 font-bold">ACTIVE</span>
+            </span>
+          </div>
+        </div>
+
+        <Button
+          size="sm"
+          variant="danger"
+          className="text-xs h-8 px-3 font-bold bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 hover:border-red-300"
+          onClick={() => setShowBreakdownModal(true)}
+        >
+          <Wrench size={13} className="mr-1.5" />
+          Report Vehicle Breakdown
+        </Button>
       </div>
 
       {/* Starting Location Info Banner */}
@@ -953,6 +1099,63 @@ export default function CurrentTrip() {
           onClose={() => setShowStartPointModal(false)}
           onConfirm={(startPoint) => handleStartTripAction(startPoint)}
         />
+      )}
+
+      {/* Vehicle Breakdown Confirmation Modal */}
+      {showBreakdownModal && effectiveRide && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mb-4 mx-auto">
+              <Wrench size={26} />
+            </div>
+            <h3 className="text-lg font-heading font-bold text-slate-900 text-center mb-2">
+              Report Vehicle Breakdown?
+            </h3>
+            <p className="text-xs text-slate-600 text-center mb-5 leading-relaxed">
+              This will immediately start <strong>automated ride recovery</strong>. Passengers will be transferred to another available vehicle when possible.
+            </p>
+
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700 mb-6 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-slate-500">Affected Ride:</span>
+                <span className="font-bold text-slate-900">{effectiveRide.routeName}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Active Passengers:</span>
+                <span className="font-bold text-slate-900">
+                  {effectiveRide.passengers?.filter((p: any) => p.status !== 'dropped').length || 0} passengers
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Breakdown Location:</span>
+                <span className="font-mono text-[11px] text-slate-800">
+                  {vehiclePosition
+                    ? `${vehiclePosition[0].toFixed(4)}, ${vehiclePosition[1].toFixed(4)}`
+                    : 'Current GPS Telematics'}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <Button
+                variant="secondary"
+                className="flex-1"
+                disabled={isReportingBreakdown}
+                onClick={() => setShowBreakdownModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                className="flex-1"
+                disabled={isReportingBreakdown}
+                onClick={handleReportBreakdownConfirm}
+              >
+                {isReportingBreakdown ? 'Reporting...' : 'Confirm Breakdown'}
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
