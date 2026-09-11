@@ -55,7 +55,7 @@ export function normalizeSafetyEvent(e: any): SafetyEvent {
     vehicleId: e.vehicleId,
     driverId: e.driverId,
     driverName: e.driverName,
-    routeName: e.routeName,
+    routeName: typeof e.routeName === 'string' ? e.routeName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim() : e.routeName,
     passengerCount: e.passengerCount,
     emergencyContact: e.emergencyContact,
     acknowledgedAt: e.acknowledgedAt,
@@ -66,6 +66,18 @@ export function normalizeSafetyEvent(e: any): SafetyEvent {
     lng: e.lng,
     status: e.status || (e.resolved ? 'RESOLVED' : 'ACTIVE'),
   } as SafetyEvent
+}
+
+export function normalizeRide(r: Ride): Ride {
+  if (!r) return r
+  let cleanName = r.routeName
+  if (typeof cleanName === 'string') {
+    cleanName = cleanName.replace(/\s*\[?hackathon[^\]]*\]?/gi, '').trim()
+  }
+  return {
+    ...r,
+    routeName: cleanName || 'Campus Shuttle',
+  }
 }
 
 interface SimState {
@@ -291,14 +303,15 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
           const isCompleted = event === 'RIDE_COMPLETED' || payload.ride.status === 'completed'
+          const normRide = normalizeRide(payload.ride)
           set((state) => ({
-            rides: state.rides.some((r) => r.id === payload.ride.id)
-              ? state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r))
-              : [payload.ride, ...state.rides],
+            rides: state.rides.some((r) => r.id === normRide.id)
+              ? state.rides.map((r) => (r.id === normRide.id ? { ...r, ...normRide } : r))
+              : [normRide, ...state.rides],
             ...(isCompleted
               ? {
                   bookings: state.bookings.map((b) =>
-                    b.rideId === payload.ride.id ? { ...b, status: 'completed' as const } : b
+                    b.rideId === normRide.id ? { ...b, status: 'completed' as const } : b
                   ),
                 }
               : {}),
@@ -310,10 +323,11 @@ export const useAppStore = create<AppState>((set, get) => ({
             }))
           }
           if (payload?.ride) {
+            const normRide = normalizeRide(payload.ride)
             set((state) => ({
-              rides: state.rides.some((r) => r.id === payload.ride.id)
-                ? state.rides.map((r) => (r.id === payload.ride.id ? { ...r, ...payload.ride } : r))
-                : [payload.ride, ...state.rides],
+              rides: state.rides.some((r) => r.id === normRide.id)
+                ? state.rides.map((r) => (r.id === normRide.id ? { ...r, ...normRide } : r))
+                : [normRide, ...state.rides],
             }))
           }
         } else if (event === 'BOOKING_UPDATED') {
@@ -506,7 +520,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         }))
 
       set({
-        rides: backendRides || [],
+        rides: (backendRides || []).map(normalizeRide),
         safetyEvents: (backendEvents || []).map(normalizeSafetyEvent),
         notifications: backendNotifs || [],
         bookings: backendBookings || [],
@@ -911,7 +925,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const freshRides = await api.getRides()
       if (Array.isArray(freshRides)) {
-        set({ rides: freshRides })
+        set({ rides: freshRides.map(normalizeRide) })
       }
     } catch (err: any) {
       console.warn('[Store] refreshRides warning:', err.message)

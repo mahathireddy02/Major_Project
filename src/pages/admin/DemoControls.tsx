@@ -148,7 +148,7 @@ export default function DemoControls() {
         <Badge variant="orange">DEMO MODE</Badge>
       </div>
       <p className="text-slate-500 text-sm mb-6">
-        Hackathon judge controls — trigger real-time events to demonstrate the system
+        System simulation controls — trigger real-time events to test and monitor the system
       </p>
 
       {/* Action grid */}
