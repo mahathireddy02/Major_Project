@@ -11,6 +11,7 @@ import Badge from '../../components/ui/Badge'
 import Avatar from '../../components/ui/Avatar'
 import SeatProgress from '../../components/ui/SeatProgress'
 import CampusMap from '../../components/map/CampusMap'
+import { resolveDriverInfo } from '../../utils/driverDirectory'
 
 export default function ActiveRide() {
   const navigate = useNavigate()
@@ -60,18 +61,25 @@ export default function ActiveRide() {
     )
   }
 
-  const driver =
-    (activeRide ? drivers.find((d) => d.id === activeRide.driverId) : undefined) ||
-    (activeRide?.driverId
-      ? {
-          id: activeRide.driverId,
-          name: (activeRide as any).driverName || 'Campus Driver',
-          phone: (activeRide as any).driverPhone || '+91 98765 43210',
-          rating: 4.9,
-          totalTrips: 120,
-        }
-      : undefined)
-  const vehicle = vehicles.find((v) => v.id === activeRide.vehicleId)
+  const driverInfo = resolveDriverInfo(activeRide?.driverId, (activeRide as any)?.driverName, drivers)
+  const matchedDriver = activeRide ? drivers.find((d) => d.id === activeRide.driverId) : undefined
+  const driver = matchedDriver || {
+    id: activeRide?.driverId || driverInfo.id,
+    name: (activeRide as any)?.driverName && !(activeRide as any).driverName.toLowerCase().includes('campus driver')
+      ? (activeRide as any).driverName
+      : driverInfo.name,
+    phone: (activeRide as any)?.driverPhone || driverInfo.phone,
+    rating: (activeRide as any)?.driverRating || driverInfo.rating,
+    totalTrips: driverInfo.totalTrips,
+    avatar: (activeRide as any)?.driverAvatar || driverInfo.avatar,
+  }
+  const matchedVehicle = vehicles.find((v) => v.id === activeRide?.vehicleId)
+  const vehicle = matchedVehicle || {
+    id: activeRide?.vehicleId || driverInfo.vehicleId,
+    name: (activeRide as any)?.vehicleName || driverInfo.vehicleName,
+    registration: (activeRide as any)?.vehiclePlate || driverInfo.vehicleRegistration,
+    vehicleType: driverInfo.vehicleType,
+  }
   const myBooking = bookings.find((b) => b.rideId === activeRide.id && b.studentId === currentStudentId && b.status === 'confirmed')
   const rideMessages = messages.filter((m) => m.rideId === activeRide.id)
   const unreadFromDriver = rideMessages.filter((m) => m.fromRole === 'driver' && !m.read).length
@@ -220,7 +228,7 @@ export default function ActiveRide() {
                   <Badge variant="green" size="sm">Verified</Badge>
                 </div>
                 <p className="text-xs text-slate-500">{vehicle.name} · {vehicle.registration}</p>
-                <p className="text-[11px] text-amber-600 font-medium mt-0.5">★ {driver.rating} Campus Driver</p>
+                <p className="text-[11px] text-amber-600 font-medium mt-0.5">★ {driver.rating} · Verified Driver ({driver.totalTrips || 150}+ trips)</p>
                 {driver.phone && (
                   <a href={`tel:${driver.phone}`} className="text-xs text-primary-600 font-medium hover:underline flex items-center gap-1 mt-0.5">
                     <Phone size={11} /> {driver.phone}

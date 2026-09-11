@@ -241,6 +241,12 @@ export interface Ride {
   originalVehicleId?: string
   originalDriverId?: string
   breakdownLocation?: { lat: number; lng: number }
+  driverName?: string
+  driverPhone?: string
+  driverRating?: number
+  driverAvatar?: string
+  vehicleName?: string
+  vehiclePlate?: string
 }
 
 export interface Booking {

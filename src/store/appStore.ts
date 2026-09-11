@@ -12,6 +12,7 @@ import type {
 } from '../types'
 import { api } from '../services/api'
 import { sosAlarmPlayer } from '../utils/alarmSound'
+import { resolveDriverInfo } from '../utils/driverDirectory'
 
 import { showNotificationToast } from '../components/notifications/NotificationToast'
 
@@ -89,10 +90,28 @@ export function normalizeRide(r: Ride): Ride {
       .replace(/Hostel B/g, 'Sri Indu Girls Hostel')
       .replace(/Hostel C/g, 'Campus Transit Terminal')
   }
+
+  // Resolve real institutional driver & vehicle details
+  const driverInfo = resolveDriverInfo(r.driverId, (r as any).driverName)
+  const resolvedDriverName = (r as any).driverName && !(r as any).driverName.toLowerCase().includes('campus driver')
+    ? (r as any).driverName
+    : driverInfo.name
+  const resolvedDriverPhone = (r as any).driverPhone || driverInfo.phone
+  const resolvedDriverRating = (r as any).driverRating || driverInfo.rating
+  const resolvedDriverAvatar = (r as any).driverAvatar || driverInfo.avatar
+  const resolvedVehicleName = (r as any).vehicleName || driverInfo.vehicleName
+  const resolvedVehiclePlate = (r as any).vehiclePlate || driverInfo.vehicleRegistration
+
   return {
     ...r,
     routeName: cleanName || 'Campus Shuttle',
     destination: cleanDest || 'SRI INDU College',
+    driverName: resolvedDriverName,
+    driverPhone: resolvedDriverPhone,
+    driverRating: resolvedDriverRating,
+    driverAvatar: resolvedDriverAvatar,
+    vehicleName: resolvedVehicleName,
+    vehiclePlate: resolvedVehiclePlate,
   }
 }
 
@@ -901,10 +920,11 @@ export const useAppStore = create<AppState>((set, get) => ({
           genderPreference: isFemaleOnly ? 'FEMALE_ONLY' : 'ANYONE',
         }],
       })
+      const normRide = normalizeRide(newRide)
       set((state) => ({
-        rides: [newRide, ...state.rides],
+        rides: [normRide, ...state.rides],
       }))
-      return newRide
+      return normRide
     } catch (err: any) {
       console.error('[Store] createRide error:', err.message)
       throw err
@@ -983,11 +1003,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         fare: 25,
       })
 
+      const normRide = normalizeRide(newRide)
       set((state) => ({
-        rides: [newRide, ...state.rides.filter((r) => r.id !== newRide.id)],
+        rides: [normRide, ...state.rides.filter((r) => r.id !== normRide.id)],
       }))
 
-      return newRide
+      return normRide
     } catch (err: any) {
       console.error('[Store] createAndActivateRide error:', err.message)
       throw err

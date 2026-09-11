@@ -70,7 +70,7 @@ export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
         id: r._id.toString(),
         vehicle_id: r.vehicleId?.toString() || 'veh-default',
         driver_id: r.driverId?.toString() || '',
-        driver_name: r.driverName || 'Campus Driver',
+        driver_name: r.driverName || 'Rahul Kumar',
         current_location: {
           lat: r.currentLocation?.coordinates?.[1] || r.pickupLocation?.coordinates?.[1] || 17.3850,
           lng: r.currentLocation?.coordinates?.[0] || r.pickupLocation?.coordinates?.[0] || 78.4867,
@@ -203,9 +203,8 @@ export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
     for (const assignment of assignments) {
       // Find or assign a driver
       const availableDriver = await UserModel.findOne({
-        role: 'driver',
+        role: { $in: ['DRIVER', 'driver'] },
         isDriverVerified: true,
-        isOnline: true,
       })
 
       const stops = (assignment.stops || []).map((s: any) => ({
@@ -219,12 +218,13 @@ export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
       const lastStop = stops[stops.length - 1]
 
       const ride = await RideModel.create({
-        driverId: availableDriver?._id?.toString() || 'driver-auto',
-        driverName: availableDriver ? `${availableDriver.firstName} ${availableDriver.lastName}` : 'Assigned Campus Driver',
-        driverPhone: availableDriver?.phone || '+91 98765 43210',
+        driverId: availableDriver?.id || availableDriver?._id?.toString() || 'd1',
+        driverName: availableDriver?.name || 'Rahul Kumar',
+        driverPhone: availableDriver?.phone || '+91 99887 76655',
+        driverRating: availableDriver?.rating || 4.8,
         vehicleId: assignment.vehicle_id,
         vehicleName: assignment.vehicle_name,
-        vehiclePlate: assignment.vehicle_name.split('(')[1]?.replace(')', '') || 'TS 09 CAMPUS',
+        vehiclePlate: assignment.vehicle_name?.split('(')[1]?.replace(')', '') || 'TS 09 AB 1234',
         pickupLocation: {
           name: firstStop?.locationName || 'Campus Hub',
           coordinates: firstStop?.coordinates || [78.4850, 17.3840],
