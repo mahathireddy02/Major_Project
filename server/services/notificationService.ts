@@ -125,6 +125,50 @@ class NotificationService {
     return doc
   }
 
+  async notifyStudent(data: {
+    studentId: string
+    title: string
+    message: string
+    type?: string
+    priority?: NotificationPriority
+    rideId?: string
+    metadata?: Record<string, any>
+  }): Promise<INotification> {
+    return this.createAndSendNotification({
+      userId: data.studentId,
+      studentId: data.studentId,
+      role: 'STUDENT',
+      title: data.title,
+      message: data.message,
+      type: data.type || 'system',
+      priority: data.priority || 'NORMAL',
+      rideId: data.rideId,
+      metadata: data.metadata,
+    })
+  }
+
+  async notifyDriver(data: {
+    driverId: string
+    title: string
+    message: string
+    type?: string
+    priority?: NotificationPriority
+    rideId?: string
+    metadata?: Record<string, any>
+  }): Promise<INotification> {
+    return this.createAndSendNotification({
+      userId: data.driverId,
+      driverId: data.driverId,
+      role: 'DRIVER',
+      title: data.title,
+      message: data.message,
+      type: data.type || 'system',
+      priority: data.priority || 'NORMAL',
+      rideId: data.rideId,
+      metadata: data.metadata,
+    })
+  }
+
   /**
    * Central Ride Event Processor:
    * Generates targeted notifications for Student, Driver, and Dispatcher

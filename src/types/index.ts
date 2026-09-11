@@ -5,12 +5,21 @@ export type RideStatus =
   | 'completed'
   | 'cancelled'
   | 'full'
+  | 'recovery_pending'
+  | 'recovered'
 
 export type UserRole = 'student' | 'faculty' | 'driver' | 'admin'
 
 export type VerificationStatus = 'PENDING' | 'VERIFIED' | 'REJECTED'
 
-export type BookingStatus = 'confirmed' | 'cancelled' | 'completed' | 'pending' | 'boarded' | 'in_transit'
+export type BookingStatus =
+  | 'confirmed'
+  | 'cancelled'
+  | 'completed'
+  | 'pending'
+  | 'boarded'
+  | 'in_transit'
+  | 'recovery_pending'
 
 export type SafetyEventType = 'sos' | 'deviation' | 'resolved'
 
@@ -86,6 +95,7 @@ export interface Vehicle {
   currentLat?: number
   currentLng?: number
   locationUpdatedAt?: string
+  status?: 'ACTIVE' | 'IDLE' | 'MAINTENANCE' | 'BREAKDOWN' | 'OUT_OF_SERVICE'
 }
 
 export type StopType = 'PICKUP' | 'DROPOFF'
@@ -227,6 +237,10 @@ export interface Ride {
   startLocationLng?: number
   date: string
   routeStatus?: RouteStatus
+  recoveryId?: string
+  originalVehicleId?: string
+  originalDriverId?: string
+  breakdownLocation?: { lat: number; lng: number }
 }
 
 export interface Booking {

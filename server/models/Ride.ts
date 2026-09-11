@@ -7,6 +7,8 @@ export type RideStatus =
   | 'full'
   | 'completed'
   | 'cancelled'
+  | 'recovery_pending'
+  | 'recovered'
 
 export interface IPickupPoint {
   id: string
@@ -115,6 +117,10 @@ export interface IRide extends Document {
   startLocation?: string
   startLocationLat?: number
   startLocationLng?: number
+  recoveryId?: string
+  originalVehicleId?: string
+  originalDriverId?: string
+  breakdownLocation?: { lat: number; lng: number; timestamp?: Date }
   date: string
   createdAt: Date
   updatedAt: Date
@@ -126,6 +132,14 @@ const RideSchema = new Schema<IRide>(
     routeName: { type: String, required: true },
     driverId: { type: String, required: true, index: true },
     vehicleId: { type: String, required: true },
+    recoveryId: { type: String, index: true },
+    originalVehicleId: { type: String },
+    originalDriverId: { type: String },
+    breakdownLocation: {
+      lat: { type: Number },
+      lng: { type: Number },
+      timestamp: { type: Date },
+    },
     pickupPoints: [
       {
         id: { type: String, required: true },
@@ -161,7 +175,7 @@ const RideSchema = new Schema<IRide>(
     ],
     status: {
       type: String,
-      enum: ['waiting', 'boarding', 'active', 'full', 'completed', 'cancelled'],
+      enum: ['waiting', 'boarding', 'active', 'full', 'completed', 'cancelled', 'recovery_pending', 'recovered'],
       default: 'waiting',
       index: true,
     },

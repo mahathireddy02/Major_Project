@@ -454,6 +454,50 @@ export const useAppStore = create<AppState>((set, get) => ({
               ),
             }))
           }
+        } else if (event === 'VEHICLE_BREAKDOWN') {
+          if (payload?.vehicleId) {
+            set((state) => ({
+              vehicles: state.vehicles.map((v) =>
+                v.id === payload.vehicleId ? { ...v, status: 'OUT_OF_SERVICE' as any } : v
+              ),
+              rides: payload.rideId
+                ? state.rides.map((r) =>
+                    r.id === payload.rideId ? { ...r, status: 'recovery_pending' as any } : r
+                  )
+                : state.rides,
+            }))
+          }
+        } else if (event === 'RECOVERY_COMPLETED') {
+          if (payload?.rideId) {
+            set((state) => ({
+              rides: state.rides.map((r) =>
+                r.id === payload.rideId
+                  ? {
+                      ...r,
+                      vehicleId: payload.replacementVehicleId || r.vehicleId,
+                      driverId: payload.replacementDriverId || r.driverId,
+                      status: 'active' as any,
+                      routeCoordinates: payload.updatedRouteGeometry || r.routeCoordinates,
+                    }
+                  : r
+              ),
+              vehicles: state.vehicles.map((v) => {
+                if (v.id === payload.oldVehicleId) return { ...v, status: 'OUT_OF_SERVICE' as any }
+                if (v.id === payload.replacementVehicleId) return { ...v, status: 'ON_TRIP' as any }
+                return v
+              }),
+            }))
+            // Refresh rides & bookings to ensure 100% sync
+            get().refreshRides()
+          }
+        } else if (event === 'RECOVERY_FAILED') {
+          if (payload?.rideId) {
+            set((state) => ({
+              rides: state.rides.map((r) =>
+                r.id === payload.rideId ? { ...r, status: 'recovery_pending' as any } : r
+              ),
+            }))
+          }
         } else if (event === 'DEMO_RESET') {
           get().initBackend()
         }

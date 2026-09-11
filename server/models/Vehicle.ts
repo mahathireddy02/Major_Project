@@ -1,6 +1,13 @@
 import mongoose, { Schema, Document } from 'mongoose'
 
-export type VehicleStatus = 'AVAILABLE' | 'ASSIGNED' | 'ON_TRIP' | 'OFFLINE' | 'MAINTENANCE'
+export type VehicleStatus =
+  | 'AVAILABLE'
+  | 'ASSIGNED'
+  | 'ON_TRIP'
+  | 'OFFLINE'
+  | 'MAINTENANCE'
+  | 'BREAKDOWN'
+  | 'OUT_OF_SERVICE'
 
 export interface IVehicle extends Document {
   id: string
@@ -33,7 +40,7 @@ const VehicleSchema = new Schema<IVehicle>(
     capacity: { type: Number, required: true, default: 6 },
     status: {
       type: String,
-      enum: ['AVAILABLE', 'ASSIGNED', 'ON_TRIP', 'OFFLINE', 'MAINTENANCE'],
+      enum: ['AVAILABLE', 'ASSIGNED', 'ON_TRIP', 'OFFLINE', 'MAINTENANCE', 'BREAKDOWN', 'OUT_OF_SERVICE'],
       default: 'AVAILABLE',
       index: true,
     },

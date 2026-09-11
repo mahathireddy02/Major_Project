@@ -540,6 +540,50 @@ class ApiClient {
     })
   }
 
+  // --- Breakdown & Automated Ride Recovery ---
+  async reportDriverBreakdown(data: {
+    vehicleId?: string
+    location?: { lat: number; lng: number; accuracy?: number }
+    reason?: string
+  }): Promise<any> {
+    return this.request('/driver/breakdown', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async reportVehicleBreakdown(
+    vehicleId: string,
+    data: {
+      location?: { lat: number; lng: number }
+      reason?: string
+    } = {}
+  ): Promise<any> {
+    return this.request(`/vehicles/${vehicleId}/breakdown`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getRecoveryStatus(rideId: string): Promise<any> {
+    return this.request(`/rides/${rideId}/recovery-status`)
+  }
+
+  async getRecoveryCandidates(rideId: string): Promise<any> {
+    return this.request(`/recovery/candidates/${rideId}`)
+  }
+
+  async retryRecovery(recoveryId: string, replacementVehicleId?: string): Promise<any> {
+    return this.request(`/recovery/${recoveryId}/retry`, {
+      method: 'POST',
+      body: JSON.stringify({ replacementVehicleId }),
+    })
+  }
+
+  async getRecoveryHistory(): Promise<any> {
+    return this.request('/recovery/history')
+  }
+
   // --- Dispatcher ---
   async getDispatcherDashboard(): Promise<{
     kpis: any
