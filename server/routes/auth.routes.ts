@@ -828,9 +828,30 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
   // ---------------------------------------------------------------------------
   // Emergency Contact Endpoints
   // ---------------------------------------------------------------------------
+  // Emergency Contact Endpoints (with robust cross-identifier resolution)
+  // ---------------------------------------------------------------------------
   fastify.get('/users/:id/emergency-contact', async (request, reply) => {
     const { id } = request.params as { id: string }
-    const contact = await EmergencyContactModel.findOne({ userId: id })
+    const user = await UserModel.findOne({
+      $or: [
+        { id },
+        { email: (id || '').toLowerCase() },
+        { phone: id },
+        { studentId: id },
+        { rollNumber: id },
+      ],
+    })
+
+    const searchIds = [id]
+    if (user?.id) searchIds.push(user.id)
+    if (user?.email) searchIds.push(user.email)
+    if (user?.studentId) searchIds.push(user.studentId)
+    if (user?.rollNumber) searchIds.push(user.rollNumber)
+
+    const contact = await EmergencyContactModel.findOne({
+      userId: { $in: searchIds },
+    }).sort({ updatedAt: -1 })
+
     return { success: true, data: contact || null }
   })
 
@@ -870,8 +891,29 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    let contact = await EmergencyContactModel.findOne({ userId: id })
+    const user = await UserModel.findOne({
+      $or: [
+        { id },
+        { email: (id || '').toLowerCase() },
+        { phone: id },
+        { studentId: id },
+        { rollNumber: id },
+      ],
+    })
+
+    const searchIds = [id]
+    if (user?.id) searchIds.push(user.id)
+    if (user?.email) searchIds.push(user.email)
+    if (user?.studentId) searchIds.push(user.studentId)
+    if (user?.rollNumber) searchIds.push(user.rollNumber)
+
+    let contact = await EmergencyContactModel.findOne({
+      userId: { $in: searchIds },
+    }).sort({ updatedAt: -1 })
+
+    const primaryUserId = user?.id || id
     if (contact) {
+      contact.userId = primaryUserId
       contact.name = name
       contact.relationship = relationship
       contact.phone = phone
@@ -879,8 +921,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       await contact.save()
     } else {
       contact = await EmergencyContactModel.create({
-        id: `ec-${Date.now()}`,
-        userId: id,
+        id: `ec-${primaryUserId}-${Date.now().toString().slice(-4)}`,
+        userId: primaryUserId,
         name,
         relationship,
         phone,
@@ -893,7 +935,23 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
 
   fastify.delete('/users/:id/emergency-contact', async (request, reply) => {
     const { id } = request.params as { id: string }
-    await EmergencyContactModel.deleteOne({ userId: id })
+    const user = await UserModel.findOne({
+      $or: [
+        { id },
+        { email: (id || '').toLowerCase() },
+        { phone: id },
+        { studentId: id },
+        { rollNumber: id },
+      ],
+    })
+
+    const searchIds = [id]
+    if (user?.id) searchIds.push(user.id)
+    if (user?.email) searchIds.push(user.email)
+    if (user?.studentId) searchIds.push(user.studentId)
+    if (user?.rollNumber) searchIds.push(user.rollNumber)
+
+    await EmergencyContactModel.deleteMany({ userId: { $in: searchIds } })
     return { success: true, data: { deleted: true } }
   })
 

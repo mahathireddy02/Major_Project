@@ -109,26 +109,76 @@ export class SafetyService {
     lat?: number,
     lng?: number,
     emergencyPhone?: string,
-    emergencyName?: string
+    emergencyName?: string,
+    forceNew?: boolean
   ): Promise<any> {
-    const user = await UserModel.findOne({ id: userId })
+    const user = await UserModel.findOne({
+      $or: [
+        { id: userId },
+        { email: (userId || '').toLowerCase() },
+        { phone: userId },
+        { studentId: userId },
+        { rollNumber: userId },
+      ],
+    })
+    const resolvedUserId = user?.id || userId
     const userRole = (user?.role || 'STUDENT').toUpperCase()
     const isDriver = userRole === 'DRIVER'
 
+    // Multi-key resolution for Emergency Contact
+    const searchUserIds = [userId, resolvedUserId]
+    if (user?.email) searchUserIds.push(user.email)
+    if (user?.studentId) searchUserIds.push(user.studentId)
+    if (user?.rollNumber) searchUserIds.push(user.rollNumber)
+
+    let emergencyContact = await EmergencyContactModel.findOne({
+      userId: { $in: searchUserIds },
+    }).sort({ updatedAt: -1 })
+
+    // Helper to filter dummy/sample fallback numbers
+    const isDummyPhone = (p?: string) =>
+      !p ||
+      p.replace(/\D/g, '').includes('9876543210') ||
+      p.replace(/\D/g, '').includes('9876543219') ||
+      p.replace(/\D/g, '').length < 10
+
+    let targetPhone = ''
+    if (emergencyPhone && emergencyPhone.trim() && !isDummyPhone(emergencyPhone)) {
+      targetPhone = emergencyPhone.trim()
+    } else if (emergencyContact?.phone && !isDummyPhone(emergencyContact.phone)) {
+      targetPhone = emergencyContact.phone.trim()
+    } else if (user?.phone && !isDummyPhone(user.phone)) {
+      targetPhone = user.phone.trim()
+    } else {
+      targetPhone = ENV.SOS_ALERT_PHONE_NUMBER || ''
+    }
+
     // Spam prevention: Check if user already has an active unresolved SOS in the last 15 mins
     const existingActive = await SafetyEventModel.findOne({
-      userId,
+      userId: { $in: [userId, resolvedUserId] },
       resolved: false,
       status: { $in: ['ACTIVE', 'ACKNOWLEDGED', 'INVESTIGATING'] },
       createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) },
     })
 
-    if (existingActive) {
-      console.log(`[SafetyService] Active SOS already open for user ${userId} (${existingActive.id}). Returning existing alert to prevent spam.`)
+    const activeContactPhone = existingActive?.emergencyContact?.phone || ''
+    const contactChanged = Boolean(targetPhone && !isDummyPhone(targetPhone) && activeContactPhone !== targetPhone)
+
+    if (existingActive && !forceNew && !contactChanged) {
+      console.log(`[SafetyService] Active SOS already open for user ${resolvedUserId} (${existingActive.id}). Returning existing alert to prevent duplicate spam.`)
       return {
         ...existingActive.toObject(),
         isExistingActive: true,
       }
+    }
+
+    if (existingActive) {
+      console.log(`[SafetyService] Superseding previous active SOS (${existingActive.id}) for user ${resolvedUserId}.`)
+      existingActive.resolved = true
+      existingActive.resolvedAt = new Date()
+      existingActive.resolvedBy = 'SYSTEM_SUPERSEDED'
+      existingActive.status = 'RESOLVED'
+      await existingActive.save()
     }
 
     // Attempt to locate active ride if not explicitly provided
@@ -136,12 +186,12 @@ export class SafetyService {
     if (!ride) {
       if (isDriver) {
         ride = await RideModel.findOne({
-          driverId: userId,
+          driverId: { $in: [userId, resolvedUserId] },
           status: { $in: ['active', 'boarding', 'waiting', 'full'] },
         })
       } else {
         const activeBooking = await BookingModel.findOne({
-          studentId: userId,
+          studentId: { $in: [userId, resolvedUserId] },
           status: { $in: ['confirmed', 'boarded', 'in_transit'] },
         }).sort({ createdAt: -1 })
         if (activeBooking?.rideId) {
@@ -158,9 +208,7 @@ export class SafetyService {
     const driverUser = ride?.driverId ? await UserModel.findOne({ id: ride.driverId }) : (isDriver ? user : null)
     const vehicle = ride?.vehicleId ? await VehicleModel.findOne({ id: ride.vehicleId }) : null
 
-    // Fetch or dynamically create/update Emergency Contact
-    let emergencyContact = await EmergencyContactModel.findOne({ userId })
-    if (emergencyPhone && emergencyPhone.trim()) {
+    if (emergencyPhone && emergencyPhone.trim() && !isDummyPhone(emergencyPhone)) {
       const cleanPhone = emergencyPhone.trim()
       const cleanName = (emergencyName || 'Emergency Contact').trim()
       if (emergencyContact) {
@@ -169,14 +217,15 @@ export class SafetyService {
         await emergencyContact.save()
       } else {
         emergencyContact = await EmergencyContactModel.create({
-          id: `ec-${userId}-${Date.now().toString().slice(-4)}`,
-          userId,
+          id: `ec-${resolvedUserId}-${Date.now().toString().slice(-4)}`,
+          userId: resolvedUserId,
           name: cleanName,
           relationship: 'Emergency Contact',
           phone: cleanPhone,
           isPrimary: true,
         })
       }
+      targetPhone = cleanPhone
     }
 
     const resolvedLat = lat ?? ride?.currentLat ?? vehicle?.currentLat ?? 17.398
@@ -188,8 +237,6 @@ export class SafetyService {
     const eventId = `sos-${Date.now()}`
     const eventType = isDriver ? 'DRIVER_SOS_TRIGGERED' : 'STUDENT_SOS_TRIGGERED'
 
-    // Format and trigger Emergency SMS & Voice Call via Twilio to registered contact (or SOS_ALERT_PHONE_NUMBER fallback)
-    const targetPhone = emergencyPhone?.trim() || emergencyContact?.phone || ENV.SOS_ALERT_PHONE_NUMBER || ''
     let smsResult = { sent: false, status: 'NOT_CONFIGURED' as const, message: '' }
     let callResult = { success: false, status: 'NOT_CONFIGURED' as const, callSid: '', message: '' }
 

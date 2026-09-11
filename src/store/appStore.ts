@@ -8,6 +8,7 @@ import type {
   SafetyEvent,
   AdminUser,
   Vehicle,
+  EmergencyContact,
 } from '../types'
 import { api } from '../services/api'
 import { sosAlarmPlayer } from '../utils/alarmSound'
@@ -80,6 +81,7 @@ interface AppState {
   currentStudentId: string
   currentDriverId: string
   backendReady: boolean
+  emergencyContact: EmergencyContact | null
 
   // Data
   students: Student[]
@@ -154,6 +156,8 @@ interface AppState {
   acknowledgeSafetyEvent: (eventId: string) => Promise<void>
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
+  setEmergencyContact: (contact: EmergencyContact | null) => void
+  loadEmergencyContact: () => Promise<EmergencyContact | null>
 
   // Actions — Messaging
   sendMessage: (rideId: string, text: string) => void
@@ -181,6 +185,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   currentStudentId: localStorage.getItem('campusflow_user_id') || '',
   currentDriverId: localStorage.getItem('campusflow_driver_id') || '',
   backendReady: false,
+  emergencyContact: null,
   students: [],
   drivers: [],
   vehicles: [],
@@ -496,6 +501,12 @@ export const useAppStore = create<AppState>((set, get) => ({
               currentStudentId: isStudent ? profile.id : get().currentStudentId,
               currentDriverId: isDriver ? profile.id : get().currentDriverId,
             })
+            const activeId = profile.id || (isStudent ? get().currentStudentId : get().currentDriverId)
+            if (activeId) {
+              api.getEmergencyContact(activeId).then((ec) => {
+                if (ec) set({ emergencyContact: ec })
+              }).catch(() => {})
+            }
           }
         } catch {
           // token expired or invalid — don't overwrite
@@ -544,6 +555,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         currentStudentId: res.user?.id || get().currentStudentId,
         currentDriverId: mappedRole === 'driver' ? res.user?.id : get().currentDriverId,
       })
+
+      if (res.user?.id) {
+        api.getEmergencyContact(res.user.id).then((ec) => {
+          if (ec) set({ emergencyContact: ec })
+        }).catch(() => {})
+      }
 
       return { success: true, role: mappedRole, user: res.user }
     } catch (err: any) {
@@ -1053,6 +1070,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      const isDummy = (p?: string) =>
+        !p ||
+        p.replace(/\D/g, '').includes('9876543210') ||
+        p.replace(/\D/g, '').includes('9876543219') ||
+        p.replace(/\D/g, '').length < 10
+
+      // Auto-attach stored emergency contact if not explicitly provided or if payload has dummy fallback
+      const storeContact = get().emergencyContact
+      if ((!payload.emergencyPhone || isDummy(payload.emergencyPhone)) && storeContact?.phone) {
+        payload.emergencyPhone = storeContact.phone
+        payload.emergencyName = storeContact.name
+      }
+
       const res = await api.triggerSOS(payload)
       const eventData = res?.data || res
       const normalized = normalizeSafetyEvent(eventData)
@@ -1066,6 +1096,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err: any) {
       console.error('[Store] triggerSOS error:', err.message)
       throw err
+    }
+  },
+
+  setEmergencyContact: (contact: EmergencyContact | null) => {
+    set({ emergencyContact: contact })
+  },
+
+  loadEmergencyContact: async () => {
+    const userId = get().currentUser?.id || get().currentStudentId || get().currentDriverId
+    if (!userId) return null
+    try {
+      const contact = await api.getEmergencyContact(userId)
+      set({ emergencyContact: contact || null })
+      return contact
+    } catch {
+      return null
     }
   },
 

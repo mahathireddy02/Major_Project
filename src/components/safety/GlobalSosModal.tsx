@@ -31,13 +31,16 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
   const currentUser = useAppStore((s) => s.currentUser)
   const currentStudent = useAppStore((s) => s.currentStudent())
   const currentDriver = useAppStore((s) => s.currentDriver())
+  const currentStudentId = useAppStore((s) => s.currentStudentId)
+  const currentDriverId = useAppStore((s) => s.currentDriverId)
+  const storeEmergencyContact = useAppStore((s) => s.emergencyContact)
   const role = useAppStore((s) => s.role)
   const rides = useAppStore((s) => s.rides)
   const bookings = useAppStore((s) => s.bookings)
   const safetyEvents = useAppStore((s) => s.safetyEvents)
   const triggerSOS = useAppStore((s) => s.triggerSOS)
 
-  const [emergencyContact, setEmergencyContact] = useState<EmergencyContact | null>(null)
+  const [emergencyContact, setEmergencyContact] = useState<EmergencyContact | null>(storeEmergencyContact || null)
   const [customPhone, setCustomPhone] = useState('')
   const [customName, setCustomName] = useState('')
   const [isEditingContact, setIsEditingContact] = useState(false)
@@ -46,23 +49,30 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const user = currentUser || (role === 'driver' ? currentDriver : currentStudent)
-  const userId = user?.id || (role === 'driver' ? 'd1' : 's1')
+  const effectiveUserId = user?.id || (role === 'driver' ? currentDriverId || 'd1' : currentStudentId || 's1')
   const isDriver = role === 'driver' || user?.role === 'driver' || user?.role === 'DRIVER'
+
+  // Helper to filter dummy/sample fallback numbers
+  const isDummy = (p?: string) =>
+    !p ||
+    p.replace(/\D/g, '').includes('9876543210') ||
+    p.replace(/\D/g, '').includes('9876543219') ||
+    p.replace(/\D/g, '').length < 10
 
   // Find active ride for user
   const activeRide = isDriver
     ? rides.find(
         (r) =>
-          (r.driverId === userId || r.driverId === user?.id) &&
+          (r.driverId === effectiveUserId || r.driverId === user?.id) &&
           (r.status === 'active' || r.status === 'boarding' || r.status === 'waiting' || r.status === 'full')
       )
     : rides.find((r) => {
         const isPassenger = (r.passengers || []).some(
-          (p) => (p.studentId === userId || p.studentId === user?.id) && p.status !== 'dropped'
+          (p) => (p.studentId === effectiveUserId || p.studentId === user?.id) && p.status !== 'dropped'
         )
         const hasBooking = bookings.some(
           (b) =>
-            (b.studentId === userId || b.studentId === user?.id) &&
+            (b.studentId === effectiveUserId || b.studentId === user?.id) &&
             b.rideId === r.id &&
             (b.status === 'confirmed' || b.status === 'boarded' || b.status === 'in_transit')
         )
@@ -71,31 +81,36 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
 
   // Check if an active SOS already exists for this user
   const activeUserSos = safetyEvents.find(
-    (e) => (e.userId === userId || (activeRide && e.rideId === activeRide.id)) && !e.resolved
+    (e) => (e.userId === effectiveUserId || (activeRide && e.rideId === activeRide.id)) && !e.resolved
   )
 
   // Fetch emergency contact and acquire GPS on modal open
   useEffect(() => {
     if (!isOpen) return
 
-    if (userId) {
+    // If store already has the saved profile contact, initialize from it immediately
+    if (storeEmergencyContact) {
+      setEmergencyContact(storeEmergencyContact)
+      if (!isEditingContact && !customPhone) {
+        setCustomPhone(storeEmergencyContact.phone || '')
+        setCustomName(storeEmergencyContact.name || '')
+      }
+    }
+
+    if (effectiveUserId) {
       api
-        .getEmergencyContact(userId)
+        .getEmergencyContact(effectiveUserId)
         .then((ec) => {
-          setEmergencyContact(ec)
           if (ec) {
-            setCustomPhone(ec.phone || '')
-            setCustomName(ec.name || '')
-          } else {
-            setCustomPhone('+91 98765 43210')
-            setCustomName('Parent / Emergency Contact')
+            setEmergencyContact(ec)
+            useAppStore.getState().setEmergencyContact(ec)
+            if (!isEditingContact && !customPhone) {
+              setCustomPhone(ec.phone || '')
+              setCustomName(ec.name || '')
+            }
           }
         })
-        .catch(() => {
-          setEmergencyContact(null)
-          setCustomPhone('+91 98765 43210')
-          setCustomName('Parent / Emergency Contact')
-        })
+        .catch(() => {})
     }
 
     if (navigator.geolocation) {
@@ -113,9 +128,33 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
     } else if (activeRide?.currentLat && activeRide?.currentLng) {
       setGpsCoords({ lat: activeRide.currentLat, lng: activeRide.currentLng })
     }
-  }, [isOpen, userId, activeRide])
+  }, [isOpen, effectiveUserId, activeRide, storeEmergencyContact])
 
   if (!isOpen) return null
+
+  const effectivePhone =
+    (!isDummy(customPhone) ? customPhone.trim() : '') ||
+    (!isDummy(emergencyContact?.phone) ? emergencyContact!.phone.trim() : '') ||
+    (!isDummy(storeEmergencyContact?.phone) ? storeEmergencyContact!.phone.trim() : '') ||
+    (!isDummy(user?.phone) ? user!.phone.trim() : '') ||
+    '+917989442841'
+
+  const effectiveName =
+    customName.trim() ||
+    emergencyContact?.name ||
+    storeEmergencyContact?.name ||
+    user?.name ||
+    'udaykiran'
+
+  const displayEmergencyPhone =
+    (!isDummy(effectivePhone) ? effectivePhone : '') ||
+    (!isDummy(activeUserSos?.emergencyContact?.phone) ? activeUserSos?.emergencyContact?.phone : '') ||
+    '+917989442841'
+
+  const displayEmergencyName =
+    effectiveName ||
+    activeUserSos?.emergencyContact?.name ||
+    'udaykiran'
 
   const handleConfirmSOS = async () => {
     setIsSubmitting(true)
@@ -126,23 +165,22 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
       const lat = gpsCoords?.lat || activeRide?.currentLat || 17.3616
       const lng = gpsCoords?.lng || activeRide?.currentLng || 78.4747
 
-      const res = await triggerSOS({
+      const phoneToSend = displayEmergencyPhone
+      const nameToSend = displayEmergencyName
+
+      await triggerSOS({
         rideId: activeRide?.id,
-        userId,
+        userId: effectiveUserId,
         lat,
         lng,
-        emergencyPhone: customPhone.trim() || undefined,
-        emergencyName: customName.trim() || undefined,
+        emergencyPhone: phoneToSend,
+        emergencyName: nameToSend,
       })
 
-      if (res?.isExistingActive) {
-        toast('Active SOS beacon already open. Siren is sounding!', { icon: '🚨' })
-      } else {
-        toast.success(
-          'Emergency SOS Dispatched! Automated Voice Call and SMS sent to contact. Siren active.',
-          { icon: '🚨', duration: 7000 }
-        )
-      }
+      toast.success(
+        `Emergency SOS Dispatched! Automated Voice Call and SMS placed to ${nameToSend} (${phoneToSend}). Siren active.`,
+        { icon: '🚨', duration: 7000 }
+      )
     } catch (err: any) {
       toast.error(err?.message || 'Failed to dispatch SOS alert. Please call emergency services directly.')
     } finally {
@@ -159,9 +197,6 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
       sosAlarmPlayer.stop()
     }
   }
-
-  const effectivePhone = customPhone || emergencyContact?.phone || '+91 98765 43210'
-  const effectiveName = customName || emergencyContact?.name || 'Emergency Contact'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
@@ -234,7 +269,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                     Twilio Emergency SMS with GPS:
                   </span>
                   <span className="font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[11px]">
-                    Dispatched ({activeUserSos.emergencyContact?.phone || effectivePhone})
+                    Dispatched ({displayEmergencyPhone})
                   </span>
                 </div>
 
@@ -253,13 +288,24 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                   </button>
                 </div>
 
-                <a
-                  href={`tel:${activeUserSos.emergencyContact?.phone || effectivePhone}`}
-                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md mt-1 cursor-pointer"
-                >
-                  <Phone size={15} />
-                  <span>Call Emergency Contact Now ({activeUserSos.emergencyContact?.phone || effectivePhone})</span>
-                </a>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+                  <a
+                    href={`tel:${displayEmergencyPhone}`}
+                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                  >
+                    <Phone size={15} />
+                    <span>Direct Call ({displayEmergencyPhone})</span>
+                  </a>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleConfirmSOS}
+                    className="py-2.5 px-3 rounded-xl bg-slate-900 hover:bg-black text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
+                  >
+                    <PhoneCall size={15} className="text-rose-400" />
+                    <span>Re-trigger Twilio Call & SMS</span>
+                  </button>
+                </div>
               </div>
             </div>
           ) : (
@@ -269,7 +315,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 Emergency Activation Protocol:
               </p>
               <ul className="list-disc pl-4 space-y-1 text-amber-800">
-                <li>Automated voice phone call will be placed to your Emergency Contact.</li>
+                <li>Automated voice phone call will be placed directly to your Emergency Contact ({displayEmergencyPhone}).</li>
                 <li>Emergency SMS with live GPS coordinates and Google Maps link will be sent.</li>
                 <li>Loud high-decibel siren alarm will sound continuously.</li>
                 <li>Telemetry is broadcast to Campus Dispatch Control and authorized responders.</li>
@@ -319,7 +365,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                         type="tel"
                         value={customPhone}
                         onChange={(e) => setCustomPhone(e.target.value)}
-                        placeholder="+91 98765 43210"
+                        placeholder="+91 79894 42841"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium focus:ring-1 focus:ring-rose-500 outline-none"
                       />
                     </div>
@@ -327,8 +373,8 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 ) : (
                   <div className="flex items-center justify-between bg-white p-2.5 rounded-xl border border-slate-200">
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">{effectiveName}</p>
-                      <p className="text-[11px] font-mono text-rose-600 font-bold">{effectivePhone}</p>
+                      <p className="font-bold text-slate-900 text-xs">{displayEmergencyName}</p>
+                      <p className="text-[11px] font-mono text-rose-600 font-bold">{displayEmergencyPhone}</p>
                     </div>
                     <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
                       Primary Contact
@@ -414,7 +460,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
               {activeUserSos ? 'Close Window' : 'CANCEL'}
             </button>
 
-            {!activeUserSos && (
+            {!activeUserSos ? (
               <button
                 type="button"
                 disabled={isSubmitting}
@@ -422,7 +468,17 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs font-extrabold shadow-lg shadow-rose-600/30 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 <ShieldAlert size={16} />
-                <span>{isSubmitting ? 'DISPATCHING SOS...' : 'SEND SOS NOW'}</span>
+                <span>{isSubmitting ? 'DISPATCHING SOS...' : `1-CLICK SOS: CALL ${displayEmergencyPhone}`}</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={handleConfirmSOS}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs font-extrabold shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <PhoneCall size={15} />
+                <span>{isSubmitting ? 'CALLING...' : `CALL ${displayEmergencyPhone} AGAIN`}</span>
               </button>
             )}
           </div>

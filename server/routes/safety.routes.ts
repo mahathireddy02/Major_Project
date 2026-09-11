@@ -12,6 +12,7 @@ export const safetyRoutes: FastifyPluginAsync = async (fastify) => {
       lng?: number
       emergencyPhone?: string
       emergencyName?: string
+      forceNew?: boolean
     }
 
     const authUser = (request as any).user
@@ -23,7 +24,8 @@ export const safetyRoutes: FastifyPluginAsync = async (fastify) => {
       body.lat,
       body.lng,
       body.emergencyPhone,
-      body.emergencyName
+      body.emergencyName,
+      body.forceNew
     )
     const isExistingActive = Boolean((event as any)?.isExistingActive)
 
