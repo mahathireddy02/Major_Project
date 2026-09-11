@@ -115,20 +115,6 @@ const [showModal, setShowModal] = useState<boolean>(false)
     return unsub
   }, [refreshRides, fetchNotifications])
 
-const driverRides = rides.filter(
-    (r) =>
-      r.driverId === currentDriverId ||
-      r.driverId === currentDriver?.id ||
-      r.driverId === 'd1' ||
-      (currentDriver?.name && (r as any).driverName === currentDriver.name)
-  )
-  const myRides = [...driverRides].sort((a, b) => {
-    const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0
-    const timeB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0
-    if (timeA !== timeB) return timeB - timeA
-    return b.id.localeCompare(a.id)
-  })
-
   const activeTrip =
     myRides.find((r) => r.status === 'active') ||
     rides.find((r) => r.status === 'active' && (r.driverId === currentDriverId || r.driverId === 'd1'))

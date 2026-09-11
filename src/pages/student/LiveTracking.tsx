@@ -144,7 +144,6 @@ export default function LiveTracking() {
 
   const progress = tripState?.progress
   const currentStop = tripState?.currentStop
-  const currentStop = tripState?.currentStop
 
   const rideMessages = activeRide ? messages.filter((m) => m.rideId === activeRide.id) : []
   const unreadFromDriver = rideMessages.filter((m) => m.fromRole === 'driver' && !m.read).length

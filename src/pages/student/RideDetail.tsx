@@ -54,41 +54,7 @@ export default function RideDetail() {
   }, [id, rides])
 
   const ride = rides.find((r) => r.id === id) || remoteRide
-  if (loadingRide && !ride) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-16 text-center">
-        <div className="w-10 h-10 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin mx-auto mb-4" />
-        <p className="text-sm font-semibold text-slate-700">Loading ride details...</p>
-      </div>
-    )
-  }
-
-  if (!ride) {
-    return (
-      <div className="max-w-lg mx-auto px-4 py-12 text-center">
-        <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
-        <h2 className="text-xl font-heading font-bold text-slate-800 mb-2">Ride Not Found</h2>
-        <p className="text-sm text-slate-500 mb-6">The ride you're looking for does not exist or has finished.</p>
-        <Button onClick={() => navigate('/student/home')}>Return Home</Button>
-      </div>
-    )
-  }
-
-  const driver =
-    drivers.find((d) => d.id === ride.driverId) ||
-    (ride.driverId
-      ? {
-          id: ride.driverId,
-          name: (ride as any).driverName || 'Campus Driver',
-          phone: (ride as any).driverPhone || '+91 98765 43210',
-          rating: 4.9,
-          totalTrips: 150,
-        }
-      : undefined)
-  const vehicle = vehicles.find((v) => v.id === ride.vehicleId)
   const isPassenger = Boolean(ride?.passengers?.some((p) => p.studentId === currentStudentId || p.studentId === currentStudent?.id))
-  const isFull = ride.bookedSeats >= ride.capacity
-  const availableSeats = ride.capacity - ride.bookedSeats
   const requestedPickup = searchParams.get('pickup') || ride?.pickupPoints?.[0]?.name || 'Pickup Point'
   const requestedDestination = searchParams.get('destination') || ride?.destination || 'Destination' 
   const requestedPickupLat = Number(searchParams.get('pickupLat')) || undefined
@@ -102,7 +68,7 @@ export default function RideDetail() {
   useEffect(() => {
     if (!ride) return
 
-    const myPassenger = ride.passengers.find((p) => p.studentId === currentStudentId)
+    const myPassenger = ride.passengers?.find((p) => p.studentId === currentStudentId)
     if (myPassenger && myPassenger.fare) {
       setFareAmount(myPassenger.fare)
       setIsLockedFare(true)
@@ -123,8 +89,8 @@ export default function RideDetail() {
       }).catch((err) => console.warn('[RideDetail] Could not load ride fares:', err))
     } else {
       // Calculate dynamic fare estimate using exact pickup & destination
-      const pLat = requestedPickupLat || ride.pickupPoints[0]?.lat || 17.398
-      const pLng = requestedPickupLng || ride.pickupPoints[0]?.lng || 78.479
+      const pLat = requestedPickupLat || ride.pickupPoints?.[0]?.lat || 17.398
+      const pLng = requestedPickupLng || ride.pickupPoints?.[0]?.lng || 78.479
       const dLat = requestedDestLat || ride.destinationLat || 17.2063
       const dLng = requestedDestLng || ride.destinationLng || 78.6015
 
@@ -169,7 +135,17 @@ export default function RideDetail() {
     )
   }
 
-  const driver = drivers.find((d) => d.id === ride.driverId)
+  const driver =
+    drivers.find((d) => d.id === ride.driverId) ||
+    (ride.driverId
+      ? {
+          id: ride.driverId,
+          name: (ride as any).driverName || 'Campus Driver',
+          phone: (ride as any).driverPhone || '+91 98765 43210',
+          rating: 4.9,
+          totalTrips: 150,
+        }
+      : undefined)
   const vehicle = vehicles.find((v) => v.id === ride.vehicleId)
   const isFull = ride.bookedSeats >= ride.capacity
   const availableSeats = ride.capacity - ride.bookedSeats
