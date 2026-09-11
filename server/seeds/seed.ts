@@ -5,6 +5,9 @@ import { RideModel } from '../models/Ride.js'
 import { BookingModel } from '../models/Booking.js'
 import { SafetyEventModel } from '../models/SafetyEvent.js'
 import { NotificationModel } from '../models/Notification.js'
+import { PricingConfigModel } from '../models/PricingConfig.js'
+import { RideFareModel } from '../models/RideFare.js'
+import { PricingEventModel } from '../models/PricingEvent.js'
 import { connectDatabase } from '../config/database.js'
 
 // 20 Students Seed Data
@@ -46,7 +49,7 @@ const DRIVERS_SEED = [
 
 // 8 Vehicles Seed Data
 const VEHICLES_SEED = [
-  { id: 'v1', name: 'Campus Van 12', driverId: 'd1', vehicleType: 'Mini Van', registrationNumber: 'TS 09 AB 1234', capacity: 6, status: 'ON_TRIP', color: '#0891B2', rating: 4.8, totalTrips: 312 },
+  { id: 'v1', name: 'Campus Shuttle Bus 01 (V1)', driverId: 'd1', vehicleType: 'Campus Shuttle Bus', registrationNumber: 'TS 09 AB 1234', capacity: 12, status: 'ON_TRIP', color: '#0891B2', rating: 4.8, totalTrips: 312 },
   { id: 'v2', name: 'Campus Van 07', driverId: 'd2', vehicleType: 'Mini Van', registrationNumber: 'TS 09 CD 5678', capacity: 6, status: 'AVAILABLE', color: '#7C3AED', rating: 4.6, totalTrips: 245 },
   { id: 'v3', name: 'Campus Bus 03', driverId: 'd3', vehicleType: 'Mini Bus', registrationNumber: 'TS 09 EF 9012', capacity: 12, status: 'ON_TRIP', color: '#059669', rating: 4.9, totalTrips: 428 },
   { id: 'v4', name: 'Campus Van 15', driverId: 'd4', vehicleType: 'Mini Van', registrationNumber: 'TS 09 GH 3456', capacity: 6, status: 'AVAILABLE', color: '#D97706', rating: 4.7, totalTrips: 189 },
@@ -56,8 +59,121 @@ const VEHICLES_SEED = [
   { id: 'v8', name: 'Campus Van 18', driverId: 'd8', vehicleType: 'Mini Van', registrationNumber: 'TS 09 OP 3691', capacity: 6, status: 'AVAILABLE', color: '#6366F1', rating: 4.4, totalTrips: 134 },
 ]
 
-// 10 Rides Seed Data (including 5/6, 2/6, 6/6, 1/6, active, deviation)
+// 11 Rides Seed Data (including Hackathon Demo Pooled Shuttle V1)
 const RIDES_SEED = [
+  // Hackathon Demo: Vehicle V1 (12-capacity shuttle with 5 pooled passengers and individual fares)
+  {
+    id: 'ride-demo-v1',
+    routeName: 'Campus Shuttle V1 [Hackathon Demo Pool]',
+    driverId: 'd1',
+    vehicleId: 'v1',
+    pickupPoints: [
+      { id: 'stop-1', name: 'Stop 1 - Campus Main Gate', lat: 17.3616, lng: 78.4747, estimatedPickupTime: '8:00 AM' },
+      { id: 'stop-2', name: 'Stop 2 - Science Block', lat: 17.3850, lng: 78.4867, estimatedPickupTime: '8:10 AM' },
+      { id: 'stop-3', name: 'Stop 3 - Hostel Hub', lat: 17.4000, lng: 78.4900, estimatedPickupTime: '8:20 AM' },
+      { id: 'stop-4', name: 'Stop 4 - Central Library', lat: 17.4156, lng: 78.4357, estimatedPickupTime: '8:30 AM' },
+      { id: 'stop-5', name: 'Stop 5 - Tech Park', lat: 17.4435, lng: 78.3772, estimatedPickupTime: '8:45 AM' },
+    ],
+    destination: 'Stop 7 - Sports Complex',
+    destinationLat: 17.2063,
+    destinationLng: 78.6015,
+    departureTime: '8:00 AM',
+    estimatedArrival: '9:05 AM',
+    capacity: 12,
+    bookedSeats: 5,
+    passengers: [
+      {
+        id: 'p_a',
+        studentId: 's1',
+        userId: 's1',
+        name: 'Uday Kiran (Passenger A)',
+        pickup: 'Stop 1 - Campus Main Gate',
+        destination: 'Stop 5 - Tech Park',
+        seatNo: 1,
+        fare: 90,
+        isPriceLocked: true,
+        status: 'boarded',
+        fareId: 'fare_demo_a',
+        bookingId: 'book_demo_a',
+      },
+      {
+        id: 'p_b',
+        studentId: 's2',
+        userId: 's2',
+        name: 'Arjun Rao (Passenger B)',
+        pickup: 'Stop 2 - Science Block',
+        destination: 'Stop 4 - Central Library',
+        seatNo: 2,
+        fare: 55,
+        isPriceLocked: true,
+        status: 'boarded',
+        fareId: 'fare_demo_b',
+        bookingId: 'book_demo_b',
+      },
+      {
+        id: 'p_c',
+        studentId: 's3',
+        userId: 's3',
+        name: 'Priya Sharma (Passenger C)',
+        pickup: 'Stop 1 - Campus Main Gate',
+        destination: 'Stop 3 - Hostel Hub',
+        seatNo: 3,
+        fare: 45,
+        isPriceLocked: true,
+        status: 'boarded',
+        fareId: 'fare_demo_c',
+        bookingId: 'book_demo_c',
+      },
+      {
+        id: 'p_d',
+        studentId: 's4',
+        userId: 's4',
+        name: 'Rahul Varma (Passenger D)',
+        pickup: 'Stop 4 - Central Library',
+        destination: 'Stop 5 - Tech Park',
+        seatNo: 4,
+        fare: 35,
+        isPriceLocked: true,
+        status: 'boarded',
+        fareId: 'fare_demo_d',
+        bookingId: 'book_demo_d',
+      },
+      {
+        id: 'p_e',
+        studentId: 's5',
+        userId: 's5',
+        name: 'Sneha Reddy (Passenger E)',
+        pickup: 'Stop 5 - Tech Park',
+        destination: 'Stop 7 - Sports Complex',
+        seatNo: 5,
+        fare: 40,
+        isPriceLocked: true,
+        status: 'boarded',
+        fareId: 'fare_demo_e',
+        bookingId: 'book_demo_e',
+      },
+    ],
+    status: 'active',
+    fare: 53,
+    totalFareAmount: 265,
+    averageFare: 53,
+    totalSharedSavings: 55,
+    demandLevel: 'NORMAL',
+    currentLat: 17.3850,
+    currentLng: 78.4867,
+    distanceKm: 28.4,
+    hasDeviation: false,
+    hasSosAlert: false,
+    date: 'today',
+    routeCoordinates: [
+      [17.3616, 78.4747],
+      [17.3850, 78.4867],
+      [17.4000, 78.4900],
+      [17.4156, 78.4357],
+      [17.4435, 78.3772],
+      [17.2063, 78.6015],
+    ],
+  },
   // Ride #101: Waiting
   {
     id: 'ride-101',
@@ -371,7 +487,25 @@ export async function seedDatabase() {
     BookingModel.deleteMany({}),
     SafetyEventModel.deleteMany({}),
     NotificationModel.deleteMany({}),
+    PricingConfigModel.deleteMany({}),
+    RideFareModel.deleteMany({}),
+    PricingEventModel.deleteMany({}),
   ])
+
+  // Insert Default Campus Pricing Config
+  await PricingConfigModel.create({
+    id: 'campus_default',
+    name: 'Standard Campus Policy',
+    baseFare: 20,
+    perKmRate: 8,
+    perMinuteRate: 1,
+    minimumFare: 30,
+    maximumFare: 500,
+    sharedDiscountCap: 0.30,
+    aiAdjustmentCap: 0.10,
+    isActive: true,
+  })
+  console.log('[Seed] Inserted campus pricing configuration (base ₹20, per km ₹8, min ₹30, max ₹500, max discount 30%).')
 
   // Insert Users with standard default password ('campus2026')
   const defaultPasswordHash = await bcrypt.hash('campus2026', 10)
@@ -392,10 +526,224 @@ export async function seedDatabase() {
   await RideModel.insertMany(RIDES_SEED)
   console.log(`[Seed] Inserted ${RIDES_SEED.length} rides across various lifecycle states.`)
 
-  // Insert initial Bookings (starts empty until students book)
-  const initialBookings: any[] = []
+  // Insert initial Bookings (Hackathon Demo Pool for Vehicle V1 with 5 passengers)
+  const initialBookings = [
+    {
+      id: 'book_demo_a',
+      studentId: 's1',
+      userId: 's1',
+      rideId: 'ride-demo-v1',
+      pickup: 'Stop 1 - Campus Main Gate',
+      destination: 'Stop 5 - Tech Park',
+      seatNo: 1,
+      seats: 1,
+      fare: 90,
+      status: 'confirmed' as const,
+      fareId: 'fare_demo_a',
+      isPriceLocked: true,
+      pricingVersion: 'v1.0',
+      bookedAt: new Date(Date.now() - 3600000),
+      fareBreakdown: {
+        baseFare: 20,
+        distanceFare: 66,
+        timeFare: 18,
+        detourPenalty: 0,
+        sharedSavings: 14,
+        surgeMultiplier: 1.0,
+        demandTier: 'NORMAL',
+        aiAdjustmentPct: 0,
+        finalFare: 90,
+        isLocked: true,
+        calculationDetails: 'Long trip: Base ₹20 + 11.0km @ ₹6/km + 18m @ ₹1/m - 15% pooled discount. Price locked.',
+      },
+    },
+    {
+      id: 'book_demo_b',
+      studentId: 's2',
+      userId: 's2',
+      rideId: 'ride-demo-v1',
+      pickup: 'Stop 2 - Science Block',
+      destination: 'Stop 4 - Central Library',
+      seatNo: 2,
+      seats: 1,
+      fare: 55,
+      status: 'confirmed' as const,
+      fareId: 'fare_demo_b',
+      isPriceLocked: true,
+      pricingVersion: 'v1.0',
+      bookedAt: new Date(Date.now() - 3000000),
+      fareBreakdown: {
+        baseFare: 20,
+        distanceFare: 36,
+        timeFare: 9,
+        detourPenalty: 0,
+        sharedSavings: 10,
+        surgeMultiplier: 1.0,
+        demandTier: 'NORMAL',
+        aiAdjustmentPct: 0,
+        finalFare: 55,
+        isLocked: true,
+        calculationDetails: 'Medium trip: Base ₹20 + 6.0km @ ₹6/km + 9m @ ₹1/m - 15% pooled discount. Price locked.',
+      },
+    },
+    {
+      id: 'book_demo_c',
+      studentId: 's3',
+      userId: 's3',
+      rideId: 'ride-demo-v1',
+      pickup: 'Stop 1 - Campus Main Gate',
+      destination: 'Stop 3 - Hostel Hub',
+      seatNo: 3,
+      seats: 1,
+      fare: 45,
+      status: 'confirmed' as const,
+      fareId: 'fare_demo_c',
+      isPriceLocked: true,
+      pricingVersion: 'v1.0',
+      bookedAt: new Date(Date.now() - 2400000),
+      fareBreakdown: {
+        baseFare: 20,
+        distanceFare: 27,
+        timeFare: 6,
+        detourPenalty: 0,
+        sharedSavings: 8,
+        surgeMultiplier: 1.0,
+        demandTier: 'NORMAL',
+        aiAdjustmentPct: 0,
+        finalFare: 45,
+        isLocked: true,
+        calculationDetails: 'Medium trip: Base ₹20 + 4.5km @ ₹6/km + 6m @ ₹1/m - 15% pooled discount. Price locked.',
+      },
+    },
+    {
+      id: 'book_demo_d',
+      studentId: 's4',
+      userId: 's4',
+      rideId: 'ride-demo-v1',
+      pickup: 'Stop 4 - Central Library',
+      destination: 'Stop 5 - Tech Park',
+      seatNo: 4,
+      seats: 1,
+      fare: 35,
+      status: 'confirmed' as const,
+      fareId: 'fare_demo_d',
+      isPriceLocked: true,
+      pricingVersion: 'v1.0',
+      bookedAt: new Date(Date.now() - 1800000),
+      fareBreakdown: {
+        baseFare: 20,
+        distanceFare: 15,
+        timeFare: 5,
+        detourPenalty: 0,
+        sharedSavings: 5,
+        surgeMultiplier: 1.0,
+        demandTier: 'NORMAL',
+        aiAdjustmentPct: 0,
+        finalFare: 35,
+        isLocked: true,
+        calculationDetails: 'Short trip: Base ₹20 + 2.5km @ ₹6/km + 5m @ ₹1/m - 12% pooled discount. Price locked.',
+      },
+    },
+    {
+      id: 'book_demo_e',
+      studentId: 's5',
+      userId: 's5',
+      rideId: 'ride-demo-v1',
+      pickup: 'Stop 5 - Tech Park',
+      destination: 'Stop 7 - Sports Complex',
+      seatNo: 5,
+      seats: 1,
+      fare: 40,
+      status: 'confirmed' as const,
+      fareId: 'fare_demo_e',
+      isPriceLocked: true,
+      pricingVersion: 'v1.0',
+      bookedAt: new Date(Date.now() - 1200000),
+      fareBreakdown: {
+        baseFare: 20,
+        distanceFare: 18,
+        timeFare: 8,
+        detourPenalty: 0,
+        sharedSavings: 6,
+        surgeMultiplier: 1.0,
+        demandTier: 'NORMAL',
+        aiAdjustmentPct: 0,
+        finalFare: 40,
+        isLocked: true,
+        calculationDetails: 'New hop: Base ₹20 + 3.0km @ ₹6/km + 8m @ ₹1/m - 13% pooled discount. Price locked.',
+      },
+    },
+  ]
   await BookingModel.insertMany(initialBookings)
-  console.log(`[Seed] Inserted ${initialBookings.length} initial bookings.`)
+  console.log(`[Seed] Inserted ${initialBookings.length} initial bookings for Hackathon Demo Pool.`)
+
+  // Insert individual RideFare records
+  const initialFares = initialBookings.map((b) => ({
+    id: b.fareId,
+    bookingId: b.id,
+    rideId: b.rideId,
+    currency: 'INR',
+    baseAmount: b.fareBreakdown.baseFare,
+    distanceAmount: b.fareBreakdown.distanceFare,
+    timeAmount: b.fareBreakdown.timeFare,
+    routeContributionAmount: 0,
+    sharedSavingsAmount: b.fareBreakdown.sharedSavings,
+    demandAdjustmentAmount: 0,
+    aiAdjustmentAmount: 0,
+    finalAmount: b.fare,
+    finalAmountPaise: b.fare * 100,
+    distanceKm: b.fareBreakdown.distanceFare / 6,
+    durationMinutes: b.fareBreakdown.timeFare,
+    routeOverlapPercent: 65,
+    additionalDistanceKm: 0,
+    additionalDurationMinutes: 0,
+    occupancyAtCalculation: 5,
+    pricingVersion: 'v1.0',
+    calculationStatus: 'CONFIRMED' as const,
+    calculationReason: b.fareBreakdown.calculationDetails,
+    breakdown: {
+      ...b.fareBreakdown,
+      finalFarePaise: b.fare * 100,
+      currency: 'INR',
+      rates: { perKm: 6, perMinute: 1, base: 20, minimumFare: 30, maximumFare: 500 },
+      metrics: { distanceKm: b.fareBreakdown.distanceFare / 6, durationMinutes: b.fareBreakdown.timeFare, routeOverlapPercent: 65, additionalDistanceKm: 0, additionalDurationMinutes: 0, occupancy: 5, capacity: 12, demandTier: 'NORMAL' },
+      explanation: b.fareBreakdown.calculationDetails,
+    },
+    isLocked: true,
+    lockedAt: b.bookedAt,
+  }))
+  await RideFareModel.insertMany(initialFares)
+  console.log(`[Seed] Inserted ${initialFares.length} individual passenger RideFare records.`)
+
+  // Insert initial PricingEvents audit logs
+  const initialEvents = [
+    {
+      id: 'evt_demo_init',
+      rideId: 'ride-demo-v1',
+      eventType: 'INITIAL_CALCULATION' as const,
+      newAmount: 265,
+      trigger: 'SCHEDULE_CREATED',
+      reason: 'Initial pooled ride schedule created with 12-seater capacity.',
+      inputSnapshot: { capacity: 12, vehicleId: 'v1' },
+      calculationSnapshot: { bookedSeats: 0, capacity: 12 },
+      createdAt: new Date(Date.now() - 4000000),
+    },
+    ...initialBookings.map((b, idx) => ({
+      id: `evt_demo_lock_${idx + 1}`,
+      rideId: 'ride-demo-v1',
+      bookingId: b.id,
+      eventType: 'PASSENGER_JOINED' as const,
+      oldAmount: 0,
+      newAmount: b.fare,
+      trigger: 'BOOKING_CONFIRMATION',
+      reason: `Confirmed seat #${b.seatNo} booking for ${b.pickup} -> ${b.destination}. Fare permanently locked.`,
+      inputSnapshot: { seatNo: b.seatNo, userId: b.userId },
+      calculationSnapshot: b.fareBreakdown,
+      createdAt: b.bookedAt,
+    })),
+  ]
+  await PricingEventModel.insertMany(initialEvents)
+  console.log(`[Seed] Inserted ${initialEvents.length} audit pricing events.`)
 
   // Insert Safety Event (Ride #105 historical deviation)
   await SafetyEventModel.create({

@@ -100,7 +100,7 @@ export default function DriverAuth() {
     } catch {
       setDetectedName('')
       setOcrResult({
-        matchScore: 0, isMatch: false, status: 'MISMATCH',
+        matchScore: 0, isMatch: false, nameOk: false, dlOk: false, status: 'MISMATCH',
         statusLabel: '⚠️ Could not read license — please upload a clearer photo',
         explanation: 'OCR could not extract text from the uploaded image.',
       })
@@ -132,7 +132,7 @@ export default function DriverAuth() {
     try {
       await registerDriver({
         fullName,
-        collegeName,
+        collegeName: 'Campus Transport',
         phone,
         email,
         password,

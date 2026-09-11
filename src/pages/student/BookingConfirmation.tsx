@@ -33,6 +33,7 @@ export default function BookingConfirmation() {
   const myPassenger = ride.passengers.find((p) => p.studentId === studentId || p.studentId === currentStudentId)
   const mySeat = myPassenger ? myPassenger.seatNo : (myBooking?.seatNo || ride.bookedSeats)
   const myDestination = myBooking?.destination || (myPassenger as any)?.destination || ride.destination
+  const myFare = myPassenger?.fare || myBooking?.fare || ride.fare
 
   return (
     <div className="max-w-lg mx-auto px-4 pt-8 pb-16">
@@ -128,8 +129,8 @@ export default function BookingConfirmation() {
                   <p className="font-semibold text-slate-800">{driver.name} · {driver.rating} ★</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-xs text-slate-400">Fare</p>
-                  <p className="font-bold text-slate-900">₹{ride.fare}</p>
+                  <p className="text-xs text-slate-400">Locked Fare</p>
+                  <p className="font-bold text-slate-900 text-base">₹{myFare}</p>
                 </div>
               </div>
             )}

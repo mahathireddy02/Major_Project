@@ -13,7 +13,8 @@
     "dev:all": "concurrently -n \"backend,frontend\" -c \"cyan,magenta\" \"npm run server\" \"npm run dev\"",
     "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

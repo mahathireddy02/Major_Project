@@ -23,6 +23,8 @@ export type RealtimeEventType =
   | 'NOTIFICATION_ADDED'
   | 'DEMO_RESET'
   | 'FLEET_RESET'
+  | 'PRICING_UPDATED'
+  | 'FARE_RECALCULATED'
 
 
 export interface RealtimeMessage {

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   MapPin, Clock, Users, Shield, Star, ChevronLeft, Car, CheckCircle2,
-  AlertCircle, ArrowRight, DollarSign, Calendar
+  AlertCircle, ArrowRight, DollarSign, Calendar, Sparkles, Info, ShieldCheck
 } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
@@ -13,7 +13,7 @@ import SeatProgress from '../../components/ui/SeatProgress'
 import CampusMap from '../../components/map/CampusMap'
 import { getRideStatusBadge, getRideStatusLabel } from '../../lib/utils'
 import { api } from '../../services/api'
-import { Ride } from '../../types'
+import { Ride, FareBreakdown } from '../../types'
 import toast from 'react-hot-toast'
 
 export default function RideDetail() {
@@ -86,6 +86,58 @@ export default function RideDetail() {
   const requestedPickupAddress = searchParams.get('pickupAddress') || requestedPickup
   const requestedDestAddress = searchParams.get('destinationAddress') || requestedDestination
 
+  const [fareBreakdown, setFareBreakdown] = useState<FareBreakdown | null>(null)
+  const [fareAmount, setFareAmount] = useState<number | null>(null)
+  const [isLockedFare, setIsLockedFare] = useState<boolean>(false)
+
+  // Fetch individual fare: from existing booking if passenger, or backend estimate if joining
+  useEffect(() => {
+    if (!ride) return
+
+    const myPassenger = ride.passengers.find((p) => p.studentId === currentStudentId)
+    if (myPassenger && myPassenger.fare) {
+      setFareAmount(myPassenger.fare)
+      setIsLockedFare(true)
+    }
+
+    // Load full fare breakdown from backend
+    if (isPassenger) {
+      api.getRideFares(ride.id).then((res) => {
+        if (res.success && res.data) {
+          const myFare = res.data.passengers.find((p) => p.studentId === currentStudentId)
+          if (myFare) {
+            setFareAmount(myFare.fare)
+            setFareBreakdown(myFare.fareBreakdown)
+            setIsLockedFare(myFare.isLocked)
+          }
+        }
+      }).catch((err) => console.warn('[RideDetail] Could not load ride fares:', err))
+    } else {
+      // Pre-booking dynamic estimate for this student's pickup and dropoff
+      const pLat = requestedPickupLat || ride.pickupPoints[0]?.lat || 17.4934
+      const pLng = requestedPickupLng || ride.pickupPoints[0]?.lng || 78.3995
+      const dLat = requestedDestLat || ride.destinationLat
+      const dLng = requestedDestLng || ride.destinationLng
+
+      api.getFareEstimate({
+        pickupName: requestedPickup,
+        pickupLat: pLat,
+        pickupLng: pLng,
+        destinationName: requestedDestination,
+        destinationLat: dLat,
+        destinationLng: dLng,
+        seats: 1,
+        rideId: ride.id,
+      }).then((res) => {
+        if (res.success && res.data) {
+          setFareAmount(res.data.estimatedFare)
+          setFareBreakdown(res.data.breakdown)
+          setIsLockedFare(false)
+        }
+      }).catch((err) => console.warn('[RideDetail] Fare estimate error:', err))
+    }
+  }, [ride?.id, currentStudentId, isPassenger, requestedPickupLat, requestedPickupLng, requestedDestLat, requestedDestLng])
+
   const mapPoints = [
     ...ride.pickupPoints.map((pp) => ({
       lat: pp.lat,
@@ -147,7 +199,9 @@ export default function RideDetail() {
       <div className="mb-4">
         <div className="flex items-center justify-between">
           <h1 className="font-heading font-bold text-2xl text-slate-900">{ride.routeName}</h1>
-          <span className="text-xl font-heading font-bold text-primary-700">₹{ride.fare}</span>
+          <span className="text-xl font-heading font-bold text-primary-700" title="Individual fare calculated by backend pricing engine">
+            {fareAmount !== null ? `₹${fareAmount}` : '…'}
+          </span>
         </div>
         <p className="text-xs text-slate-500 mt-1 flex items-center gap-1">
           <Calendar size={13} className="text-slate-400" />
@@ -286,12 +340,121 @@ export default function RideDetail() {
         </div>
       </Card>
 
+      {/* Passenger Fare Details Card (Section 17) */}
+      <Card className="mb-24" padding="md">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <h3 className="font-heading font-semibold text-slate-900 text-sm flex items-center gap-1.5">
+              <Sparkles size={15} className="text-primary-600" />
+              {isLockedFare ? 'Confirmed Fare Receipt' : 'Estimated Fare Breakdown'}
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              {isLockedFare ? 'Price locked & guaranteed' : 'Route-calculated individual passenger fare'}
+            </p>
+          </div>
+          {isLockedFare ? (
+            <Badge variant="green" size="sm">
+              <ShieldCheck size={12} /> Confirmed
+            </Badge>
+          ) : (
+            <Badge variant="blue" size="sm">
+              Dynamic Pooling
+            </Badge>
+          )}
+        </div>
+
+        <div className="bg-slate-50 rounded-xl p-3.5 border border-slate-100 space-y-2 text-xs">
+          {fareBreakdown ? (
+            <>
+              <div className="flex justify-between text-slate-600">
+                <span>Base fare</span>
+                <span className="font-mono font-medium">₹{fareBreakdown.baseFare}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Distance ({fareBreakdown.metrics.distanceKm} km)</span>
+                <span className="font-mono font-medium">₹{fareBreakdown.distanceFare}</span>
+              </div>
+              <div className="flex justify-between text-slate-600">
+                <span>Travel time ({fareBreakdown.metrics.durationMinutes} min)</span>
+                <span className="font-mono font-medium">₹{fareBreakdown.durationFare}</span>
+              </div>
+              {fareBreakdown.routeContribution > 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Route contribution</span>
+                  <span className="font-mono font-medium">+₹{fareBreakdown.routeContribution}</span>
+                </div>
+              )}
+              {fareBreakdown.demandAdjustment !== 0 && (
+                <div className="flex justify-between text-slate-600">
+                  <span>Demand adjustment ({fareBreakdown.metrics.demandTier})</span>
+                  <span className="font-mono font-medium">
+                    {fareBreakdown.demandAdjustment > 0 ? `+₹${fareBreakdown.demandAdjustment}` : `-₹${Math.abs(fareBreakdown.demandAdjustment)}`}
+                  </span>
+                </div>
+              )}
+              {fareBreakdown.sharedSavings > 0 && (
+                <div className="flex justify-between text-emerald-700 font-semibold">
+                  <span>Shared ride savings ({fareBreakdown.metrics.routeOverlapPercent}% overlap)</span>
+                  <span className="font-mono">-₹{fareBreakdown.sharedSavings}</span>
+                </div>
+              )}
+              {fareBreakdown.aiAdvice && fareBreakdown.aiAdvice.appliedAdjustmentPercent !== 0 && (
+                <div className="flex justify-between text-blue-700">
+                  <span>AI Advisory Adjustment</span>
+                  <span className="font-mono">
+                    {fareBreakdown.aiAdvice.appliedAdjustmentPercent! > 0
+                      ? `+${fareBreakdown.aiAdvice.appliedAdjustmentPercent}%`
+                      : `${fareBreakdown.aiAdvice.appliedAdjustmentPercent}%`}
+                  </span>
+                </div>
+              )}
+              <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline font-bold text-slate-900 text-sm">
+                <span>Final fare</span>
+                <span className="text-xl font-heading text-primary-700 font-extrabold">
+                  ₹{fareAmount !== null ? fareAmount : ride.fare}
+                </span>
+              </div>
+              {fareBreakdown.explanation && (
+                <p className="text-[11px] text-slate-500 pt-2 border-t border-slate-200/60 leading-relaxed italic">
+                  {fareBreakdown.explanation}
+                </p>
+              )}
+            </>
+          ) : fareAmount !== null ? (
+            <div className="space-y-2">
+              <div className="flex justify-between text-slate-600">
+                <span>Estimated Fare</span>
+                <span className="font-mono font-medium text-slate-900">₹{fareAmount}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 italic">
+                Full breakdown loading from backend pricing engine…
+              </p>
+              <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline font-bold text-slate-900 text-sm">
+                <span>Total fare</span>
+                <span className="text-xl font-heading text-primary-700 font-extrabold">
+                  ₹{fareAmount}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-2">
+              <div className="w-4 h-4 border-2 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-1" />
+              <p className="text-xs text-slate-500">Calculating your individual fare…</p>
+            </div>
+          )}
+        </div>
+      </Card>
+
       {/* Bottom Floating CTA Bar */}
       <div className="fixed bottom-16 lg:bottom-4 left-0 right-0 max-w-2xl mx-auto px-4 z-30">
         <div className="bg-white/95 backdrop-blur-md p-3.5 rounded-2xl border border-slate-200 shadow-xl flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Standard Fare</p>
-            <p className="text-xl font-heading font-bold text-slate-900">₹{ride.fare}</p>
+            <p className="text-xs text-slate-400 font-medium">
+              {isLockedFare ? 'Confirmed Fare' : 'Your Fare'}
+            </p>
+            <p className="text-xl font-heading font-bold text-slate-900">
+              {fareAmount !== null ? `₹${fareAmount}` : '…'}
+            </p>
           </div>
 
           {isPassenger ? (
@@ -352,7 +515,9 @@ export default function RideDetail() {
                 </div>
                 <div className="border-t border-slate-200 pt-2 flex justify-between">
                   <span className="font-semibold text-slate-700">Estimated Fare:</span>
-                  <span className="font-heading font-bold text-lg text-green-600">₹{ride.fare}</span>
+                  <span className="font-heading font-bold text-lg text-green-600">
+                    {fareAmount !== null ? `₹${fareAmount}` : 'Calculating…'}
+                  </span>
                 </div>
               </div>
 

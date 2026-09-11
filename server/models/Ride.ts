@@ -23,6 +23,9 @@ export interface IPassenger {
   destination?: string
   status: 'waiting' | 'boarded' | 'dropped'
   seatNo: number
+  fare?: number
+  fareId?: string
+  bookingId?: string
 }
 
 export type StopType = 'PICKUP' | 'DROPOFF'
@@ -93,6 +96,10 @@ export interface IRide extends Document {
   passengers: IPassenger[]
   status: RideStatus
   fare: number
+  totalFareAmount?: number
+  averageFare?: number
+  totalSharedSavings?: number
+  demandLevel?: 'LOW' | 'NORMAL' | 'HIGH'
   routeCoordinates: [number, number][]
   currentLat: number
   currentLng: number
@@ -130,12 +137,17 @@ const RideSchema = new Schema<IRide>(
     bookedSeats: { type: Number, required: true, default: 0, index: true },
     passengers: [
       {
+        id: { type: String },
+        userId: { type: String },
         studentId: { type: String, required: true },
         name: { type: String, required: true },
         pickup: { type: String, required: true },
         destination: { type: String },
         status: { type: String, enum: ['waiting', 'boarded', 'dropped'], default: 'waiting' },
         seatNo: { type: Number, required: true },
+        fare: { type: Number },
+        fareId: { type: String },
+        bookingId: { type: String },
       },
     ],
     status: {
@@ -183,6 +195,10 @@ const RideSchema = new Schema<IRide>(
       steps: { type: [Schema.Types.Mixed], default: [] },
     },
     fare: { type: Number, required: true, default: 25 },
+    totalFareAmount: { type: Number, default: 0 },
+    averageFare: { type: Number, default: 0 },
+    totalSharedSavings: { type: Number, default: 0 },
+    demandLevel: { type: String, enum: ['LOW', 'NORMAL', 'HIGH'], default: 'NORMAL' },
     routeCoordinates: { type: [[Number]], default: [] },
     currentLat: { type: Number, default: 17.398 },
     currentLng: { type: Number, default: 78.479 },

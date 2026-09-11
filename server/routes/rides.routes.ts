@@ -7,6 +7,8 @@ import { NotificationModel } from '../models/Notification.js'
 import { realtimeService } from '../services/realtimeService.js'
 import { routingService } from '../services/routingService.js'
 import { routeProgressService } from '../services/routeProgressService.js'
+import { pricingEngine } from '../services/pricingEngine.js'
+import { PricingEventModel } from '../models/PricingEvent.js'
 
 export const rideRoutes: FastifyPluginAsync = async (fastify) => {
   // List all rides
@@ -264,7 +266,29 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    // Create Booking with explicit coordinates
+    const pLat = pickupCoords?.lat || currentRide.pickupPoints?.[0]?.lat || 17.4934
+    const pLng = pickupCoords?.lng || currentRide.pickupPoints?.[0]?.lng || 78.3995
+    const dLat = destinationCoords?.lat || currentRide.destinationLat
+    const dLng = destinationCoords?.lng || currentRide.destinationLng
+
+    // Deterministic + AI Advisory Passenger-Specific Fare Calculation
+    const fareCalc = await pricingEngine.calculatePassengerFare(
+      {
+        studentId,
+        studentName,
+        pickupName: body.pickupName || body.pickup,
+        pickupLat: pLat,
+        pickupLng: pLng,
+        destinationName: studentDestination,
+        destinationLat: dLat,
+        destinationLng: dLng,
+        seats: requestedSeats,
+      },
+      currentRide,
+      { status: 'CONFIRMED', trigger: 'PASSENGER_JOINED' }
+    )
+
+    // Create Booking with explicit coordinates and locked fare
     const bookingId = `b-${Date.now().toString().slice(-6)}`
     const booking = await BookingModel.create({
       id: bookingId,
@@ -274,19 +298,41 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       pickup: body.pickup,
       pickupName: body.pickupName || body.pickup,
       pickupAddress: body.pickupAddress,
-      pickupLat: pickupCoords?.lat,
-      pickupLng: pickupCoords?.lng,
+      pickupLat: pLat,
+      pickupLng: pLng,
       destination: studentDestination,
       destinationName: studentDestination,
       destinationAddress: body.destinationAddress,
-      destinationLat: destinationCoords?.lat || currentRide.destinationLat,
-      destinationLng: destinationCoords?.lng || currentRide.destinationLng,
-      fare: updatedRide.fare,
+      destinationLat: dLat,
+      destinationLng: dLng,
+      fare: fareCalc.finalAmount,
+      fareBreakdown: fareCalc.breakdown,
+      isPriceLocked: true,
+      pricingVersion: fareCalc.pricingVersion,
       seats: requestedSeats,
       seatNo: nextSeatNo,
       status: 'confirmed',
       bookingTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     })
+
+    // Persist authoritative RideFare and audit event in DB
+    const savedFare = await pricingEngine.saveAuthoritativeFare(
+      bookingId,
+      id,
+      studentId,
+      fareCalc,
+      'Passenger joined pooled ride',
+      'PASSENGER_JOINED'
+    )
+
+    // Update passenger entry in ride with its individual fare
+    const passengerEntry = updatedRide.passengers.find((p) => p.studentId === studentId && p.seatNo === nextSeatNo)
+    if (passengerEntry) {
+      passengerEntry.fare = fareCalc.finalAmount
+      passengerEntry.fareId = savedFare.id
+      passengerEntry.bookingId = bookingId
+      await updatedRide.save()
+    }
 
     // Dynamically update route and stops for the new pickup & dropoff
     await routeProgressService.handlePassengerJoin(
@@ -305,12 +351,12 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       userId: studentId,
       type: 'match',
       title: 'Booking Confirmed',
-      message: `You joined ${updatedRide.routeName}. Pickup at ${body.pickup}, ${updatedRide.departureTime}.`,
+      message: `You joined ${updatedRide.routeName}. Pickup at ${body.pickup}, ${updatedRide.departureTime}. Individual fare: ₹${fareCalc.finalAmount}.`,
       rideId: id,
     })
 
     // Broadcast Realtime Update
-    realtimeService.broadcast('BOOKING_CREATED', { booking, ride: updatedRide })
+    realtimeService.broadcast('BOOKING_CREATED', { booking, ride: updatedRide, fare: savedFare })
     realtimeService.broadcast('RIDE_UPDATED', { ride: updatedRide })
 
     return {
@@ -318,6 +364,7 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
       data: {
         booking,
         ride: updatedRide,
+        fare: savedFare,
       },
     }
   })
@@ -348,14 +395,38 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
     // Dynamically adjust stops and route
     await routeProgressService.handlePassengerCancel(ride, studentId)
 
-    // Update booking
-    await BookingModel.updateMany(
-      { rideId: id, studentId, status: 'confirmed' },
-      { status: 'cancelled' }
-    )
+    // Update booking and log pricing cancellation event
+    const cancelledBooking = await BookingModel.findOne({ rideId: id, studentId, status: { $ne: 'cancelled' } })
+    if (cancelledBooking) {
+      const oldFare = cancelledBooking.fare
+      cancelledBooking.status = 'cancelled'
+      await cancelledBooking.save()
+
+      // Record audit event
+      const eventId = `pe-${Date.now()}-${Math.floor(Math.random() * 1000)}`
+      await PricingEventModel.create({
+        id: eventId,
+        rideId: id,
+        bookingId: cancelledBooking.id,
+        eventType: 'PASSENGER_CANCELLED',
+        oldAmount: oldFare,
+        newAmount: 0,
+        trigger: 'PASSENGER_CANCELLED',
+        reason: 'Passenger cancelled booking. Seat released, route recalculated. Confirmed co-passenger fares remain locked.',
+      })
+
+      await RideFareModel.findOneAndUpdate(
+        { bookingId: cancelledBooking.id },
+        { calculationStatus: 'CREDITED' }
+      )
+    }
+
+    // Recompute vehicle-level pricing rollups
+    await pricingEngine.updateRideAggregates(id)
 
     realtimeService.broadcast('BOOKING_CANCELLED', { rideId: id, studentId })
     realtimeService.broadcast('RIDE_UPDATED', { ride })
+    realtimeService.broadcast('PRICING_UPDATED' as any, { rideId: id, studentId, eventType: 'PASSENGER_CANCELLED' })
 
     return { success: true, data: ride }
   })

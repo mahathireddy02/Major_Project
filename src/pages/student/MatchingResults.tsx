@@ -17,6 +17,7 @@ import { getScoreColor, getScoreBg, getRideStatusBadge, getRideStatusLabel } fro
 
 import { getCurrentRealTime } from '../../components/booking/DepartureTimeSelector'
 import { api } from '../../services/api'
+import type { FareEstimateResult } from '../../types'
 
 export default function MatchingResults() {
   const navigate = useNavigate()
@@ -47,6 +48,32 @@ export default function MatchingResults() {
   const [showOtherOptions, setShowOtherOptions] = useState(false)
   const [isCreatingRequest, setIsCreatingRequest] = useState(false)
   const [selectedMatchIndex, setSelectedMatchIndex] = useState(0)
+  const [faresByRideId, setFaresByRideId] = useState<Record<string, FareEstimateResult>>({})
+
+  // Fetch dynamic individual fare estimates for all match options
+  useEffect(() => {
+    if (matches.length > 0 && pickupLat && pickupLng && destinationLat && destinationLng) {
+      matches.forEach((m) => {
+        api
+          .getFareEstimate({
+            pickupName: pickup,
+            pickupLat,
+            pickupLng,
+            destinationName: destination,
+            destinationLat,
+            destinationLng,
+            seats,
+            rideId: m.ride.id,
+          })
+          .then((res) => {
+            if (res.success && res.data) {
+              setFaresByRideId((prev) => ({ ...prev, [m.ride.id]: res.data }))
+            }
+          })
+          .catch((e) => console.warn('[MatchingResults] Fare estimate fetch failed:', e?.message))
+      })
+    }
+  }, [matches, pickupLat, pickupLng, destinationLat, destinationLng, seats, pickup, destination])
 
   const handleAnimationComplete = async () => {
     try {
@@ -241,10 +268,21 @@ export default function MatchingResults() {
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <p className="text-xl font-heading font-bold text-slate-900">₹{topMatch.ride.fare}</p>
-                    <p className="text-[10px] text-slate-400">Fixed student fare</p>
-                  </div>
+                  {(() => {
+                    const topFare = faresByRideId[topMatch.ride.id]
+                    return (
+                      <div className="text-right">
+                        <p className="text-xl font-heading font-bold text-slate-900">
+                          ₹{topFare ? topFare.estimatedFare : topMatch.ride.fare}
+                        </p>
+                        <p className="text-[10px] text-emerald-600 font-semibold">
+                          {topFare && topFare.sharedSavings > 0
+                            ? `Save ₹${topFare.sharedSavings} pooled`
+                            : 'Route-calculated fare'}
+                        </p>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
@@ -368,7 +406,23 @@ export default function MatchingResults() {
                       </div>
 
                       <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
-                        <p className="font-heading font-bold text-slate-900">₹{m.ride.fare}</p>
+                        {(() => {
+                          const matchFare = faresByRideId[m.ride.id]
+                          return (
+                            <div>
+                              <p className="font-heading font-bold text-slate-900">
+                                ₹{matchFare ? matchFare.estimatedFare : m.ride.fare}
+                              </p>
+                              {matchFare && matchFare.sharedSavings > 0 ? (
+                                <span className="text-[10px] text-emerald-600 font-semibold block">
+                                  -₹{matchFare.sharedSavings} saved
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400 block">Personal Fare</span>
+                              )}
+                            </div>
+                          )
+                        })()}
                         <div className="flex items-center gap-1.5">
                           <Button
                             size="sm"
