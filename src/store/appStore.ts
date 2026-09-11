@@ -134,9 +134,10 @@ interface AppState {
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
 
   // Actions — Messaging
-  sendMessage: (rideId: string, text: string) => void
-  replyToMessage: (rideId: string, text: string) => void
+  sendMessage: (rideId: string, text: string) => Promise<void>
+  replyToMessage: (rideId: string, text: string) => Promise<void>
   markMessagesRead: (rideId: string, role: 'student' | 'driver') => void
+  fetchRideMessages: (rideId: string) => Promise<void>
 
   // Actions — Notifications
   markNotificationRead: (notifId: string) => Promise<void>
@@ -197,6 +198,22 @@ export const useAppStore = create<AppState>((set, get) => ({
             set((state) => ({
               notifications: [notif, ...state.notifications.filter((n) => n.id !== notif.id)],
             }))
+            // If it's a ride message, also push into messages state for live chat
+            if (notif.type === 'message' && notif.rideId && notif.metadata?.senderId) {
+              const msg: RideMessage = {
+                id: notif.id,
+                rideId: notif.rideId,
+                fromId: notif.metadata.senderId,
+                fromName: notif.metadata.senderName || (notif.metadata.senderRole === 'driver' ? 'Driver' : 'Student'),
+                fromRole: notif.metadata.senderRole as 'student' | 'driver',
+                text: notif.message,
+                sentAt: notif.createdAt,
+                read: false,
+              }
+              set((state) => ({
+                messages: [...state.messages.filter((m) => m.id !== msg.id), msg],
+              }))
+            }
           }
         } else if ((event === 'RIDE_UPDATED' || event === 'RIDE_CREATED' || event === 'RIDE_STARTED' || event === 'RIDE_COMPLETED' || event === 'RIDE_CANCELLED' || event === 'DRIVER_ACCEPTED' || event === 'DRIVER_REASSIGNED' || event === 'VEHICLE_REASSIGNED' || event === 'ROUTE_UPDATED') && payload?.ride) {
           const isCompleted = event === 'RIDE_COMPLETED' || payload.ride.status === 'completed'
@@ -925,37 +942,76 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Messaging
-  sendMessage: (rideId, text) => {
+  // Messaging — persisted via backend Notification model
+  sendMessage: async (rideId, text) => {
     const { currentUser, currentStudentId, students } = get()
     const sender = currentUser || students.find((s) => s.id === currentStudentId)
-    const msg: RideMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      rideId,
-      fromId: sender?.id || currentStudentId,
-      fromName: sender?.name || 'Student',
-      fromRole: 'student',
-      text: text.trim(),
-      sentAt: new Date().toISOString(),
-      read: false,
+    const senderId = sender?.id || currentStudentId
+    const senderName = sender?.name || 'Student'
+    try {
+      const doc = await api.sendRideMessage({ rideId, senderId, senderName, senderRole: 'student', text: text.trim() })
+      // Optimistically add to local messages so UI updates immediately
+      const msg: RideMessage = {
+        id: doc.id || `msg-${Date.now()}`,
+        rideId,
+        fromId: senderId,
+        fromName: senderName,
+        fromRole: 'student',
+        text: text.trim(),
+        sentAt: doc.createdAt || new Date().toISOString(),
+        read: false,
+      }
+      set((state) => ({ messages: [...state.messages.filter((m) => m.id !== msg.id), msg] }))
+    } catch (err: any) {
+      console.error('[Store] sendMessage error:', err.message)
     }
-    set((state) => ({ messages: [...state.messages, msg] }))
   },
 
-  replyToMessage: (rideId, text) => {
+  replyToMessage: async (rideId, text) => {
     const { currentUser, currentDriverId, drivers } = get()
     const driver = currentUser || drivers.find((d) => d.id === currentDriverId)
-    const msg: RideMessage = {
-      id: `msg-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-      rideId,
-      fromId: driver?.id || currentDriverId,
-      fromName: driver?.name || 'Driver',
-      fromRole: 'driver',
-      text: text.trim(),
-      sentAt: new Date().toISOString(),
-      read: false,
+    const senderId = driver?.id || currentDriverId
+    const senderName = driver?.name || 'Driver'
+    try {
+      const doc = await api.sendRideMessage({ rideId, senderId, senderName, senderRole: 'driver', text: text.trim() })
+      const msg: RideMessage = {
+        id: doc.id || `msg-${Date.now()}`,
+        rideId,
+        fromId: senderId,
+        fromName: senderName,
+        fromRole: 'driver',
+        text: text.trim(),
+        sentAt: doc.createdAt || new Date().toISOString(),
+        read: false,
+      }
+      set((state) => ({ messages: [...state.messages.filter((m) => m.id !== msg.id), msg] }))
+    } catch (err: any) {
+      console.error('[Store] replyToMessage error:', err.message)
     }
-    set((state) => ({ messages: [...state.messages, msg] }))
+  },
+
+  fetchRideMessages: async (rideId) => {
+    try {
+      const docs = await api.getRideMessages(rideId)
+      const msgs: RideMessage[] = (docs || []).map((doc: any) => ({
+        id: doc.id,
+        rideId: doc.rideId,
+        fromId: doc.metadata?.senderId || '',
+        fromName: doc.metadata?.senderName || (doc.metadata?.senderRole === 'driver' ? 'Driver' : 'Student'),
+        fromRole: doc.metadata?.senderRole as 'student' | 'driver',
+        text: doc.message,
+        sentAt: doc.createdAt,
+        read: doc.read,
+      }))
+      set((state) => {
+        const backendIds = new Set(msgs.map((m) => m.id))
+        const optimistic = state.messages.filter((m) => m.rideId === rideId && !backendIds.has(m.id))
+        const otherRides = state.messages.filter((m) => m.rideId !== rideId)
+        return { messages: [...otherRides, ...msgs, ...optimistic] }
+      })
+    } catch (err: any) {
+      console.error('[Store] fetchRideMessages error:', err.message)
+    }
   },
 
   markMessagesRead: (rideId, role) => {

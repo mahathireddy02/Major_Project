@@ -21,6 +21,7 @@ export default function PassengerList() {
   const messages = useAppStore((s) => s.messages)
   const replyToMessage = useAppStore((s) => s.replyToMessage)
   const markMessagesRead = useAppStore((s) => s.markMessagesRead)
+  const fetchRideMessages = useAppStore((s) => s.fetchRideMessages)
 
   const [activeTab, setActiveTab] = useState<'roster' | 'messages'>('roster')
   const [replyDraft, setReplyDraft] = useState('')
@@ -54,8 +55,13 @@ export default function PassengerList() {
   const unreadFromStudents = rideMessages.filter((m) => m.fromRole === 'student' && !m.read).length
 
   useEffect(() => {
+    if (activeRide?.id) fetchRideMessages(activeRide.id)
+  }, [activeRide?.id])
+
+  useEffect(() => {
     if (activeTab === 'messages' && activeRide) {
       markMessagesRead(activeRide.id, 'student')
+      fetchRideMessages(activeRide.id)
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }, [activeTab, rideMessages.length])

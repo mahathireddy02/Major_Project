@@ -616,6 +616,24 @@ class ApiClient {
     return this.request<void>('/notifications/read-all', { method: 'POST' })
   }
 
+  // --- Ride Messaging (persisted via Notification model) ---
+  async sendRideMessage(data: {
+    rideId: string
+    senderId: string
+    senderName?: string
+    senderRole: 'student' | 'driver'
+    text: string
+  }): Promise<any> {
+    return this.request<any>('/notifications/message', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async getRideMessages(rideId: string): Promise<any[]> {
+    return this.request<any[]>(`/notifications/messages/${rideId}`)
+  }
+
   // --- Bookings ---
   async getUserBookings(studentId: string): Promise<Booking[]> {
     return this.request<Booking[]>(`/rides/bookings/user/${studentId}`)

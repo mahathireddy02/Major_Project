@@ -22,6 +22,7 @@ export default function BookingConfirmation() {
   const messages = useAppStore((s) => s.messages)
   const sendMessage = useAppStore((s) => s.sendMessage)
   const markMessagesRead = useAppStore((s) => s.markMessagesRead)
+  const fetchRideMessages = useAppStore((s) => s.fetchRideMessages)
 
   const [chatOpen, setChatOpen] = useState(false)
   const [draft, setDraft] = useState('')
@@ -33,8 +34,13 @@ export default function BookingConfirmation() {
   const unreadFromDriver = rideMessages.filter((m) => m.fromRole === 'driver' && !m.read).length
 
   useEffect(() => {
+    if (id) fetchRideMessages(id)
+  }, [id])
+
+  useEffect(() => {
     if (chatOpen && id) {
       markMessagesRead(id, 'driver')
+      fetchRideMessages(id)
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
     }
   }, [chatOpen, rideMessages.length])
