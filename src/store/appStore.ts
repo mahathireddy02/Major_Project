@@ -86,8 +86,7 @@ interface AppState {
   registerDriver: (data: any) => Promise<{ user: any; token: string; ocrResult: any }>
   logout: () => void
 
-  // Actions — Booking
-  joinRide: (rideId: string, studentId: string, pickup: string, destination: string, pickupCoords?: { lat: number; lng: number }, destinationCoords?: { lat: number; lng: number }, pickupAddress?: string, destinationAddress?: string) => Promise<Booking | null>
+  joinRide: (rideId: string, studentId: string, pickup: string, destination: string, pickupCoords?: { lat: number; lng: number }, destinationCoords?: { lat: number; lng: number }, pickupAddress?: string, destinationAddress?: string, genderPreference?: string) => Promise<Booking | null>
   createRide: (
     pickup: string,
     destination: string,
@@ -95,13 +94,14 @@ interface AppState {
     seats: number,
     studentId: string,
     pickupCoords?: { lat: number; lng: number },
-    destinationCoords?: { lat: number; lng: number }
+    destinationCoords?: { lat: number; lng: number },
+    genderPreference?: string
   ) => Promise<Ride>
   cancelBooking: (bookingId: string) => Promise<void>
 
   // Actions — Driver
   acceptRide: (rideId: string) => Promise<void>
-  startRide: (rideId: string) => Promise<void>
+  startRide: (rideId: string, startLocation?: { name?: string; lat: number; lng: number }) => Promise<void>
   completeRide: (rideId: string) => Promise<void>
   refreshRides: () => Promise<void>
   updatePassengerStatus: (rideId: string, studentId: string, status: 'boarded' | 'dropped') => Promise<void>
@@ -333,6 +333,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           email: u.email,
           collegeName: u.collegeName,
           rollNumber: u.rollNumber,
+          gender: u.gender,
           verificationStatus: u.verificationStatus === 'REJECTED' ? 'REJECTED' : (u.verificationStatus || 'VERIFIED'),
           nameMatchStatus: u.nameMatchStatus || 'MATCHED',
         }))
@@ -353,6 +354,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           email: u.email,
           vehicleRegistration: u.vehicleRegistration,
           vehicleType: u.vehicleType,
+          gender: u.gender,
           verificationStatus: u.verificationStatus === 'REJECTED' ? 'REJECTED' : (u.verificationStatus || 'VERIFIED'),
           nameMatchStatus: u.nameMatchStatus || 'MATCHED',
         }))
@@ -432,21 +434,42 @@ export const useAppStore = create<AppState>((set, get) => ({
       return { success: true, role: mappedRole, user: res.user }
     } catch (err: any) {
       // If the backend responded with an error (e.g., 401 Incorrect password, 404 User not found), rethrow immediately!
-      if (err.status || err.code || err.message?.includes('password') || err.message?.includes('account')) {
+      if (err.status || err.code || err.message?.includes('password') || err.message?.includes('account') || err.message?.includes('credentials')) {
         throw err
       }
 
       // Fallback only if backend server is completely offline / unreachable
+      const reqRole = (credentials.role || '').toLowerCase()
+      if (reqRole === 'driver') {
+        const fallbackDriver =
+          get().drivers.find(
+            (d) =>
+              d.email?.toLowerCase() === credentials.email?.toLowerCase() ||
+              d.phone === credentials.phone ||
+              d.id === credentials.userId ||
+              d.email === 'driver.demo@gmail.com'
+          ) || get().drivers[0]
+
+        if (fallbackDriver) {
+          set({
+            currentUser: fallbackDriver,
+            currentDriverId: fallbackDriver.id,
+            role: 'driver',
+          })
+          return { success: true, role: 'driver', user: fallbackDriver }
+        }
+      }
+
       const fallbackUser = get().students.find(
-        (s) => s.email === credentials.email || s.id === credentials.userId
+        (s) => s.email?.toLowerCase() === credentials.email?.toLowerCase() || s.id === credentials.userId
       )
       if (fallbackUser) {
         set({
           currentUser: fallbackUser,
           currentStudentId: fallbackUser.id,
-          role: 'student',
+          role: reqRole === 'faculty' ? 'faculty' : 'student',
         })
-        return { success: true, role: 'student', user: fallbackUser }
+        return { success: true, role: reqRole === 'faculty' ? 'faculty' : 'student', user: fallbackUser }
       }
       throw err
     }
@@ -524,9 +547,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Join Ride
-  joinRide: async (rideId: string, studentId: string, pickup: string, destination: string, pickupCoords?: { lat: number; lng: number }, destinationCoords?: { lat: number; lng: number }, pickupAddress?: string, destinationAddress?: string) => {
+  joinRide: async (
+    rideId: string,
+    studentId: string,
+    pickup: string,
+    destination: string,
+    pickupCoords?: { lat: number; lng: number },
+    destinationCoords?: { lat: number; lng: number },
+    pickupAddress?: string,
+    destinationAddress?: string,
+    genderPreference?: string
+  ) => {
     try {
-      const res = await api.joinRide(rideId, studentId, pickup, destination, 1, pickupCoords, destinationCoords, pickupAddress, destinationAddress)
+      const res = await api.joinRide(rideId, studentId, pickup, destination, 1, pickupCoords, destinationCoords, pickupAddress, destinationAddress, genderPreference)
       set((state) => ({
         rides: state.rides.map((r) => (r.id === res.ride.id ? res.ride : r)),
         bookings: [res.booking, ...state.bookings],
@@ -546,7 +579,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     seats: number,
     studentId: string,
     pickupCoords?: { lat: number; lng: number },
-    destinationCoords?: { lat: number; lng: number }
+    destinationCoords?: { lat: number; lng: number },
+    genderPreference?: string
   ) => {
     try {
       const pLat = pickupCoords?.lat || 17.398
@@ -554,6 +588,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const dLat = destinationCoords?.lat || 17.387
       const dLng = destinationCoords?.lng || 78.486
       const student = get().students.find((s) => s.id === studentId)
+      const isFemaleOnly = genderPreference === 'FEMALE_ONLY'
       const newRide = await api.createRide({
         pickupPoints: [{ id: `pp-${Date.now()}`, name: pickup, lat: pLat, lng: pLng, estimatedPickupTime: time }],
         destination,
@@ -563,7 +598,18 @@ export const useAppStore = create<AppState>((set, get) => ({
         bookedSeats: seats,
         capacity: 6,
         fare: 25,
-        passengers: [{ studentId, name: student?.name || 'Student', pickup, destination, status: 'waiting', seatNo: 1 }],
+        isFemaleOnly,
+        genderPreference: isFemaleOnly ? 'FEMALE_ONLY' : 'ANYONE',
+        passengers: [{
+          studentId,
+          name: student?.name || 'Student',
+          pickup,
+          destination,
+          status: 'waiting',
+          seatNo: 1,
+          gender: student?.gender || 'Other',
+          genderPreference: isFemaleOnly ? 'FEMALE_ONLY' : 'ANYONE',
+        }],
       })
       set((state) => ({
         rides: [newRide, ...state.rides],
@@ -601,9 +647,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  startRide: async (rideId: string) => {
+  startRide: async (rideId: string, startLocation?: { name?: string; lat: number; lng: number }) => {
     try {
-      const updated = await api.startRide(rideId)
+      const updated = await api.startRide(rideId, startLocation)
       set((state) => ({
         rides: state.rides.map((r) => (r.id === rideId ? updated : r)),
       }))

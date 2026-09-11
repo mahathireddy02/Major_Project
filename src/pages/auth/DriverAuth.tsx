@@ -10,6 +10,7 @@ import {
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
+import Badge from '../../components/ui/Badge'
 import toast from 'react-hot-toast'
 import { compressImage } from '../../lib/utils'
 
@@ -62,7 +63,7 @@ export default function DriverAuth() {
   const [isScanning, setIsScanning] = useState(false)
 
   // Sign In Fields
-  const [signInPhone, setSignInPhone] = useState('')
+  const [signInCredential, setSignInCredential] = useState('')
   const [signInPassword, setSignInPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -180,8 +181,9 @@ export default function DriverAuth() {
   // Sign In Driver
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!signInPhone || signInPhone.length !== 10) {
-      toast.error('Please enter a valid 10-digit mobile number.')
+    const credential = signInCredential.trim()
+    if (!credential) {
+      toast.error('Please enter your registered email or mobile number.')
       return
     }
     if (!signInPassword) {
@@ -190,9 +192,12 @@ export default function DriverAuth() {
     }
     setLoading(true)
     try {
+      const isEmail = credential.includes('@')
+      const digits = credential.replace(/\D/g, '')
       const res = await login({
-        phone: '+91' + signInPhone,
-        email: '+91' + signInPhone,
+        email: isEmail ? credential.toLowerCase() : undefined,
+        phone: !isEmail ? (digits.length === 10 ? `+91 ${digits.slice(0, 5)} ${digits.slice(5)}` : credential) : undefined,
+        username: credential,
         password: signInPassword,
         role: 'driver',
       })
@@ -205,15 +210,19 @@ export default function DriverAuth() {
     }
   }
 
-  // Demo Driver Login
-  const handleDemoDriverLogin = async (driverId: string) => {
+  // Demo Driver Login (Uses real database credentials)
+  const handleDemoDriverLogin = async () => {
     setLoading(true)
     try {
-      await login({ userId: driverId, role: 'driver' })
-      toast.success('Logged in with demo driver profile')
+      const res = await login({
+        email: 'driver.demo@gmail.com',
+        password: 'campus2026',
+        role: 'driver',
+      })
+      toast.success(`Welcome back, Driver ${res.user?.name || 'Rahul'}!`)
       navigate('/driver/dashboard')
-    } catch {
-      toast.error('Driver login failed')
+    } catch (err: any) {
+      toast.error(err.message || 'Driver demo login failed')
     } finally {
       setLoading(false)
     }
@@ -298,25 +307,19 @@ export default function DriverAuth() {
             <form onSubmit={handleSignIn} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Registered Phone Number
+                  Registered Email or Mobile Number
                 </label>
-                <div className="flex">
-                  <span className="inline-flex items-center px-3 bg-slate-100 border border-r-0 border-slate-300 rounded-l-xl text-sm font-semibold text-slate-600 select-none">
-                    🇮🇳 +91
-                  </span>
+                <div className="relative">
+                  <User size={16} className="absolute left-3 top-3 text-slate-400" />
                   <input
-                    type="tel"
+                    type="text"
                     required
-                    maxLength={10}
-                    value={signInPhone}
-                    onChange={(e) => setSignInPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="9988776655"
-                    className="input-field rounded-l-none text-sm flex-1"
+                    value={signInCredential}
+                    onChange={(e) => setSignInCredential(e.target.value)}
+                    placeholder="driver.demo@gmail.com or 9988776655"
+                    className="input-field pl-9 text-sm"
                   />
                 </div>
-                {signInPhone.length > 0 && signInPhone.length < 10 && (
-                  <p className="text-[10px] text-red-500 mt-0.5">Must be exactly 10 digits</p>
-                )}
               </div>
 
               <div>
@@ -354,24 +357,30 @@ export default function DriverAuth() {
                 <ArrowRight size={16} />
               </Button>
 
-              {/* Demo Drivers Selector */}
+              {/* Demo Driver 1-Click Button */}
               <div className="pt-4 mt-4 border-t border-slate-100">
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-                  ⚡ Quick Demo Drivers (1-Click Test)
+                  ⚡ Quick 1-Click Demo Login (Real Database Account)
                 </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {drivers.slice(0, 4).map((d) => (
-                    <button
-                      key={d.id}
-                      type="button"
-                      onClick={() => handleDemoDriverLogin(d.id)}
-                      className="p-2 rounded-xl border border-slate-200 hover:border-emerald-400 hover:bg-emerald-50/40 text-left transition-all text-xs"
-                    >
-                      <p className="font-bold text-slate-800 truncate">{d.name}</p>
-                      <p className="text-[10px] text-slate-400">{d.phone}</p>
-                    </button>
-                  ))}
-                </div>
+                <button
+                  type="button"
+                  onClick={handleDemoDriverLogin}
+                  disabled={loading}
+                  className="w-full p-3 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100 hover:border-emerald-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                      🚗
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-xs">Rahul Kumar (Demo Driver)</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">driver.demo@gmail.com</p>
+                    </div>
+                  </div>
+                  <Badge variant="green" size="sm" className="font-semibold">
+                    1-Click Sign In →
+                  </Badge>
+                </button>
               </div>
             </form>
           )}
@@ -861,6 +870,32 @@ export default function DriverAuth() {
                   </div>
                 </form>
               )}
+
+              {/* Demo Driver 1-Click Button (Sign Up Mode) */}
+              <div className="pt-5 mt-6 border-t border-slate-100">
+                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
+                  ⚡ Quick 1-Click Demo Login (Skip Registration)
+                </span>
+                <button
+                  type="button"
+                  onClick={handleDemoDriverLogin}
+                  disabled={loading}
+                  className="w-full p-3 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100 hover:border-emerald-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                      🚗
+                    </div>
+                    <div>
+                      <p className="font-bold text-slate-900 text-xs">Rahul Kumar (Demo Driver)</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">driver.demo@gmail.com</p>
+                    </div>
+                  </div>
+                  <Badge variant="green" size="sm" className="font-semibold">
+                    1-Click Sign In →
+                  </Badge>
+                </button>
+              </div>
             </div>
           )}
         </Card>

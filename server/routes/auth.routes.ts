@@ -441,15 +441,29 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    const user = await UserModel.findOne({
-      $or: [
-        { email: credential },
-        { phone: credential },
-        { studentId: credential },
-        { rollNumber: credential },
-        { id: credential },
-      ],
-    })
+    const digitsOnly = credential.replace(/\D/g, '')
+    const orConditions: any[] = [
+      { email: { $regex: new RegExp(`^${credential.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } },
+      { phone: credential },
+      { studentId: credential },
+      { rollNumber: credential },
+      { id: credential },
+    ]
+    if (digitsOnly.length >= 10) {
+      const last10 = digitsOnly.slice(-10)
+      const phoneRegexStr = last10.split('').join('[\\s\\-\\(\\)]*')
+      orConditions.push({ phone: { $regex: new RegExp(phoneRegexStr) } })
+    }
+    if (body.phone) {
+      const pDigits = body.phone.replace(/\D/g, '')
+      if (pDigits.length >= 10) {
+        const last10P = pDigits.slice(-10)
+        const pRegexStr = last10P.split('').join('[\\s\\-\\(\\)]*')
+        orConditions.push({ phone: { $regex: new RegExp(pRegexStr) } })
+      }
+    }
+
+    const user = await UserModel.findOne({ $or: orConditions })
 
     if (!user) {
       return reply.status(404).send({

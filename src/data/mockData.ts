@@ -1,5 +1,6 @@
 import type {
   Student,
+  Faculty,
   Driver,
   Vehicle,
   Ride,
@@ -26,52 +27,75 @@ export const LOCATIONS: Record<string, { name: string; lat: number; lng: number 
   'Library':        { name: 'Library',        lat: 17.3865, lng: 78.4855 },
 }
 
-// ─── Students ─────────────────────────────────────────────────────────────────
+// ─── Students (10 Institutional Students) ─────────────────────────────────────
 export const STUDENTS: Student[] = [
-  { id: 's1',  name: 'Uday Kiran',    studentId: 'CSE2021001', department: 'Computer Science', year: 3, phone: '+91 98765 43210', avatar: 'UK', rating: 4.9, totalRides: 38, verified: true, role: 'student' },
-  { id: 's2',  name: 'Arjun Rao',     studentId: 'ECE2022015', department: 'Electronics',      year: 2, phone: '+91 87654 32109', avatar: 'AR', rating: 4.7, totalRides: 22, verified: true, role: 'student' },
-  { id: 's3',  name: 'Priya Sharma',  studentId: 'ME2021034',  department: 'Mechanical',       year: 3, phone: '+91 76543 21098', avatar: 'PS', rating: 4.8, totalRides: 31, verified: true, role: 'student' },
-  { id: 's4',  name: 'Rahul Varma',   studentId: 'CSE2023007', department: 'Computer Science', year: 1, phone: '+91 65432 10987', avatar: 'RV', rating: 4.6, totalRides: 9,  verified: true, role: 'student' },
-  { id: 's5',  name: 'Sneha Reddy',   studentId: 'IT2022023',  department: 'Information Tech', year: 2, phone: '+91 54321 09876', avatar: 'SR', rating: 4.9, totalRides: 45, verified: true, role: 'student' },
-  { id: 's6',  name: 'Karthik Naidu', studentId: 'EEE2021009', department: 'Electrical',       year: 3, phone: '+91 43210 98765', avatar: 'KN', rating: 4.5, totalRides: 17, verified: true, role: 'student' },
-  { id: 's7',  name: 'Ananya Patel',  studentId: 'CSE2020044', department: 'Computer Science', year: 4, phone: '+91 32109 87654', avatar: 'AP', rating: 4.8, totalRides: 56, verified: true, role: 'student' },
-  { id: 's8',  name: 'Rohit Kumar',   studentId: 'MBA2022003', department: 'Management',       year: 2, phone: '+91 21098 76543', avatar: 'RK', rating: 4.3, totalRides: 12, verified: true, role: 'student' },
-  { id: 's9',  name: 'Meera Singh',   studentId: 'BT2021018',  department: 'Biotechnology',    year: 3, phone: '+91 10987 65432', avatar: 'MS', rating: 4.7, totalRides: 28, verified: true, role: 'student' },
-  { id: 's10', name: 'Vivek Reddy',   studentId: 'CE2022031',  department: 'Civil Engg',       year: 2, phone: '+91 09876 54321', avatar: 'VR', rating: 4.6, totalRides: 19, verified: true, role: 'student' },
-  { id: 's11', name: 'Divya Nair',    studentId: 'CSE2023055', department: 'Computer Science', year: 1, phone: '+91 98761 23450', avatar: 'DN', rating: 4.4, totalRides: 6,  verified: true, role: 'student' },
-  { id: 's12', name: 'Aditya Menon',  studentId: 'ECE2021042', department: 'Electronics',      year: 3, phone: '+91 87652 34561', avatar: 'AM', rating: 4.8, totalRides: 33, verified: true, role: 'student' },
-  { id: 's13', name: 'Lakshmi Iyer',  studentId: 'ME2022011',  department: 'Mechanical',       year: 2, phone: '+91 76543 45672', avatar: 'LI', rating: 4.9, totalRides: 41, verified: true, role: 'student' },
-  { id: 's14', name: 'Sanjay Gupta',  studentId: 'IT2021067',  department: 'Information Tech', year: 3, phone: '+91 65434 56783', avatar: 'SG', rating: 4.5, totalRides: 24, verified: true, role: 'student' },
-  { id: 's15', name: 'Pooja Das',     studentId: 'CSE2020089', department: 'Computer Science', year: 4, phone: '+91 54325 67894', avatar: 'PD', rating: 4.7, totalRides: 52, verified: true, role: 'student' },
-  { id: 's16', name: 'Nikhil Sharma', studentId: 'EEE2022004', department: 'Electrical',       year: 2, phone: '+91 43216 78905', avatar: 'NS', rating: 4.3, totalRides: 11, verified: true, role: 'student' },
-  { id: 's17', name: 'Shreya Joshi',  studentId: 'BT2021029',  department: 'Biotechnology',    year: 3, phone: '+91 32107 89016', avatar: 'SJ', rating: 4.8, totalRides: 37, verified: true, role: 'student' },
-  { id: 's18', name: 'Akash Verma',   studentId: 'CE2023008',  department: 'Civil Engg',       year: 1, phone: '+91 21098 90127', avatar: 'AV', rating: 4.6, totalRides: 8,  verified: true, role: 'student' },
-  { id: 's19', name: 'Riya Pillai',   studentId: 'MBA2021015', department: 'Management',       year: 3, phone: '+91 10989 01238', avatar: 'RP', rating: 4.7, totalRides: 29, verified: true, role: 'student' },
-  { id: 's20', name: 'Vikram Nair',   studentId: 'CSE2022077', department: 'Computer Science', year: 2, phone: '+91 09870 12349', avatar: 'VN', rating: 4.9, totalRides: 43, verified: true, role: 'student' },
+  { id: 's1',  name: 'Uday Kiran (Demo Student)', email: 'student.demo@sriindu.ac.in', studentId: 'STUDENT-DEMO-2026', rollNumber: '21IND0501', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science', year: 3, phone: '+91 98765 43210', avatar: 'UK', rating: 4.9, totalRides: 38, verified: true, role: 'student', gender: 'Male' },
+  { id: 's2',  name: 'Arjun Rao',     email: 'arjun.rao@iith.ac.in', studentId: 'IITH2022015', rollNumber: 'EE22BTECH11015', collegeName: 'IIT Hyderabad', department: 'Electrical Engg', year: 2, phone: '+91 87654 32109', avatar: 'AR', rating: 4.7, totalRides: 22, verified: true, role: 'student', gender: 'Male' },
+  { id: 's3',  name: 'Priya Sharma',  email: 'priya.sharma@nitw.ac.in', studentId: 'NITW2021034', rollNumber: 'ME21B034', collegeName: 'NIT Warangal', department: 'Mechanical Engg', year: 3, phone: '+91 76543 21098', avatar: 'PS', rating: 4.8, totalRides: 31, verified: true, role: 'student', gender: 'Female' },
+  { id: 's4',  name: 'Rahul Varma',   email: 'rahul.varma@cbit.ac.in', studentId: 'CBIT2023007', rollNumber: '160123733007', collegeName: 'Chaitanya Bharathi Institute of Technology', department: 'Computer Science', year: 1, phone: '+91 65432 10987', avatar: 'RV', rating: 4.6, totalRides: 9,  verified: true, role: 'student', gender: 'Male' },
+  { id: 's5',  name: 'Sneha Reddy',   email: 'sneha.reddy@osmania.ac.in', studentId: 'OU2022023', rollNumber: '100522737023', collegeName: 'Osmania University', department: 'Information Tech', year: 2, phone: '+91 54321 09876', avatar: 'SR', rating: 4.9, totalRides: 45, verified: true, role: 'student', gender: 'Female' },
+  { id: 's6',  name: 'Karthik Naidu', email: 'karthik.naidu@jntuh.ac.in', studentId: 'JNTU2021009', rollNumber: '21011A0409', collegeName: 'JNTU Hyderabad', department: 'Electronics', year: 3, phone: '+91 43210 98765', avatar: 'KN', rating: 4.5, totalRides: 17, verified: true, role: 'student', gender: 'Male' },
+  { id: 's7',  name: 'Ananya Patel',  email: 'ananya.patel@iiit.ac.in', studentId: 'IIIT2020044', rollNumber: '2020101044', collegeName: 'IIIT Hyderabad', department: 'AI & Data Science', year: 4, phone: '+91 32109 87654', avatar: 'AP', rating: 4.8, totalRides: 56, verified: true, role: 'student', gender: 'Female' },
+  { id: 's8',  name: 'Rohit Kumar',   email: 'rohit.kumar@uohyd.ac.in', studentId: 'UOH2022003', rollNumber: '22MBBA03', collegeName: 'University of Hyderabad', department: 'Management', year: 2, phone: '+91 21098 76543', avatar: 'RK', rating: 4.3, totalRides: 12, verified: true, role: 'student', gender: 'Male' },
+  { id: 's9',  name: 'Meera Singh',   email: 'meera.singh@bits-pilani.ac.in', studentId: 'BITS2021018', rollNumber: '2021A1PS0018H', collegeName: 'BITS Pilani Hyderabad', department: 'Biotechnology', year: 3, phone: '+91 10987 65432', avatar: 'MS', rating: 4.7, totalRides: 28, verified: true, role: 'student', gender: 'Female' },
+  { id: 's10', name: 'Vivek Reddy',   email: 'vivek.reddy@campusflow.io', studentId: 'CF2022031', rollNumber: 'CF2022CE31', collegeName: 'CampusFlow Academy', department: 'Civil Engg', year: 2, phone: '+91 09876 54321', avatar: 'VR', rating: 4.6, totalRides: 19, verified: true, role: 'student', gender: 'Male' },
 ]
 
-// ─── Drivers ──────────────────────────────────────────────────────────────────
+// ─── Faculty (5 Institutional Faculty Members) ────────────────────────────────
+export const FACULTY: Faculty[] = [
+  { id: 'f1', name: 'Dr. Ramesh Sharma (Demo Faculty)', email: 'faculty.demo@sriindu.ac.in', collegeId: 'FAC-2026-001', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science & Engineering', phone: '+91 91234 56780', avatar: 'RS', rating: 5.0, totalRides: 64, isVerified: true, role: 'faculty', gender: 'Male' },
+  { id: 'f2', name: 'Prof. Lakshmi Nair', email: 'prof.lakshmi.nair@iith.ac.in', collegeId: 'FAC-IITH-012', collegeName: 'IIT Hyderabad', department: 'Electrical Engineering', phone: '+91 82345 67891', avatar: 'LN', rating: 4.9, totalRides: 42, isVerified: true, role: 'faculty', gender: 'Female' },
+  { id: 'f3', name: 'Dr. Venkat Rao', email: 'dr.venkat.rao@nitw.ac.in', collegeId: 'FAC-NITW-045', collegeName: 'NIT Warangal', department: 'Mechanical Engineering', phone: '+91 73456 78902', avatar: 'VR', rating: 4.8, totalRides: 37, isVerified: true, role: 'faculty', gender: 'Male' },
+  { id: 'f4', name: 'Prof. Sunita Gupta', email: 'prof.sunita.gupta@cbit.ac.in', collegeId: 'FAC-CBIT-088', collegeName: 'Chaitanya Bharathi Institute of Technology', department: 'Physics & Nanotech', phone: '+91 64567 89013', avatar: 'SG', rating: 4.9, totalRides: 51, isVerified: true, role: 'faculty', gender: 'Female' },
+  { id: 'f5', name: 'Dr. Anil Kumar', email: 'dr.anil.kumar@osmania.ac.in', collegeId: 'FAC-OU-007', collegeName: 'Osmania University', department: 'Dean of Sciences', phone: '+91 55678 90124', avatar: 'AK', rating: 4.7, totalRides: 29, isVerified: true, role: 'faculty', gender: 'Male' },
+]
+
+// ─── Drivers (20 Drivers with personal @gmail.com) ─────────────────────────────
 export const DRIVERS: Driver[] = [
-  { id: 'd1', name: 'Rahul Kumar',    phone: '+91 99887 76655', avatar: 'RK', rating: 4.8, totalTrips: 312, verified: true, licenseNo: 'TS09 2019 0045123', role: 'driver', vehicleId: 'v1' },
-  { id: 'd2', name: 'Suresh Babu',    phone: '+91 88776 65544', avatar: 'SB', rating: 4.6, totalTrips: 245, verified: true, licenseNo: 'TS09 2018 0038211', role: 'driver', vehicleId: 'v2' },
-  { id: 'd3', name: 'Ravi Kumar',     phone: '+91 77665 54433', avatar: 'RK', rating: 4.9, totalTrips: 428, verified: true, licenseNo: 'TS09 2017 0029874', role: 'driver', vehicleId: 'v3' },
-  { id: 'd4', name: 'Mahesh Reddy',   phone: '+91 66554 43322', avatar: 'MR', rating: 4.7, totalTrips: 189, verified: true, licenseNo: 'TS09 2020 0051234', role: 'driver', vehicleId: 'v4' },
-  { id: 'd5', name: 'Venkat Rao',     phone: '+91 55443 32211', avatar: 'VR', rating: 4.5, totalTrips: 156, verified: true, licenseNo: 'TS09 2019 0047832', role: 'driver', vehicleId: 'v5' },
-  { id: 'd6', name: 'Kiran Babu',     phone: '+91 44332 21100', avatar: 'KB', rating: 4.8, totalTrips: 267, verified: true, licenseNo: 'TS09 2018 0033491', role: 'driver', vehicleId: 'v6' },
-  { id: 'd7', name: 'Satish Kumar',   phone: '+91 33221 10099', avatar: 'SK', rating: 4.6, totalTrips: 198, verified: true, licenseNo: 'TS09 2020 0056789', role: 'driver', vehicleId: 'v7' },
-  { id: 'd8', name: 'Prasad Naidu',   phone: '+91 22110 09988', avatar: 'PN', rating: 4.4, totalTrips: 134, verified: true, licenseNo: 'TS09 2021 0062341', role: 'driver', vehicleId: 'v8' },
+  { id: 'd1',  name: 'Rahul Kumar (Demo Driver)', email: 'driver.demo@gmail.com', phone: '+91 99887 76655', avatar: 'RK', rating: 4.8, totalTrips: 312, verified: true, licenseNo: 'TS-09-2018-004521', role: 'driver', vehicleId: 'v1' },
+  { id: 'd2',  name: 'Suresh Babu',    email: 'suresh.babu.driver@gmail.com', phone: '+91 88776 65544', avatar: 'SB', rating: 4.6, totalTrips: 245, verified: true, licenseNo: 'TS-09-2019-005612', role: 'driver', vehicleId: 'v2' },
+  { id: 'd3',  name: 'Ravi Kumar',     email: 'ravi.kumar.cabs@gmail.com', phone: '+91 77665 54433', avatar: 'RK', rating: 4.9, totalTrips: 428, verified: true, licenseNo: 'TS-09-2017-003489', role: 'driver', vehicleId: 'v3' },
+  { id: 'd4',  name: 'Mahesh Reddy',   email: 'mahesh.reddy.trans@gmail.com', phone: '+91 66554 43322', avatar: 'MR', rating: 4.7, totalTrips: 189, verified: true, licenseNo: 'TS-09-2020-006734', role: 'driver', vehicleId: 'v4' },
+  { id: 'd5',  name: 'Venkat Rao',     email: 'venkat.rao.shuttle@gmail.com', phone: '+91 55443 32211', avatar: 'VR', rating: 4.5, totalTrips: 156, verified: true, licenseNo: 'TS-09-2018-002345', role: 'driver', vehicleId: 'v5' },
+  { id: 'd6',  name: 'Kiran Babu',     email: 'kiran.babu.mobility@gmail.com', phone: '+91 44332 21100', avatar: 'KB', rating: 4.8, totalTrips: 267, verified: true, licenseNo: 'TS-09-2019-007890', role: 'driver', vehicleId: 'v6' },
+  { id: 'd7',  name: 'Satish Kumar',   email: 'satish.kumar.auto@gmail.com', phone: '+91 33221 10099', avatar: 'SK', rating: 4.6, totalTrips: 198, verified: true, licenseNo: 'TS-09-2021-001278', role: 'driver', vehicleId: 'v7' },
+  { id: 'd8',  name: 'Prasad Naidu',   email: 'prasad.naidu.driver@gmail.com', phone: '+91 22110 09988', avatar: 'PN', rating: 4.4, totalTrips: 134, verified: true, licenseNo: 'TS-09-2018-009845', role: 'driver', vehicleId: 'v8' },
+  { id: 'd9',  name: 'Gopal Krishna',  email: 'gopal.krishna.cabs@gmail.com', phone: '+91 91122 33445', avatar: 'GK', rating: 4.7, totalTrips: 210, verified: true, licenseNo: 'TS-09-2020-004412', role: 'driver', vehicleId: 'v9' },
+  { id: 'd10', name: 'Anil Varma',     email: 'anil.varma.driver@gmail.com', phone: '+91 82233 44556', avatar: 'AV', rating: 4.8, totalTrips: 280, verified: true, licenseNo: 'TS-09-2017-008923', role: 'driver', vehicleId: 'v10' },
+  { id: 'd11', name: 'Srinivas Reddy', email: 'srinivas.reddy.van@gmail.com', phone: '+91 73344 55667', avatar: 'SR', rating: 4.5, totalTrips: 172, verified: true, licenseNo: 'TS-09-2019-003319', role: 'driver', vehicleId: 'v11' },
+  { id: 'd12', name: 'Mohammed Ali',  email: 'mohammed.ali.driver@gmail.com', phone: '+91 64455 66778', avatar: 'MA', rating: 4.9, totalTrips: 390, verified: true, licenseNo: 'TS-09-2016-006745', role: 'driver', vehicleId: 'v12' },
+  { id: 'd13', name: 'Ramesh Yadav',   email: 'ramesh.yadav.auto@gmail.com', phone: '+91 55566 77889', avatar: 'RY', rating: 4.6, totalTrips: 165, verified: true, licenseNo: 'TS-09-2021-005531', role: 'driver', vehicleId: 'v13' },
+  { id: 'd14', name: 'Manoj Kumar',    email: 'manoj.kumar.driver@gmail.com', phone: '+91 46677 88990', avatar: 'MK', rating: 4.7, totalTrips: 225, verified: true, licenseNo: 'TS-09-2018-007722', role: 'driver', vehicleId: 'v14' },
+  { id: 'd15', name: 'Vijay Sharma',   email: 'vijay.sharma.cabs@gmail.com', phone: '+91 37788 99001', avatar: 'VS', rating: 4.8, totalTrips: 340, verified: true, licenseNo: 'TS-09-2019-008891', role: 'driver', vehicleId: 'v15' },
+  { id: 'd16', name: 'Krishna Murthy', email: 'krishna.murthy.shuttle@gmail.com', phone: '+91 28899 00112', avatar: 'KM', rating: 4.5, totalTrips: 195, verified: true, licenseNo: 'TS-09-2017-002244', role: 'driver', vehicleId: 'v16' },
+  { id: 'd17', name: 'Baskar Rao',     email: 'baskar.rao.mobility@gmail.com', phone: '+91 19900 11223', avatar: 'BR', rating: 4.6, totalTrips: 180, verified: true, licenseNo: 'TS-09-2020-001188', role: 'driver', vehicleId: 'v17' },
+  { id: 'd18', name: 'Jagdish Chandra',email: 'jagdish.chandra.driver@gmail.com', phone: '+91 90011 22334', avatar: 'JC', rating: 4.4, totalTrips: 140, verified: true, licenseNo: 'TS-09-2018-006655', role: 'driver', vehicleId: 'v18' },
+  { id: 'd19', name: 'Shankar Naik',   email: 'shankar.naik.van@gmail.com', phone: '+91 81122 33445', avatar: 'SN', rating: 4.8, totalTrips: 305, verified: true, licenseNo: 'TS-09-2016-009933', role: 'driver', vehicleId: 'v19' },
+  { id: 'd20', name: 'Praveen Kumar',  email: 'praveen.kumar.driver@gmail.com', phone: '+91 72233 44556', avatar: 'PK', rating: 4.7, totalTrips: 260, verified: true, licenseNo: 'TS-09-2021-004477', role: 'driver', vehicleId: 'v20' },
 ]
 
-// ─── Vehicles ────────────────────────────────────────────────────────────────
+// ─── Vehicles (20 Fleet Vehicles) ────────────────────────────────────────────
 export const VEHICLES: Vehicle[] = [
-  { id: 'v1', name: 'Campus Van 12', type: 'Mini Van',      registration: 'TS 09 AB 1234', capacity: 6, driverId: 'd1', color: '#0891B2', verified: true, rating: 4.8, totalTrips: 312 },
-  { id: 'v2', name: 'Campus Van 07', type: 'Mini Van',      registration: 'TS 09 CD 5678', capacity: 6, driverId: 'd2', color: '#7C3AED', verified: true, rating: 4.6, totalTrips: 245 },
-  { id: 'v3', name: 'Campus Bus 03', type: 'Mini Bus',      registration: 'TS 09 EF 9012', capacity: 12, driverId: 'd3', color: '#059669', verified: true, rating: 4.9, totalTrips: 428 },
-  { id: 'v4', name: 'Campus Van 15', type: 'Mini Van',      registration: 'TS 09 GH 3456', capacity: 6, driverId: 'd4', color: '#D97706', verified: true, rating: 4.7, totalTrips: 189 },
-  { id: 'v5', name: 'Campus Van 09', type: 'Mini Van',      registration: 'TS 09 IJ 7890', capacity: 6, driverId: 'd5', color: '#DC2626', verified: true, rating: 4.5, totalTrips: 156 },
-  { id: 'v6', name: 'Campus Van 21', type: 'Mini Van',      registration: 'TS 09 KL 1357', capacity: 6, driverId: 'd6', color: '#0891B2', verified: true, rating: 4.8, totalTrips: 267 },
-  { id: 'v7', name: 'Campus Auto 04',type: 'Auto Rickshaw', registration: 'TS 09 MN 2468', capacity: 3, driverId: 'd7', color: '#F59E0B', verified: true, rating: 4.6, totalTrips: 198 },
-  { id: 'v8', name: 'Campus Van 18', type: 'Mini Van',      registration: 'TS 09 OP 3691', capacity: 6, driverId: 'd8', color: '#6366F1', verified: true, rating: 4.4, totalTrips: 134 },
+  { id: 'v1',  name: 'Campus Shuttle Bus 01 (V1)', type: 'Campus Shuttle Bus', registration: 'TS 09 AB 1234', capacity: 12, driverId: 'd1',  color: '#0891B2', verified: true, rating: 4.8, totalTrips: 312 },
+  { id: 'v2',  name: 'Campus Van 07',              type: 'Mini Van',            registration: 'TS 09 CD 5678', capacity: 6,  driverId: 'd2',  color: '#7C3AED', verified: true, rating: 4.6, totalTrips: 245 },
+  { id: 'v3',  name: 'Campus Bus 03',              type: 'Mini Bus',            registration: 'TS 09 EF 9012', capacity: 12, driverId: 'd3',  color: '#059669', verified: true, rating: 4.9, totalTrips: 428 },
+  { id: 'v4',  name: 'Campus Van 15',              type: 'Mini Van',            registration: 'TS 09 GH 3456', capacity: 6,  driverId: 'd4',  color: '#D97706', verified: true, rating: 4.7, totalTrips: 189 },
+  { id: 'v5',  name: 'Campus Van 09',              type: 'Mini Van',            registration: 'TS 09 IJ 7890', capacity: 6,  driverId: 'd5',  color: '#DC2626', verified: true, rating: 4.5, totalTrips: 156 },
+  { id: 'v6',  name: 'Campus Van 21',              type: 'Mini Van',            registration: 'TS 09 KL 1357', capacity: 6,  driverId: 'd6',  color: '#0891B2', verified: true, rating: 4.8, totalTrips: 267 },
+  { id: 'v7',  name: 'Campus Auto 04',             type: 'Auto Rickshaw',       registration: 'TS 09 MN 2468', capacity: 3,  driverId: 'd7',  color: '#F59E0B', verified: true, rating: 4.6, totalTrips: 198 },
+  { id: 'v8',  name: 'Campus Van 18',              type: 'Mini Van',            registration: 'TS 09 OP 3691', capacity: 6,  driverId: 'd8',  color: '#6366F1', verified: true, rating: 4.4, totalTrips: 134 },
+  { id: 'v9',  name: 'Electric Shuttle 02',        type: 'Electric Shuttle',    registration: 'TS 09 QR 4820', capacity: 8,  driverId: 'd9',  color: '#10B981', verified: true, rating: 4.7, totalTrips: 210 },
+  { id: 'v10', name: 'Campus Express Bus 05',      type: 'Campus Bus',          registration: 'TS 09 ST 5931', capacity: 16, driverId: 'd10', color: '#3B82F6', verified: true, rating: 4.8, totalTrips: 280 },
+  { id: 'v11', name: 'Campus Van 11',              type: 'Mini Van',            registration: 'TS 09 UV 6042', capacity: 6,  driverId: 'd11', color: '#8B5CF6', verified: true, rating: 4.5, totalTrips: 172 },
+  { id: 'v12', name: 'Campus Shuttle Bus 06',      type: 'Campus Shuttle Bus',  registration: 'TS 09 WX 7153', capacity: 12, driverId: 'd12', color: '#06B6D4', verified: true, rating: 4.9, totalTrips: 390 },
+  { id: 'v13', name: 'Campus Auto 08',             type: 'Auto Rickshaw',       registration: 'TS 09 YZ 8264', capacity: 3,  driverId: 'd13', color: '#F59E0B', verified: true, rating: 4.6, totalTrips: 165 },
+  { id: 'v14', name: 'Campus Van 25',              type: 'Campus Van',          registration: 'TS 09 AA 9375', capacity: 6,  driverId: 'd14', color: '#EC4899', verified: true, rating: 4.7, totalTrips: 225 },
+  { id: 'v15', name: 'Electric Shuttle 09',        type: 'Electric Shuttle',    registration: 'TS 09 BB 1486', capacity: 8,  driverId: 'd15', color: '#14B8A6', verified: true, rating: 4.8, totalTrips: 340 },
+  { id: 'v16', name: 'Campus Bus 14',              type: 'Campus Bus',          registration: 'TS 09 CC 2597', capacity: 14, driverId: 'd16', color: '#6366F1', verified: true, rating: 4.5, totalTrips: 195 },
+  { id: 'v17', name: 'Campus Van 30',              type: 'Mini Van',            registration: 'TS 09 DD 3608', capacity: 6,  driverId: 'd17', color: '#F97316', verified: true, rating: 4.6, totalTrips: 180 },
+  { id: 'v18', name: 'Campus Van 33',              type: 'Campus Van',          registration: 'TS 09 EE 4719', capacity: 6,  driverId: 'd18', color: '#84CC16', verified: true, rating: 4.4, totalTrips: 140 },
+  { id: 'v19', name: 'Campus Shuttle Bus 08',      type: 'Campus Shuttle Bus',  registration: 'TS 09 FF 5820', capacity: 12, driverId: 'd19', color: '#0EA5E9', verified: true, rating: 4.8, totalTrips: 305 },
+  { id: 'v20', name: 'Campus Auto 12',             type: 'Auto Rickshaw',       registration: 'TS 09 GG 6931', capacity: 3,  driverId: 'd20', color: '#EAB308', verified: true, rating: 4.7, totalTrips: 260 },
 ]
 
 // ─── Rides ────────────────────────────────────────────────────────────────────

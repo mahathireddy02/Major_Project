@@ -443,7 +443,13 @@ export default function Home() {
               </button>
               <button
                 type="button"
-                onClick={() => setGenderPreference('FEMALE_ONLY')}
+                onClick={() => {
+                  if (currentStudent?.gender?.toLowerCase() === 'male') {
+                    toast.error('The Female Passengers Only pool is reserved for female students/faculty.')
+                    return
+                  }
+                  setGenderPreference('FEMALE_ONLY')
+                }}
                 className={`py-2 px-3 rounded-xl border text-xs font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                   genderPreference === 'FEMALE_ONLY'
                     ? 'border-pink-500 bg-pink-50 text-pink-700 shadow-2xs font-bold'

@@ -178,6 +178,8 @@ export interface Passenger {
   fareId?: string
   bookingId?: string
   fareBreakdown?: FareBreakdown
+  gender?: string
+  genderPreference?: 'ANYONE' | 'FEMALE_ONLY' | string
 }
 
 export interface Ride {
@@ -210,6 +212,11 @@ export interface Ride {
   durationSeconds?: number
   hasDeviation: boolean
   hasSosAlert: boolean
+  isFemaleOnly?: boolean
+  genderPreference?: 'ANYONE' | 'FEMALE_ONLY'
+  startLocation?: string
+  startLocationLat?: number
+  startLocationLng?: number
   date: string
 }
 

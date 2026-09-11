@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Star, MapPin, Clock, Users, ChevronRight, CheckCircle2,
   AlertCircle, ArrowLeft, Car, Zap, ChevronDown, ChevronUp,
-  Sparkles, ShieldCheck, ArrowRight
+  Sparkles, ShieldCheck, ArrowRight, Shield
 } from 'lucide-react'
 import { findMatches, haversineKm, type RideMatch } from '../../engine/matchingEngine'
 import { useAppStore } from '../../store/appStore'
@@ -140,7 +140,8 @@ export default function MatchingResults() {
         seats,
         currentStudentId,
         { lat: pickupLat, lng: pickupLng },
-        { lat: destinationLat, lng: destinationLng }
+        { lat: destinationLat, lng: destinationLng },
+        genderPreference
       )
       setIsCreatingRequest(false)
       navigate(`/student/confirmation/${newRide.id}`)
@@ -231,11 +232,16 @@ export default function MatchingResults() {
             {/* Header Banner */}
             <div className="bg-gradient-to-r from-primary-600 to-primary-800 p-5 text-white flex items-start justify-between">
               <div>
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="font-heading font-bold text-xl">{topMatch.ride.routeName}</span>
                   <span className="px-2 py-0.5 rounded-full bg-white/20 text-xs font-bold">
                     {getRideStatusLabel(topMatch.ride.status)}
                   </span>
+                  {(topMatch.ride.isFemaleOnly || topMatch.ride.genderPreference === 'FEMALE_ONLY') && (
+                    <span className="px-2 py-0.5 rounded-full bg-pink-500 text-white text-xs font-bold flex items-center gap-1 shadow-xs">
+                      <Shield size={11} /> ♀ Female Only
+                    </span>
+                  )}
                 </div>
                 <div className="text-xs text-primary-100 flex items-center gap-1.5 flex-wrap">
                   <span className="bg-white/15 px-2 py-0.5 rounded text-white font-medium">Your Route:</span>
@@ -409,6 +415,11 @@ export default function MatchingResults() {
                           <span className="text-xs font-bold text-primary-700 bg-primary-50 px-2 py-0.5 rounded-full border border-primary-200">
                             {m.score.total}% Match
                           </span>
+                          {(m.ride.isFemaleOnly || m.ride.genderPreference === 'FEMALE_ONLY') && (
+                            <span className="text-[10px] font-bold text-pink-700 bg-pink-50 px-2 py-0.5 rounded-full border border-pink-200 flex items-center gap-1">
+                              <Shield size={10} className="text-pink-600" /> ♀ Female Only
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 truncate">
                           {pickup} → <span className="font-semibold text-emerald-700">{destination}</span> · Departs {m.ride.departureTime}
