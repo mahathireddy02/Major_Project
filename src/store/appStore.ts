@@ -471,7 +471,7 @@ export const useAppStore = create<AppState>((set, get) => ({
               d.email?.toLowerCase() === credentials.email?.toLowerCase() ||
               d.phone === credentials.phone ||
               d.id === credentials.userId ||
-              d.email === 'driver.demo@gmail.com'
+              d.email === 'rahul.kumar.driver@gmail.com'
           ) || get().drivers[0]
 
         if (fallbackDriver) {
