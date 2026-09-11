@@ -8,6 +8,7 @@ import { NotificationModel } from '../models/Notification.js'
 import { AuditLogModel } from '../models/AuditLog.js'
 import { requireRoles } from '../middleware/auth.js'
 import { realtimeService } from '../services/realtimeService.js'
+import { notificationService } from '../services/notificationService.js'
 import { routingService } from '../services/routingService.js'
 import { RideFareModel } from '../models/RideFare.js'
 import { pricingEngine } from '../services/pricingEngine.js'
@@ -160,14 +161,15 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
       { new: true }
     )
 
-    // Notify new driver
-    await NotificationModel.create({
-      id: `n-${Date.now()}-1`,
-      userId: driverId,
-      type: 'system',
-      title: 'Ride Reassigned',
-      message: `Dispatch Control has assigned you to ${updatedRide?.routeName}.`,
+    // Central Notification: Driver Reassigned
+    const passengerIds = (currentRide.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+    await notificationService.notifyRideEvent('DRIVER_REASSIGNED', {
       rideId,
+      routeName: updatedRide?.routeName || currentRide.routeName,
+      driverId,
+      driverName: driver.name,
+      previousDriverId,
+      passengerIds,
     })
 
     // Log Audit Event
@@ -223,6 +225,18 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
       { new: true }
     )
 
+    // Central Notification: Vehicle Reassigned
+    const passengerIds = (currentRide.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+    await notificationService.notifyRideEvent('VEHICLE_REASSIGNED', {
+      rideId,
+      routeName: updatedRide?.routeName || currentRide.routeName,
+      driverId: currentRide.driverId,
+      vehicleId,
+      vehicleName: vehicle.name,
+      previousVehicleId,
+      passengerIds,
+    })
+
     // Log Audit Event
     const auditLog = await AuditLogModel.create({
       id: `audit-${Date.now()}`,
@@ -261,17 +275,15 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
     // Update associated bookings
     await BookingModel.updateMany({ rideId }, { status: 'cancelled' })
 
-    // Notify passengers
-    for (const p of ride.passengers || []) {
-      await NotificationModel.create({
-        id: `n-${Date.now()}-${p.studentId}`,
-        userId: p.studentId,
-        type: 'delay',
-        title: 'Ride Cancelled by Dispatch',
-        message: `Your ride (${ride.routeName}) was cancelled by Dispatch Control. ${reason ? `Reason: ${reason}` : ''}`,
-        rideId,
-      })
-    }
+    // Central Notification: Ride Cancelled by Dispatch
+    const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+    await notificationService.notifyRideEvent('RIDE_CANCELLED', {
+      rideId,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      passengerIds,
+      reason,
+    })
 
     // Log Audit Event
     const auditLog = await AuditLogModel.create({
@@ -303,7 +315,7 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
 
     const waypoints: [number, number][] = [
       [ride.currentLat || ride.destinationLat, ride.currentLng || ride.destinationLng],
-      ...ride.pickupPoints.map((pp) => [pp.lat, pp.lng] as [number, number]),
+      ...ride.pickupPoints.map((pp: any) => [pp.lat, pp.lng] as [number, number]),
       [ride.destinationLat, ride.destinationLng],
     ]
 
@@ -317,6 +329,16 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
       },
       { new: true }
     )
+
+    // Central Notification: Route Recalculated
+    const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+    await notificationService.notifyRideEvent('ROUTE_UPDATED', {
+      rideId,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      passengerIds,
+      eta: updatedRide?.estimatedArrival,
+    })
 
     // Log Audit Event
     const auditLog = await AuditLogModel.create({
@@ -356,6 +378,19 @@ export const dispatcherRoutes: FastifyPluginAsync = async (fastify) => {
       const remainingAlerts = await SafetyEventModel.countDocuments({ rideId: event.rideId, resolved: false })
       if (remainingAlerts === 0) {
         await RideModel.findOneAndUpdate({ id: event.rideId }, { hasDeviation: false, hasSosAlert: false })
+      }
+      const associatedRide = await RideModel.findOne({ id: event.rideId })
+      if (associatedRide) {
+        const passengerIds = (associatedRide.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+        const driverUser = await UserModel.findOne({ id: associatedRide.driverId })
+        await notificationService.notifyRideEvent('SOS_RESOLVED', {
+          rideId: event.rideId,
+          routeName: associatedRide.routeName,
+          driverId: associatedRide.driverId,
+          driverName: driverUser?.name || 'Driver',
+          studentId: event.userId,
+          passengerIds,
+        })
       }
     }
 

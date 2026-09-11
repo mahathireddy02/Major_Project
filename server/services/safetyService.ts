@@ -4,6 +4,7 @@ import { UserModel } from '../models/User.js'
 import { EmergencyContactModel } from '../models/EmergencyContact.js'
 import { NotificationModel } from '../models/Notification.js'
 import { realtimeService } from './realtimeService.js'
+import { notificationService } from './notificationService.js'
 import { haversineDistanceMeters } from './routingService.js'
 import { ENV } from '../config/env.js'
 
@@ -72,17 +73,18 @@ export class SafetyService {
         resolved: false,
       })
 
-      // Notify all passengers
-      for (const passenger of ride.passengers) {
-        await NotificationModel.create({
-          id: `n-${Date.now()}-${passenger.studentId}`,
-          userId: passenger.studentId,
-          type: 'safety',
-          title: 'Route Deviation Detected',
-          message: `Your ride has moved away from the planned route. Campus security is monitoring.`,
-          rideId,
-        })
-      }
+      // Centralized Safety Event Notification: Route Deviation
+      const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+      const driverUser = await UserModel.findOne({ id: ride.driverId })
+
+      await notificationService.notifyRideEvent('ROUTE_DEVIATION', {
+        rideId,
+        routeName: ride.routeName,
+        driverId: ride.driverId,
+        driverName: driverUser?.name || 'Driver',
+        passengerIds,
+        deviationMeters: Math.round(minDistance),
+      })
 
       realtimeService.broadcast('SAFETY_ALERT', {
         rideId,
@@ -132,15 +134,15 @@ export class SafetyService {
       resolved: false,
     })
 
-    // Create Notification for Student
-    await NotificationModel.create({
-      id: `notif-${Date.now()}`,
-      studentId: userId,
-      type: 'emergency',
-      title: '🚨 Emergency SOS Broadcast',
-      message: `Campus Safety and your emergency contact (${contactInfoStr}) have been alerted with live vehicle coordinates.`,
-      read: false,
+    // Centralized Critical SOS Notification
+    await notificationService.notifyRideEvent('SOS_TRIGGERED', {
       rideId,
+      routeName: ride?.routeName || `Ride #${rideId}`,
+      driverId: ride?.driverId,
+      driverName: driver?.name || 'Driver',
+      studentId: userId,
+      studentName: student?.name || userId,
+      priority: 'CRITICAL',
     })
 
     // Notify connected clients via WebSockets / Realtime
@@ -179,11 +181,25 @@ export class SafetyService {
       resolved: false,
     })
 
-    if (remaining === 0) {
-      await RideModel.updateOne(
-        { id: event.rideId },
-        { hasDeviation: false, hasSosAlert: false }
-      )
+    const ride = await RideModel.findOne({ id: event.rideId })
+
+    if (remaining === 0 && ride) {
+      ride.hasDeviation = false
+      ride.hasSosAlert = false
+      await ride.save()
+    }
+
+    if (ride) {
+      const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+      const driverUser = await UserModel.findOne({ id: ride.driverId })
+      await notificationService.notifyRideEvent('SOS_RESOLVED', {
+        rideId: event.rideId,
+        routeName: ride.routeName,
+        driverId: ride.driverId,
+        driverName: driverUser?.name || 'Driver',
+        studentId: event.userId,
+        passengerIds,
+      })
     }
 
     realtimeService.broadcast('SAFETY_ALERT', {

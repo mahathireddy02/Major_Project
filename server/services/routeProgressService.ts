@@ -1,9 +1,11 @@
 import { IRide, IRouteStop, IRouteStep, ITripRoute, RideModel } from '../models/Ride.js'
 import { VehicleModel } from '../models/Vehicle.js'
 import { BookingModel } from '../models/Booking.js'
+import { UserModel } from '../models/User.js'
 import { RideStopModel } from '../models/RideStop.js'
 import { routingService, haversineDistanceMeters } from './routingService.js'
 import { realtimeService } from './realtimeService.js'
+import { notificationService } from './notificationService.js'
 
 export const ARRIVAL_RADIUS_METERS = 80
 export const OFF_ROUTE_THRESHOLD_METERS = 120
@@ -349,10 +351,26 @@ export class RouteProgressService {
       if (distToStop <= ARRIVAL_RADIUS_METERS) {
         if (stop.status === 'UPCOMING') {
           stop.status = 'ARRIVING'
+          notificationService.notifyRideEvent('DRIVER_ARRIVING', {
+            rideId,
+            routeName: ride.routeName,
+            driverId: ride.driverId,
+            stopId: stop.id,
+            stopName: stop.name,
+            studentId: stop.studentId,
+          }).catch((e) => console.warn('[RouteProgress] Notification warning:', e.message))
           realtimeService.broadcast('DRIVER_ARRIVING', { rideId, stopId: stop.id, stopName: stop.name })
         }
         if (distToStop <= 40 && stop.status !== 'ARRIVED' && stop.status !== 'BOARDED') {
           stop.status = 'ARRIVED'
+          notificationService.notifyRideEvent('DRIVER_REACHED_PICKUP', {
+            rideId,
+            routeName: ride.routeName,
+            driverId: ride.driverId,
+            stopId: stop.id,
+            stopName: stop.name,
+            studentId: stop.studentId,
+          }).catch((e) => console.warn('[RouteProgress] Notification warning:', e.message))
           realtimeService.broadcast('DRIVER_ARRIVED', { rideId, stopId: stop.id, stopName: stop.name })
         }
       }
@@ -365,7 +383,17 @@ export class RouteProgressService {
 
     // Destination arrival check
     const distToDestination = haversineDistanceMeters(currentLat, currentLng, ride.destinationLat, ride.destinationLng)
-    if (distToDestination <= ARRIVAL_RADIUS_METERS && stops.every((s) => s.type !== 'PICKUP' || s.status === 'BOARDED')) {
+    if (distToDestination <= ARRIVAL_RADIUS_METERS && stops.every((s: any) => s.type !== 'PICKUP' || s.status === 'BOARDED')) {
+      if (ride.tripRoute!.status !== 'ARRIVING') {
+        const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+        notificationService.notifyRideEvent('ARRIVED_DESTINATION', {
+          rideId,
+          routeName: ride.routeName,
+          driverId: ride.driverId,
+          destination: ride.destination,
+          passengerIds,
+        }).catch((e) => console.warn('[RouteProgress] Notification warning:', e.message))
+      }
       ride.tripRoute!.status = 'ARRIVING'
       realtimeService.broadcast('ARRIVED_DESTINATION', { rideId, destination: ride.destination })
     }
@@ -538,7 +566,7 @@ export class RouteProgressService {
     if (!ride) throw new Error('Ride not found')
 
     // Mark passenger status as dropped in ride
-    const passenger = (ride.passengers || []).find((p) => p.studentId === studentId)
+    const passenger = (ride.passengers || []).find((p: any) => p.studentId === studentId)
     if (passenger) {
       passenger.status = 'dropped'
     }
@@ -546,7 +574,7 @@ export class RouteProgressService {
     // Mark corresponding dropoff stop as COMPLETED
     if (ride.stops) {
       const dropoffStop = ride.stops.find(
-        (s) => s.type === 'DROPOFF' && (s.studentId === studentId || s.name === passenger?.destination)
+        (s: any) => s.type === 'DROPOFF' && (s.studentId === studentId || s.name === passenger?.destination)
       )
       if (dropoffStop) {
         dropoffStop.status = 'COMPLETED'
@@ -563,7 +591,7 @@ export class RouteProgressService {
     // Check if ALL passengers in this ride are now dropped
     const allDropped =
       (ride.passengers || []).length > 0 &&
-      ride.passengers.every((p) => p.status === 'dropped')
+      ride.passengers.every((p: any) => p.status === 'dropped')
 
     if (allDropped) {
       ride.status = 'completed'
@@ -574,7 +602,7 @@ export class RouteProgressService {
         ride.tripRoute.remainingDurationSeconds = 0
       }
       if (ride.stops) {
-        ride.stops.forEach((s) => {
+        ride.stops.forEach((s: any) => {
           s.status = 'COMPLETED'
         })
       }
@@ -593,7 +621,30 @@ export class RouteProgressService {
       }
     }
 
-    await ride.save()
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+
+    // Central Notification: Passenger Dropped
+    await notificationService.notifyRideEvent('PASSENGER_DROPPED', {
+      rideId,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      studentId,
+      studentName: passenger?.name || 'Student',
+      destination: passenger?.destination || ride.destination,
+    }).catch((e) => console.warn('[RouteProgress] Passenger drop notification warning:', e.message))
+
+    if (allDropped) {
+      const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+      await notificationService.notifyRideEvent('TRIP_COMPLETED', {
+        rideId,
+        routeName: ride.routeName,
+        driverId: ride.driverId,
+        driverName: driverUser?.name || 'Driver',
+        vehicleId: ride.vehicleId,
+        passengerIds,
+      }).catch((e) => console.warn('[RouteProgress] Trip complete notification warning:', e.message))
+    }
 
     realtimeService.broadcast('PASSENGER_DROPPED', { rideId, studentId })
     realtimeService.broadcast('RIDE_UPDATED', { ride })

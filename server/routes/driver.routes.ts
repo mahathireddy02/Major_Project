@@ -5,6 +5,7 @@ import { BookingModel } from '../models/Booking.js'
 import { UserModel } from '../models/User.js'
 import { VehicleLocationHistoryModel } from '../models/VehicleLocationHistory.js'
 import { realtimeService } from '../services/realtimeService.js'
+import { notificationService } from '../services/notificationService.js'
 import { routeProgressService } from '../services/routeProgressService.js'
 import { requireRoles } from '../middleware/auth.js'
 
@@ -42,6 +43,17 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     await routeProgressService.buildTripRoute(ride)
     await ride.save()
 
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+    const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+
+    await notificationService.notifyRideEvent('DRIVER_ACCEPTED', {
+      rideId: id,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      passengerIds,
+    })
+
     realtimeService.broadcast('RIDE_UPDATED', { ride, event: 'DRIVER_ACCEPTED' })
     return { success: true, data: ride }
   })
@@ -62,6 +74,18 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       ride.tripRoute!.status = 'NAVIGATING'
     }
     await ride.save()
+
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+    const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+
+    await notificationService.notifyRideEvent('TRIP_STARTED', {
+      rideId: id,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      vehicleId: ride.vehicleId,
+      passengerIds,
+    })
 
     realtimeService.broadcast('RIDE_STARTED', { rideId: id, ride })
     realtimeService.broadcast('RIDE_UPDATED', { ride })
@@ -155,13 +179,29 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
     }
 
-    const stop = (ride.stops || []).find((s) => s.id === stopId)
+    const stop = (ride.stops || []).find((s: any) => s.id === stopId)
     if (!stop) {
       return reply.status(404).send({ success: false, error: { message: 'Stop not found' } })
     }
 
     stop.status = 'ARRIVED'
     await ride.save()
+
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+    const vehicle = await VehicleModel.findOne({ id: ride.vehicleId })
+
+    await notificationService.notifyRideEvent('DRIVER_REACHED_PICKUP', {
+      rideId: id,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      vehicleId: ride.vehicleId,
+      vehicleName: vehicle?.name,
+      vehiclePlate: vehicle?.registrationNumber,
+      stopId: stop.id,
+      stopName: stop.name,
+      studentId: stop.studentId,
+    })
 
     realtimeService.broadcast('DRIVER_ARRIVED', { rideId: id, stopId, stopName: stop.name })
     realtimeService.broadcast('STOP_UPDATED', { rideId: id, stop })
@@ -178,7 +218,7 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ success: false, error: { message: 'Ride not found' } })
     }
 
-    const stop = (ride.stops || []).find((s) => s.id === stopId)
+    const stop = (ride.stops || []).find((s: any) => s.id === stopId)
     if (!stop) {
       return reply.status(404).send({ success: false, error: { message: 'Stop not found' } })
     }
@@ -186,23 +226,45 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     stop.status = 'BOARDED'
 
     // Update corresponding passenger in ride.passengers
+    let boardedPassengerStudentId = stop.studentId
+    let boardedPassengerName = 'Passenger'
     if (stop.studentId) {
       const p = (ride.passengers || []).find((item: any) => item.studentId === stop.studentId)
-      if (p) p.status = 'boarded'
+      if (p) {
+        p.status = 'boarded'
+        boardedPassengerName = p.name
+      }
     } else {
       const p = (ride.passengers || []).find((item: any) => item.pickup === stop.name)
-      if (p) p.status = 'boarded'
+      if (p) {
+        p.status = 'boarded'
+        boardedPassengerStudentId = p.studentId
+        boardedPassengerName = p.name
+      }
     }
 
     // Advance currentStopIndex
     if (ride.tripRoute) {
-      const nextUpcomingIndex = (ride.stops || []).findIndex((s) => s.status === 'UPCOMING' || s.status === 'ARRIVING' || s.status === 'ARRIVED')
+      const nextUpcomingIndex = (ride.stops || []).findIndex((s: any) => s.status === 'UPCOMING' || s.status === 'ARRIVING' || s.status === 'ARRIVED')
       if (nextUpcomingIndex >= 0) {
         ride.tripRoute.currentStopIndex = nextUpcomingIndex
       }
     }
 
     await ride.save()
+
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+
+    await notificationService.notifyRideEvent('PASSENGER_BOARDED', {
+      rideId: id,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      studentId: boardedPassengerStudentId,
+      studentName: boardedPassengerName,
+      stopId: stop.id,
+      stopName: stop.name,
+    })
 
     realtimeService.broadcast('PASSENGER_BOARDED', { rideId: id, stopId, stopName: stop.name })
     realtimeService.broadcast('STOP_UPDATED', { rideId: id, stop })
@@ -268,6 +330,18 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       { status: 'completed', completedAt: new Date() }
     )
 
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+    const passengerIds = (ride.passengers || []).map((p: any) => p.studentId).filter(Boolean)
+
+    await notificationService.notifyRideEvent('TRIP_COMPLETED', {
+      rideId: id,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      vehicleId: ride.vehicleId,
+      passengerIds,
+    })
+
     realtimeService.broadcast('RIDE_COMPLETED', { rideId: id, ride })
     realtimeService.broadcast('RIDE_UPDATED', { ride })
     realtimeService.broadcast('BOOKING_UPDATED', { rideId: id, status: 'completed' })
@@ -280,7 +354,7 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     const { rideId, studentId, status } = request.body as {
       rideId: string
       studentId: string
-      status: 'waiting' | 'boarded' | 'dropped'
+      status: 'waiting' | 'boarded' | 'dropped' | 'no_show'
     }
 
     const ride = await RideModel.findOne({ id: rideId })
@@ -291,6 +365,38 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     if (status === 'dropped') {
       const updatedRide = await routeProgressService.handlePassengerDrop(rideId, studentId)
       return { success: true, data: updatedRide }
+    }
+
+    if (status === 'no_show') {
+      const p = (ride.passengers || []).find((item: any) => item.studentId === studentId)
+      if (p) {
+        p.status = 'no_show' as any
+      }
+      const stop = (ride.stops || []).find((s: any) => s.studentId === studentId || (p && s.name === p.pickup))
+      if (stop) {
+        stop.status = 'COMPLETED'
+      }
+      await ride.save()
+
+      await BookingModel.updateMany(
+        { rideId, studentId, status: { $ne: 'cancelled' } },
+        { status: 'cancelled' }
+      )
+
+      const driverUser = await UserModel.findOne({ id: ride.driverId })
+      await notificationService.notifyRideEvent('PASSENGER_NO_SHOW', {
+        rideId,
+        routeName: ride.routeName,
+        driverId: ride.driverId,
+        driverName: driverUser?.name || 'Driver',
+        studentId,
+        studentName: p?.name || 'Passenger',
+        pickup: p?.pickup,
+      })
+
+      realtimeService.broadcast('RIDE_UPDATED', { ride })
+      realtimeService.broadcast('BOOKING_UPDATED', { rideId, studentId, status: 'cancelled' })
+      return { success: true, data: ride }
     }
 
     let p = (ride.passengers || []).find((item: any) => item.studentId === studentId)
@@ -309,7 +415,7 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // Update matching pickup stop if exists
-    const stop = (ride.stops || []).find((s) => s.studentId === studentId || (p && s.name === p.pickup))
+    const stop = (ride.stops || []).find((s: any) => s.studentId === studentId || (p && s.name === p.pickup))
     if (stop) {
       stop.status = status === 'boarded' ? 'BOARDED' : 'UPCOMING'
     }
@@ -323,6 +429,20 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
       { status: bookingStatus }
     )
 
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+
+    if (status === 'boarded') {
+      await notificationService.notifyRideEvent('PASSENGER_BOARDED', {
+        rideId,
+        routeName: ride.routeName,
+        driverId: ride.driverId,
+        driverName: driverUser?.name || 'Driver',
+        studentId,
+        studentName: p?.name || 'Passenger',
+        pickup: p?.pickup,
+      })
+    }
+
     realtimeService.broadcast('RIDE_UPDATED', { ride })
     realtimeService.broadcast('BOOKING_UPDATED', { rideId, studentId, status: bookingStatus })
     realtimeService.broadcast('PASSENGER_BOARDED', { rideId, studentId, status })
@@ -330,4 +450,5 @@ export const driverRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: ride }
   })
 }
+
 

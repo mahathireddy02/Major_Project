@@ -7,6 +7,7 @@ import { UserModel } from '../models/User.js'
 import { BookingModel } from '../models/Booking.js'
 import { AuditLogModel } from '../models/AuditLog.js'
 import { realtimeService } from '../services/realtimeService.js'
+import { notificationService } from '../services/notificationService.js'
 
 export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
   // Check Python Service Health / Availability
@@ -267,14 +268,17 @@ export const optimizationRoutes: FastifyPluginAsync = async (fastify) => {
       timestamp: new Date(),
     })
 
+    // Central Notification: Network Optimization Applied
+    await notificationService.notifyRideEvent('NETWORK_OPTIMIZED', {
+      createdRideCount: createdRideIds.length,
+      metadata: { createdRideIds, vehiclesDeployed: assignments.length },
+    })
+
     // Broadcast Realtime Event
-    realtimeService.broadcast({
-      type: 'NETWORK_OPTIMIZED',
-      payload: {
-        createdRideIds,
-        vehiclesDeployed: assignments.length,
-        timestamp: new Date().toISOString(),
-      },
+    realtimeService.broadcast('NETWORK_OPTIMIZED' as any, {
+      createdRideIds,
+      vehiclesDeployed: assignments.length,
+      timestamp: new Date().toISOString(),
     })
 
     return reply.send({

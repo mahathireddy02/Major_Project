@@ -11,7 +11,7 @@ import Avatar from '../ui/Avatar'
 const studentNav = [
   { to: '/student/home',          icon: Home,      label: 'Home' },
   { to: '/student/rides',         icon: BookOpen,  label: 'My Rides' },
-  { to: '/student/notifications', icon: Bell,      label: '' },
+  { to: '/student/notifications', icon: Bell,      label: 'Notifications' },
   { to: '/student/profile',       icon: User,      label: 'Profile' },
 ]
 
@@ -50,7 +50,11 @@ export default function Sidebar({ mode }: SidebarProps) {
   const currentDriver = useAppStore((s) => s.currentDriver())
   const notifications = useAppStore((s) => s.notifications)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
-  const unread = notifications.filter((n) => n.studentId === currentStudentId && !n.read).length
+  const unread = notifications.filter(
+    (n) =>
+      (n.studentId === currentStudentId || n.userId === currentStudentId || (n as any).targetRole === 'STUDENT') &&
+      !n.read
+  ).length
 
   const navItems = mode === 'admin' ? adminNav : mode === 'driver' ? driverNav : studentNav
   const user =

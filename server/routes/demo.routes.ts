@@ -7,6 +7,8 @@ import { realtimeService } from '../services/realtimeService.js'
 import { safetyService } from '../services/safetyService.js'
 import { seedDatabase } from '../seeds/seed.js'
 
+import { notificationService } from '../services/notificationService.js'
+
 let trafficActive = false
 
 export const demoRoutes: FastifyPluginAsync = async (fastify) => {
@@ -26,12 +28,13 @@ export const demoRoutes: FastifyPluginAsync = async (fastify) => {
     const student = await UserModel.findOne({ role: 'STUDENT', id: { $nin: ride.passengers.map((p: any) => p.studentId) } })
     const studentId = student?.id || `s-demo-${Date.now().toString().slice(-4)}`
     const studentName = student?.name || 'Demo Student'
+    const pickup = ride.pickupPoints[0]?.name || 'Hostel A'
 
     ride.bookedSeats += 1
     ride.passengers.push({
       studentId,
       name: studentName,
-      pickup: ride.pickupPoints[0]?.name || 'Hostel A',
+      pickup,
       status: 'waiting',
       seatNo: nextSeat,
     })
@@ -47,13 +50,27 @@ export const demoRoutes: FastifyPluginAsync = async (fastify) => {
       id: `b-demo-${Date.now()}`,
       studentId,
       rideId,
-      pickup: ride.pickupPoints[0]?.name || 'Hostel A',
+      pickup,
       destination: ride.destination,
       seats: 1,
       fare: ride.fare,
       seatNo: nextSeat,
       status: 'confirmed',
       bookedAt: new Date(),
+    })
+
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+    await notificationService.notifyRideEvent('PASSENGER_ADDED', {
+      rideId,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      studentId,
+      studentName,
+      pickup,
+      destination: ride.destination,
+      departureTime: ride.departureTime,
+      fare: ride.fare,
     })
 
     realtimeService.broadcast('BOOKING_CREATED', { ride, studentName })
@@ -82,6 +99,16 @@ export const demoRoutes: FastifyPluginAsync = async (fastify) => {
       { status: 'cancelled' }
     )
 
+    const driverUser = await UserModel.findOne({ id: ride.driverId })
+    await notificationService.notifyRideEvent('PASSENGER_CANCELLED', {
+      rideId,
+      routeName: ride.routeName,
+      driverId: ride.driverId,
+      driverName: driverUser?.name || 'Driver',
+      studentId: removedPassenger.studentId,
+      studentName: removedPassenger.name,
+    })
+
     realtimeService.broadcast('BOOKING_CANCELLED', { rideId, studentId: removedPassenger.studentId })
     realtimeService.broadcast('RIDE_UPDATED', { ride })
 
@@ -92,17 +119,19 @@ export const demoRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/add-student', async () => {
     const randomStudents = ['Karthik Naidu', 'Sneha Reddy', 'Rohit Kumar', 'Aditya Menon', 'Shreya Joshi']
     const name = randomStudents[Math.floor(Math.random() * randomStudents.length)]
+    const reqId = `req-demo-${Date.now()}`
 
-    const notif = await NotificationModel.create({
-      id: `n-demo-${Date.now()}`,
-      userId: 's1',
-      type: 'system',
-      title: 'New Student Booking Request',
-      message: `${name} requested a ride from Hostel Zone to Main Campus.`,
+    const notifs = await notificationService.notifyRideEvent('RIDE_REQUEST_CREATED', {
+      studentId: 's1',
+      studentName: name,
+      pickup: 'Hostel Zone',
+      destination: 'Main Campus Gate',
+      time: '8:45 AM',
+      seats: 1,
+      metadata: { requestId: reqId },
     })
 
-    realtimeService.broadcast('NOTIFICATION_ADDED', { notification: notif })
-    return { success: true, data: notif }
+    return { success: true, data: notifs[0] }
   })
 
   // 4. Trigger route deviation
