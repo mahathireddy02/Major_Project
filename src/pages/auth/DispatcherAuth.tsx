@@ -185,7 +185,7 @@ export default function DispatcherAuth() {
                 className="w-full py-2.5 px-3 rounded-xl bg-slate-50 hover:bg-primary-50/60 border border-slate-200 hover:border-primary-300 text-xs font-bold text-primary-700 hover:text-primary-800 transition-all cursor-pointer flex items-center justify-center gap-2 shadow-2xs"
               >
                 <Zap size={14} className="text-amber-500 fill-amber-400" />
-                Quick Demo Dispatcher Sign In (Judges 1-Click)
+                Quick Demo Dispatcher Sign In (1-Click)
               </button>
             </div>
 

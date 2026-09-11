@@ -20,6 +20,7 @@ import { pricingRoutes } from './routes/pricing.routes.js'
 import { pythonOptimizerService } from './services/pythonOptimizerService.js'
 
 import { UserModel } from './models/User.js'
+import { RideModel } from './models/Ride.js'
 import { seedDatabase } from './seeds/seed.js'
 
 export async function buildServer() {
@@ -102,7 +103,13 @@ export async function startServer() {
     // 2. Ensure Python AI Optimization Engine is running
     await pythonOptimizerService.ensureServiceStarted()
 
-    // 2. Check if DB has data; auto-seed if empty
+    // 3. Clean up any legacy hackathon strings from stored rides
+    await RideModel.updateMany(
+      { routeName: /hackathon/i },
+      { $set: { routeName: 'Campus Shuttle V1' } }
+    ).catch(() => {})
+
+    // 4. Check if DB has data; auto-seed if empty
     const count = await UserModel.countDocuments()
     if (count === 0) {
       console.log('[Server] Database is empty. Seeding realistic campus data...')
