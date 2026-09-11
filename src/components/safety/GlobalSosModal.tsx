@@ -158,8 +158,6 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
 
   const handleConfirmSOS = async () => {
     setIsSubmitting(true)
-    // Immediately trigger loud siren sound directly on user click
-    sosAlarmPlayer.play().catch(() => {})
 
     try {
       const lat = gpsCoords?.lat || activeRide?.currentLat || 17.3616
@@ -178,7 +176,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
       })
 
       toast.success(
-        `Emergency SOS Dispatched! Automated Voice Call and SMS placed to ${nameToSend} (${phoneToSend}). Siren active.`,
+        `Emergency SOS Dispatched! Automated Voice Call, SMS, and Email alert placed to ${nameToSend} (${phoneToSend}). Dispatcher notified.`,
         { icon: '🚨', duration: 7000 }
       )
     } catch (err: any) {
@@ -191,7 +189,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
   const handleToggleMute = () => {
     if (isMuted) {
       setIsMuted(false)
-      sosAlarmPlayer.play().catch(() => {})
+      sosAlarmPlayer.playSingleShot().catch(() => {})
     } else {
       setIsMuted(true)
       sosAlarmPlayer.stop()

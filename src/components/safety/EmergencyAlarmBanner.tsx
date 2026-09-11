@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { ShieldAlert, Volume2, VolumeX, CheckCircle, MapPin, ExternalLink } from 'lucide-react'
 import { useAppStore } from '../../store/appStore'
 import { sosAlarmPlayer } from '../../utils/alarmSound'
@@ -21,16 +21,11 @@ export const EmergencyAlarmBanner: React.FC = () => {
   const currentSos = activeSosEvents[0]
 
   useEffect(() => {
-    if (currentSos && !isMuted) {
-      sosAlarmPlayer.play().catch(() => {})
-    } else {
-      sosAlarmPlayer.stop()
-    }
-
+    // Only cleanup audio on unmount if any tone was playing
     return () => {
       sosAlarmPlayer.stop()
     }
-  }, [currentSos, isMuted])
+  }, [])
 
   if (!currentSos) return null
 
@@ -50,7 +45,7 @@ export const EmergencyAlarmBanner: React.FC = () => {
   const handleToggleMute = () => {
     if (isMuted) {
       setIsMuted(false)
-      sosAlarmPlayer.play().catch(() => {})
+      sosAlarmPlayer.playSingleShot().catch(() => {})
     } else {
       setIsMuted(true)
       sosAlarmPlayer.stop()

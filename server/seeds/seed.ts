@@ -573,11 +573,11 @@ export async function seedDatabase() {
 
   // Insert Emergency Contacts
   const emergencyContacts = [
-    { id: 'ec-s1', userId: 's1', name: 'udaykiran', relationship: 'Parent', phone: '+917989442841', isPrimary: true },
-    { id: 'ec-s2', userId: 's2', name: 'S. Rao (Father)', relationship: 'Parent', phone: '+91 87654 32199', isPrimary: true },
-    { id: 'ec-s3', userId: 's3', name: 'M. Sharma (Mother)', relationship: 'Parent', phone: '+91 76543 21999', isPrimary: true },
-    { id: 'ec-f1', userId: 'f1', name: 'Sunita Sharma (Spouse)', relationship: 'Spouse', phone: '+91 91234 56789', isPrimary: true },
-    { id: 'ec-d1', userId: 'd1', name: 'Meena Kumar (Spouse)', relationship: 'Spouse', phone: '+91 99887 76600', isPrimary: true },
+    { id: 'ec-s1', userId: 's1', name: 'udaykiran', relationship: 'Parent', phone: '+917989442841', email: 'udaykiran.emergency@sriindu.ac.in', isPrimary: true },
+    { id: 'ec-s2', userId: 's2', name: 'S. Rao (Father)', relationship: 'Parent', phone: '+91 87654 32199', email: 'srao.parent@iith.ac.in', isPrimary: true },
+    { id: 'ec-s3', userId: 's3', name: 'M. Sharma (Mother)', relationship: 'Parent', phone: '+91 76543 21999', email: 'msharma.parent@nitw.ac.in', isPrimary: true },
+    { id: 'ec-f1', userId: 'f1', name: 'Sunita Sharma (Spouse)', relationship: 'Spouse', phone: '+91 91234 56789', email: 'sunita.sharma@sriindu.ac.in', isPrimary: true },
+    { id: 'ec-d1', userId: 'd1', name: 'Meena Kumar (Spouse)', relationship: 'Spouse', phone: '+91 99887 76600', email: 'meena.kumar.family@gmail.com', isPrimary: true },
   ]
   await EmergencyContactModel.insertMany(emergencyContacts)
   console.log(`[Seed] Inserted ${emergencyContacts.length} emergency contacts for campus accounts.`)

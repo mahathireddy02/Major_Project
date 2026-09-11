@@ -366,8 +366,18 @@ export const useAppStore = create<AppState>((set, get) => ({
             set((state) => ({
               safetyEvents: [normalized, ...state.safetyEvents.filter((e) => e.id !== normalized.id)],
             }))
-            // Immediately play loud emergency siren alarm across listening devices
-            sosAlarmPlayer.play().catch(() => {})
+            // Specifically trigger alarm only in Dispatcher portal once per new SOS event
+            const activeRole = (get().role || get().currentUser?.role || '').toLowerCase()
+            const isDispatcher =
+              activeRole === 'dispatcher' ||
+              activeRole === 'admin' ||
+              (typeof window !== 'undefined' &&
+                (window.location.pathname.startsWith('/admin') ||
+                 window.location.pathname.startsWith('/dispatcher')))
+
+            if (isDispatcher && normalized.id) {
+              sosAlarmPlayer.playOnceForEvent(normalized.id).catch(() => {})
+            }
           }
           if (payload?.ride) {
             set((state) => ({
@@ -1146,11 +1156,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Safety Actions
-  triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number } | string, studentId?: string) => {
+  triggerSOS: async (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string; emergencyEmail?: string } | string, studentId?: string) => {
     try {
-      // Immediately start sounding loud siren alarm upon user gesture
-      sosAlarmPlayer.play().catch(() => {})
-
       let payload: {
         rideId?: string
         userId?: string
@@ -1158,6 +1165,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         lng?: number
         emergencyPhone?: string
         emergencyName?: string
+        emergencyEmail?: string
       } = {}
 
       if (typeof params === 'string') {
