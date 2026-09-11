@@ -9,17 +9,15 @@ import { RatingModel } from '../models/Rating.js'
 import { ENV } from '../config/env.js'
 import { generateToken, authenticate } from '../middleware/auth.js'
 import { ocrService } from '../services/ocrService.js'
+import { validateInstitutionalEmail } from '../utils/institutionalEmail.js'
 
 function isAuthorizedDomain(email: string): boolean {
-  if (!email || !email.includes('@')) return false
-  const domain = email.split('@')[1].toLowerCase().trim()
-  return ENV.AUTHORIZED_COLLEGE_DOMAINS.some(
-    (authDomain) => domain === authDomain || domain.endsWith(`.${authDomain}`)
-  )
+  const result = validateInstitutionalEmail(email, ENV.AUTHORIZED_COLLEGE_DOMAINS)
+  return result.isValid
 }
 
 export const authRoutes: FastifyPluginAsync = async (fastify) => {
-  // Validate College Email Domain
+  // Validate College / Institutional Email Domain
   fastify.post('/verify-email-domain', async (request, reply) => {
     const { email } = (request.body as { email?: string }) || {}
     if (!email) {
@@ -29,19 +27,16 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    const isValid = isAuthorizedDomain(email)
-    const domain = email.includes('@') ? email.split('@')[1] : ''
+    const validation = validateInstitutionalEmail(email, ENV.AUTHORIZED_COLLEGE_DOMAINS)
 
     return {
       success: true,
       data: {
-        allowed: isValid,
-        isValid,
-        domain,
-        authorizedDomains: ENV.AUTHORIZED_COLLEGE_DOMAINS,
-        message: isValid
-          ? `✓ Authorized college domain detected (@${domain})`
-          : `Domain @${domain} is not in the authorized college list (${ENV.AUTHORIZED_COLLEGE_DOMAINS.join(', ')})`,
+        allowed: validation.isValid,
+        isValid: validation.isValid,
+        domain: validation.domain,
+        reason: validation.reason,
+        message: validation.message,
       },
     }
   })
@@ -91,12 +86,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     // Check college domain
-    if (!isAuthorizedDomain(collegeEmail)) {
+    const emailValidation = validateInstitutionalEmail(collegeEmail, ENV.AUTHORIZED_COLLEGE_DOMAINS)
+    if (!emailValidation.isValid) {
       return reply.status(400).send({
         success: false,
         error: {
           code: 'UNAUTHORIZED_DOMAIN',
-          message: `Email domain is not authorized. Must end with: ${ENV.AUTHORIZED_COLLEGE_DOMAINS.join(', ')}`,
+          message: emailValidation.message,
         },
       })
     }
@@ -177,12 +173,13 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    if (!isAuthorizedDomain(collegeEmail)) {
+    const emailValidation = validateInstitutionalEmail(collegeEmail, ENV.AUTHORIZED_COLLEGE_DOMAINS)
+    if (!emailValidation.isValid) {
       return reply.status(400).send({
         success: false,
         error: {
           code: 'UNAUTHORIZED_DOMAIN',
-          message: `Email domain is not authorized. Must end with: ${ENV.AUTHORIZED_COLLEGE_DOMAINS.join(', ')}`,
+          message: emailValidation.message,
         },
       })
     }
