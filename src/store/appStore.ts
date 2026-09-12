@@ -1076,11 +1076,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  refreshRides: async () => {
+  refreshRides: async (status?: string) => {
     try {
-      const freshRides = await api.getRides()
+      const freshRides = await api.getRides(status ? { status } : undefined)
       if (Array.isArray(freshRides)) {
-        set({ rides: freshRides.map(normalizeRide) })
+        set((state) => {
+          const normFresh = freshRides.map(normalizeRide)
+          const rideMap = new Map<string, Ride>()
+          state.rides.forEach((r) => rideMap.set(r.id, r))
+          normFresh.forEach((r) => rideMap.set(r.id, r))
+          return { rides: Array.from(rideMap.values()) }
+        })
       }
     } catch (err: any) {
       console.warn('[Store] refreshRides warning:', err.message)

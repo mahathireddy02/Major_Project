@@ -429,7 +429,7 @@ export const bookingRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  // GET /api/bookings — List bookings with optional query filters
+  // GET /api/bookings — List bookings with optional query filters (hydrated with trip, driver, and vehicle)
   fastify.get('/', async (request) => {
     const query = request.query as { studentId?: string; rideId?: string; status?: string }
     const filter: any = {}
@@ -437,8 +437,52 @@ export const bookingRoutes: FastifyPluginAsync = async (fastify) => {
     if (query.rideId) filter.rideId = query.rideId
     if (query.status && query.status !== 'all') filter.status = query.status
 
-    const bookings = await BookingModel.find(filter).sort({ createdAt: -1 })
-    return { success: true, data: bookings }
+    const bookings = await BookingModel.find(filter).sort({ bookedAt: -1, createdAt: -1 })
+    const rideIds = [...new Set(bookings.map((b) => b.rideId).filter((id) => id && id !== 'unassigned'))]
+    const rides = await RideModel.find({ id: { $in: rideIds } })
+    const rideMap = new Map(rides.map((r) => [r.id, r]))
+
+    const driverIds = [...new Set(rides.map((r) => r.driverId).filter(Boolean))]
+    const vehicleIds = [...new Set(rides.map((r) => r.vehicleId).filter(Boolean))]
+    const [drivers, vehicles] = await Promise.all([
+      UserModel.find({ id: { $in: driverIds } }),
+      VehicleModel.find({ id: { $in: vehicleIds } }),
+    ])
+    const driverMap = new Map(drivers.map((d) => [d.id, d]))
+    const vehicleMap = new Map(vehicles.map((v) => [v.id, v]))
+
+    const enriched = bookings.map((b) => {
+      const bObj = b.toObject ? b.toObject() : { ...b }
+      const linkedRide = rideMap.get(b.rideId)
+      const linkedDriver = linkedRide ? driverMap.get(linkedRide.driverId) : null
+      const linkedVehicle = linkedRide ? vehicleMap.get(linkedRide.vehicleId) : null
+
+      let effectiveStatus = bObj.status
+      if (linkedRide?.status === 'completed' && effectiveStatus !== 'cancelled') {
+        effectiveStatus = 'completed'
+      } else if (linkedRide?.status === 'cancelled') {
+        effectiveStatus = 'cancelled'
+      }
+
+      return {
+        ...bObj,
+        status: effectiveStatus,
+        ride: linkedRide
+          ? {
+              ...linkedRide.toObject(),
+              status: linkedRide.status,
+              driverName: linkedDriver?.name || linkedRide.driverName || 'Rahul Kumar',
+              driverPhone: linkedDriver?.phone || linkedRide.driverPhone || '+91 99887 76655',
+              driverRating: linkedDriver?.rating || linkedRide.driverRating || 4.8,
+              driverAvatar: linkedDriver?.avatar || (linkedDriver?.name ? linkedDriver.name.slice(0, 2).toUpperCase() : 'RK'),
+              vehicleName: linkedVehicle?.name || linkedRide.vehicleName || 'Campus EV Shuttle',
+              vehiclePlate: linkedVehicle?.registrationNumber || linkedRide.vehiclePlate || 'TS 09 UB 1001',
+            }
+          : null,
+      }
+    })
+
+    return { success: true, data: enriched }
   })
 
   // GET /api/bookings/:id — Retrieve single booking with full trip, driver, and vehicle metadata

@@ -12,6 +12,7 @@ import Avatar from '../../components/ui/Avatar'
 import SeatProgress from '../../components/ui/SeatProgress'
 import CampusMap from '../../components/map/CampusMap'
 import { resolveDriverInfo } from '../../utils/driverDirectory'
+import { api } from '../../services/api'
 
 export default function ActiveRide() {
   const navigate = useNavigate()
@@ -33,19 +34,43 @@ export default function ActiveRide() {
 
   const refreshRides = useAppStore((s) => s.refreshRides)
 
-  // Refresh rides on mount
+  const currentUser = useAppStore((s) => s.currentUser)
+  const effectiveStudentId = currentStudentId || currentUser?.id || (currentUser as any)?.studentId || 's1'
+
+  // Refresh rides on mount and subscribe to realtime trip events
   useEffect(() => {
     refreshRides()
+    const unsub = api.onRealtimeEvent((event: string) => {
+      if (
+        event === 'RIDE_UPDATED' ||
+        event === 'RIDE_STARTED' ||
+        event === 'RIDE_COMPLETED' ||
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED' ||
+        event === 'TRIP_ROUTE_UPDATED' ||
+        event === 'BOOKING_UPDATED'
+      ) {
+        refreshRides()
+      }
+    })
+    return () => {
+      unsub()
+    }
   }, [refreshRides])
 
   // Find ride where student has a confirmed active, boarding, waiting, or full ride
   const activeRide = rides.find((r) => {
     if (r.status === 'completed' || r.status === 'cancelled') return false
     const hasBooking = bookings.some(
-      (b) => b.studentId === currentStudentId && b.rideId === r.id && (b.status === 'confirmed' || b.status === 'pending')
+      (b) =>
+        (b.studentId === effectiveStudentId || b.studentId === currentStudentId) &&
+        b.rideId === r.id &&
+        (b.status === 'confirmed' || b.status === 'pending' || (b as any).status === 'boarded')
     )
     const isPassenger = r.passengers?.some(
-      (p) => p.studentId === currentStudentId && (p.status === 'boarded' || p.status === 'waiting')
+      (p) =>
+        (p.studentId === effectiveStudentId || p.studentId === currentStudentId) &&
+        (p.status === 'boarded' || p.status === 'waiting')
     )
     return hasBooking || isPassenger
   })

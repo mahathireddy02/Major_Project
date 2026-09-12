@@ -902,11 +902,65 @@ export const rideRoutes: FastifyPluginAsync = async (fastify) => {
     return { success: true, data: ride }
   })
 
-  // List all bookings or bookings for student
+  // List all bookings for student, enriched with linked ride, driver, and vehicle data
   fastify.get('/bookings/user/:studentId', async (request) => {
     const { studentId } = request.params as { studentId: string }
-    const bookings = await BookingModel.find({ studentId }).sort({ bookedAt: -1 })
-    return { success: true, data: bookings }
+    const user = await UserModel.findOne({
+      $or: [{ id: studentId }, { studentId }, { email: studentId.toLowerCase() }, { phone: studentId }],
+    })
+    const possibleIds = [studentId]
+    if (user?.id) possibleIds.push(user.id)
+    if (user?.studentId) possibleIds.push(user.studentId)
+    if (user?.email) possibleIds.push(user.email)
+
+    const bookings = await BookingModel.find({ studentId: { $in: possibleIds } }).sort({ bookedAt: -1, createdAt: -1 })
+
+    const rideIds = [...new Set(bookings.map((b) => b.rideId).filter((id) => id && id !== 'unassigned'))]
+    const rides = await RideModel.find({ id: { $in: rideIds } })
+    const rideMap = new Map(rides.map((r) => [r.id, r]))
+
+    const driverIds = [...new Set(rides.map((r) => r.driverId).filter(Boolean))]
+    const vehicleIds = [...new Set(rides.map((r) => r.vehicleId).filter(Boolean))]
+    const [drivers, vehicles] = await Promise.all([
+      UserModel.find({ id: { $in: driverIds } }),
+      VehicleModel.find({ id: { $in: vehicleIds } }),
+    ])
+    const driverMap = new Map(drivers.map((d) => [d.id, d]))
+    const vehicleMap = new Map(vehicles.map((v) => [v.id, v]))
+
+    const enriched = bookings.map((b) => {
+      const bObj = b.toObject ? b.toObject() : { ...b }
+      const linkedRide = rideMap.get(b.rideId)
+      const linkedDriver = linkedRide ? driverMap.get(linkedRide.driverId) : null
+      const linkedVehicle = linkedRide ? vehicleMap.get(linkedRide.vehicleId) : null
+
+      // Sync booking status with ride status if ride is completed or cancelled
+      let effectiveStatus = bObj.status
+      if (linkedRide?.status === 'completed' && effectiveStatus !== 'cancelled') {
+        effectiveStatus = 'completed'
+      } else if (linkedRide?.status === 'cancelled') {
+        effectiveStatus = 'cancelled'
+      }
+
+      return {
+        ...bObj,
+        status: effectiveStatus,
+        ride: linkedRide
+          ? {
+              ...linkedRide.toObject(),
+              status: linkedRide.status,
+              driverName: linkedDriver?.name || linkedRide.driverName || 'Rahul Kumar',
+              driverPhone: linkedDriver?.phone || linkedRide.driverPhone || '+91 99887 76655',
+              driverRating: linkedDriver?.rating || linkedRide.driverRating || 4.8,
+              driverAvatar: linkedDriver?.avatar || (linkedDriver?.name ? linkedDriver.name.slice(0, 2).toUpperCase() : 'RK'),
+              vehicleName: linkedVehicle?.name || linkedRide.vehicleName || 'Campus EV Shuttle',
+              vehiclePlate: linkedVehicle?.registrationNumber || linkedRide.vehiclePlate || 'TS 09 UB 1001',
+            }
+          : null,
+      }
+    })
+
+    return { success: true, data: enriched }
   })
 
   fastify.get('/bookings', async (request) => {

@@ -48,16 +48,30 @@ export default function RideHistory() {
   })
   const [submittingRating, setSubmittingRating] = useState(false)
 
+  const effectiveStudentId = currentStudentId || (useAppStore.getState().currentUser as any)?.id || (useAppStore.getState().currentUser as any)?.studentId || 's1'
+
   // Load real backend bookings
   const loadBookings = async () => {
-    if (!currentStudentId) return
     try {
-      const data = await api.getUserBookings(currentStudentId)
+      const [data, allRides] = await Promise.all([
+        api.getUserBookings(effectiveStudentId).catch(() => []),
+        api.getRides({ status: 'all' }).catch(() => []),
+      ])
+
       if (Array.isArray(data)) {
         setBackendBookings(data)
       }
-    } catch {
-      // Fallback to store bookings
+
+      if (Array.isArray(allRides) && allRides.length > 0) {
+        useAppStore.setState((state) => {
+          const map = new Map<string, Ride>()
+          state.rides.forEach((r) => map.set(r.id, r))
+          allRides.forEach((r) => map.set(r.id, r))
+          return { rides: Array.from(map.values()) }
+        })
+      }
+    } catch (err) {
+      console.warn('[RideHistory] Failed to load bookings:', err)
     } finally {
       setLoading(false)
     }
@@ -70,10 +84,17 @@ export default function RideHistory() {
     const unsubscribe = api.onRealtimeEvent((event) => {
       if (
         event === 'BOOKING_CREATED' ||
+        event === 'BOOKING_UPDATED' ||
         event === 'BOOKING_CANCELLED' ||
         event === 'RIDE_UPDATED' ||
         event === 'RIDE_COMPLETED' ||
-        event === 'RIDE_STARTED'
+        event === 'RIDE_STARTED' ||
+        event === 'TRIP_CREATED' ||
+        event === 'TRIP_ROUTE_UPDATED' ||
+        event === 'PASSENGER_JOINED_TRIP' ||
+        event === 'PASSENGER_REMOVED_FROM_TRIP' ||
+        event === 'PASSENGER_BOARDED' ||
+        event === 'PASSENGER_DROPPED'
       ) {
         loadBookings()
       }
@@ -82,13 +103,13 @@ export default function RideHistory() {
     return () => {
       unsubscribe()
     }
-  }, [currentStudentId])
+  }, [effectiveStudentId])
 
   // Merge backend bookings with store bookings, prioritizing backend
   const allBookings: Booking[] = (() => {
     const map = new Map<string, Booking>()
     storeBookings
-      .filter((b) => b.studentId === currentStudentId)
+      .filter((b) => b.studentId === effectiveStudentId || b.studentId === currentStudentId)
       .forEach((b) => map.set(b.id, b))
     backendBookings.forEach((b) => map.set(b.id, b))
     return Array.from(map.values()).sort(
@@ -98,17 +119,18 @@ export default function RideHistory() {
 
   // Filter bookings based on active tab and ride status
   const filteredBookings = allBookings.filter((b) => {
-    const ride = rides.find((r) => r.id === b.rideId)
-    const isRideActive = ride?.status === 'active' || ride?.status === 'boarding'
-    const isCompleted = b.status === 'completed' || ride?.status === 'completed'
+    const ride = (b as any).ride || rides.find((r) => r.id === b.rideId)
+    const isCompleted = b.status === 'completed' || ride?.status === 'completed' || (b as any).status === 'dropped'
     const isCancelled = b.status === 'cancelled' || ride?.status === 'cancelled'
+    const isRideActive = !isCompleted && !isCancelled && (ride?.status === 'active' || ride?.status === 'boarding' || b.status === 'boarded')
+    const isUpcoming = !isCompleted && !isCancelled && !isRideActive && (ride?.status === 'waiting' || b.status === 'confirmed' || b.status === 'pending')
 
     if (activeTab === 'All') return true
     if (activeTab === 'Active') {
-      return !isCancelled && !isCompleted && (isRideActive || b.status === 'confirmed')
+      return isRideActive || (!ride && !isCompleted && !isCancelled && b.status === 'confirmed')
     }
     if (activeTab === 'Upcoming') {
-      return !isCancelled && !isCompleted && ride?.status === 'waiting'
+      return isUpcoming
     }
     if (activeTab === 'Completed') {
       return isCompleted
@@ -126,7 +148,7 @@ export default function RideHistory() {
     if (booking.status === 'completed' || ride?.status === 'completed') {
       return <Badge variant="green" size="sm">Completed</Badge>
     }
-    if (ride?.status === 'active') {
+    if (ride?.status === 'active' || booking.status === 'boarded') {
       return (
         <Badge variant="blue" size="sm">
           <span className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse mr-1 inline-block" />
@@ -220,12 +242,20 @@ export default function RideHistory() {
       ) : (
         <div className="space-y-3.5">
           {filteredBookings.map((booking) => {
-            const ride = rides.find((r) => r.id === booking.rideId)
-            const driver = drivers.find((d) => d.id === ride?.driverId)
-            const vehicle = vehicles.find((v) => v.id === ride?.vehicleId)
+            const ride = (booking as any).ride || rides.find((r) => r.id === booking.rideId)
+            const driver = drivers.find((d) => d.id === ride?.driverId) || {
+              name: ride?.driverName || 'Campus Driver',
+              rating: ride?.driverRating || 4.8,
+              phone: ride?.driverPhone,
+              avatar: ride?.driverAvatar,
+            }
+            const vehicle = vehicles.find((v) => v.id === ride?.vehicleId) || {
+              name: ride?.vehicleName || 'Campus EV Shuttle',
+              registration: ride?.vehiclePlate || 'TS 09 UB 1001',
+            }
 
-            const isActiveOrBoarding = ride?.status === 'active' || ride?.status === 'boarding'
-            const isCompleted = booking.status === 'completed' || ride?.status === 'completed'
+            const isActiveOrBoarding = ride?.status === 'active' || ride?.status === 'boarding' || booking.status === 'boarded'
+            const isCompleted = booking.status === 'completed' || ride?.status === 'completed' || (booking as any).status === 'dropped'
             const isCancelled = booking.status === 'cancelled' || ride?.status === 'cancelled'
 
             return (
@@ -327,26 +357,30 @@ export default function RideHistory() {
                   )}
 
                   <div className="ml-auto flex items-center gap-2">
-                    {ride && (
-                      <Button
-                        size="sm"
-                        variant={isActiveOrBoarding ? 'primary' : 'secondary'}
-                        onClick={() => navigate(isActiveOrBoarding ? `/student/live?rideId=${ride.id}` : `/student/ride/${ride.id}`)}
-                        className="text-xs gap-1"
-                      >
-                        {isActiveOrBoarding ? (
-                          <>
-                            <Navigation size={12} />
-                            Track Live
-                          </>
-                        ) : (
-                          <>
-                            Details
-                            <ChevronRight size={12} />
-                          </>
-                        )}
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant={isActiveOrBoarding ? 'primary' : 'secondary'}
+                      onClick={() =>
+                        navigate(
+                          isActiveOrBoarding
+                            ? `/student/live?rideId=${ride?.id || booking.rideId}`
+                            : `/student/ride/${ride?.id || booking.rideId}`
+                        )
+                      }
+                      className="text-xs gap-1"
+                    >
+                      {isActiveOrBoarding ? (
+                        <>
+                          <Navigation size={12} />
+                          Track Live
+                        </>
+                      ) : (
+                        <>
+                          Details
+                          <ChevronRight size={12} />
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </div>
               </Card>
