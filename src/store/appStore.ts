@@ -199,7 +199,7 @@ interface AppState {
   loadAuditLog: () => Promise<void>
 
   // Actions — Safety
-  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string } | string, studentId?: string) => Promise<any>
+  triggerSOS: (params?: { rideId?: string; userId?: string; lat?: number; lng?: number; emergencyPhone?: string; emergencyName?: string; emergencyEmail?: string; forceNew?: boolean } | string, studentId?: string) => Promise<any>
   acknowledgeSafetyEvent: (eventId: string) => Promise<void>
   triggerDeviation: (rideId: string) => Promise<void>
   resolveDeviation: (rideId: string, eventId: string) => Promise<void>
@@ -1306,7 +1306,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         payload.emergencyName = storeContact.name
       }
 
-      const res = await api.triggerSOS(payload)
+      const res = await api.triggerSOS({ ...payload, forceNew: true })
       const eventData = res?.data || res
       const normalized = normalizeSafetyEvent(eventData)
 

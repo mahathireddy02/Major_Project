@@ -134,7 +134,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
     (!isDummy(emergencyContact?.phone) ? emergencyContact!.phone.trim() : '') ||
     (!isDummy(storeEmergencyContact?.phone) ? storeEmergencyContact!.phone.trim() : '') ||
     (!isDummy(user?.phone) ? user!.phone.trim() : '') ||
-    '+917989442841'
+    '+918519804666'
 
   const effectiveName =
     customName.trim() ||
@@ -146,7 +146,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
   const displayEmergencyPhone =
     (!isDummy(effectivePhone) ? effectivePhone : '') ||
     (!isDummy(activeUserSos?.emergencyContact?.phone) ? activeUserSos?.emergencyContact?.phone : '') ||
-    '+917989442841'
+    '+918519804666'
 
   const displayEmergencyName =
     effectiveName ||
@@ -269,13 +269,15 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
-                  <a
-                    href={`tel:${displayEmergencyPhone}`}
-                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={handleConfirmSOS}
+                    className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer disabled:opacity-50"
                   >
                     <Phone size={15} />
                     <span>Direct Call ({displayEmergencyPhone})</span>
-                  </a>
+                  </button>
                   <button
                     type="button"
                     disabled={isSubmitting}

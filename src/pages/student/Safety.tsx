@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
-import { Shield, Phone, AlertTriangle, CheckCircle, ChevronLeft, Navigation, HeartHandshake, ShieldAlert } from 'lucide-react'
+import { Shield, Phone, AlertTriangle, CheckCircle, ChevronLeft, Navigation, HeartHandshake, ShieldAlert, Loader2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
+import toast from 'react-hot-toast'
 import { useAppStore } from '../../store/appStore'
 import Button from '../../components/ui/Button'
 import Card from '../../components/ui/Card'
@@ -12,12 +13,14 @@ import { GlobalSosModal } from '../../components/safety/GlobalSosModal'
 export default function Safety() {
   const navigate = useNavigate()
   const [sosModalOpen, setSosModalOpen] = useState(false)
+  const [isCallingContact, setIsCallingContact] = useState(false)
   const storeEmergencyContact = useAppStore((s) => s.emergencyContact)
   const [contact, setContact] = useState<EmergencyContact | null>(storeEmergencyContact || null)
   const rides = useAppStore((s) => s.rides)
   const safetyEvents = useAppStore((s) => s.safetyEvents)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
   const currentUser = useAppStore((s) => s.currentUser)
+  const triggerSOS = useAppStore((s) => s.triggerSOS)
 
   const activeUserId = currentUser?.id || currentStudentId || 's1'
 
@@ -122,12 +125,34 @@ export default function Safety() {
                 </div>
                 <p className="text-xs text-slate-500 font-mono mt-0.5">{contact.phone}</p>
               </div>
-              <a
-                href={`tel:${contact.phone}`}
-                className="w-8 h-8 bg-rose-100 rounded-lg flex items-center justify-center cursor-pointer hover:bg-rose-200 transition-colors"
+              <button
+                type="button"
+                disabled={isCallingContact}
+                onClick={async () => {
+                  setIsCallingContact(true)
+                  try {
+                    toast.loading(`Placing automated Twilio emergency call to ${contact.name} (${contact.phone})...`, { id: 'call-toast' })
+                    await triggerSOS({
+                      emergencyPhone: contact.phone,
+                      emergencyName: contact.name,
+                      forceNew: true,
+                    })
+                    toast.success(`Automated emergency call dispatched to ${contact.phone}!`, { id: 'call-toast', icon: '📞' })
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to place automated call.', { id: 'call-toast' })
+                  } finally {
+                    setIsCallingContact(false)
+                  }
+                }}
+                className="w-9 h-9 bg-rose-100 hover:bg-rose-200 rounded-lg flex items-center justify-center cursor-pointer transition-colors shadow-xs"
+                title={`Call ${contact.name} (${contact.phone}) via Twilio Voice Dispatch`}
               >
-                <Phone size={14} className="text-rose-600" />
-              </a>
+                {isCallingContact ? (
+                  <Loader2 size={16} className="text-rose-600 animate-spin" />
+                ) : (
+                  <Phone size={15} className="text-rose-600" />
+                )}
+              </button>
             </div>
           )}
           {[

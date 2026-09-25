@@ -218,9 +218,32 @@ export default function StudentProfile() {
                 {emergencyContact.phone}
               </p>
             </div>
-            <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
-              Active SOS
-            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    toast.loading(`Placing Twilio emergency call to ${emergencyContact.name} (${emergencyContact.phone})...`, { id: 'profile-call' })
+                    await useAppStore.getState().triggerSOS({
+                      emergencyPhone: emergencyContact.phone,
+                      emergencyName: emergencyContact.name,
+                      forceNew: true,
+                    })
+                    toast.success(`Emergency call dispatched to ${emergencyContact.phone}!`, { id: 'profile-call', icon: '📞' })
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to place call', { id: 'profile-call' })
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                title={`Call ${emergencyContact.phone} via Twilio Voice Dispatch`}
+              >
+                <Phone size={12} />
+                <span>Call</span>
+              </button>
+              <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full">
+                Active SOS
+              </span>
+            </div>
           </div>
         ) : (
           <div className="p-4 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-1.5">

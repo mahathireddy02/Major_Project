@@ -1,3 +1,4 @@
+import twilio from 'twilio'
 import { ENV } from '../config/env.js'
 import { normalizePhoneNumber, isValidPhoneNumber } from '../utils/phone.js'
 
@@ -69,7 +70,7 @@ export class TwilioService {
   }
 
   /** Centralized Twilio initialization */
-  public async initClient() {
+  public initClient() {
     const accountSid = ENV.TWILIO_ACCOUNT_SID?.trim()
     const authToken = ENV.TWILIO_AUTH_TOKEN?.trim()
     this.fromNumber = ENV.TWILIO_PHONE_NUMBER?.trim()
@@ -77,26 +78,10 @@ export class TwilioService {
 
     if (accountSid && authToken && (this.fromNumber || this.verifyServiceSid)) {
       try {
-        let twilioLib: any = null
-        try {
-          const modName = 'twilio'
-          // @ts-ignore
-          const imported = await import(/* @vite-ignore */ modName)
-          twilioLib = imported.default || imported
-        } catch {
-          twilioLib = null
-        }
-
-        if (twilioLib) {
-          this.client = twilioLib(accountSid, authToken)
-          this.isConfigured = true
-          const maskedSid = accountSid.length > 8 ? accountSid.slice(0, 4) + '...' + accountSid.slice(-4) : 'Configured'
-          console.log('[TwilioService] Initialized official Twilio client with Account SID: ' + maskedSid)
-        } else {
-          this.isConfigured = false
-          this.client = null
-          console.log('[TwilioService] Optional "twilio" module not found. Running in DEV mode (OTP & SMS logged safely to console).')
-        }
+        this.client = twilio(accountSid, authToken)
+        this.isConfigured = true
+        const maskedSid = accountSid.length > 8 ? accountSid.slice(0, 4) + '...' + accountSid.slice(-4) : 'Configured'
+        console.log('[TwilioService] Initialized official Twilio client with Account SID: ' + maskedSid)
       } catch (err: any) {
         this.isConfigured = false
         this.client = null

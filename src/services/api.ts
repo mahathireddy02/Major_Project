@@ -1071,10 +1071,12 @@ class ApiClient {
     lng?: number
     emergencyPhone?: string
     emergencyName?: string
+    emergencyEmail?: string
+    forceNew?: boolean
   }): Promise<any> {
     return this.request('/safety/sos', {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({ forceNew: true, ...params }),
     })
   }
 
