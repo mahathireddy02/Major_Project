@@ -142,17 +142,27 @@ export class SafetyService {
       !p ||
       p.replace(/\D/g, '').includes('9876543210') ||
       p.replace(/\D/g, '').includes('9876543219') ||
-      p.replace(/\D/g, '').length < 10
+      p.replace(/\D/g, '').includes('7989442841') ||
+      p.replace(/\D/g, '').length < 9
+
+    const isOldPlaceholderContact =
+      emergencyContact?.name === 'udaykiran' ||
+      emergencyContact?.phone === '+917989442841'
 
     let targetPhone = ''
+    let targetName = 'Demo Emergency Contact'
     if (emergencyPhone && emergencyPhone.trim() && !isDummyPhone(emergencyPhone)) {
+      // User explicitly specified or edited emergency phone
       targetPhone = emergencyPhone.trim()
-    } else if (emergencyContact?.phone && !isDummyPhone(emergencyContact.phone)) {
+      targetName = (emergencyName || emergencyContact?.name || 'Demo Emergency Contact').trim()
+    } else if (emergencyContact?.phone && !isDummyPhone(emergencyContact.phone) && !isOldPlaceholderContact) {
+      // User has an existing valid edited emergency contact
       targetPhone = emergencyContact.phone.trim()
-    } else if (user?.phone && !isDummyPhone(user.phone)) {
-      targetPhone = user.phone.trim()
+      targetName = emergencyContact.name?.trim() || 'Demo Emergency Contact'
     } else {
-      targetPhone = ENV.SOS_ALERT_PHONE_NUMBER || ''
+      // Fixed default target emergency contact
+      targetPhone = ENV.SOS_ALERT_PHONE_NUMBER || '+91851984666'
+      targetName = 'Demo Emergency Contact'
     }
 
     // Resolve target email for emergency contact
@@ -222,7 +232,7 @@ export class SafetyService {
 
     if (emergencyPhone && emergencyPhone.trim() && !isDummyPhone(emergencyPhone)) {
       const cleanPhone = emergencyPhone.trim()
-      const cleanName = (emergencyName || 'Emergency Contact').trim()
+      const cleanName = (emergencyName || targetName || 'Demo Emergency Contact').trim()
       if (emergencyContact) {
         emergencyContact.phone = cleanPhone
         if (cleanName) emergencyContact.name = cleanName
@@ -240,6 +250,24 @@ export class SafetyService {
         })
       }
       targetPhone = cleanPhone
+      targetName = cleanName
+    } else if (!emergencyContact) {
+      emergencyContact = await EmergencyContactModel.create({
+        id: `ec-${resolvedUserId}-${Date.now().toString().slice(-4)}`,
+        userId: resolvedUserId,
+        name: 'Demo Emergency Contact',
+        relationship: 'Primary Contact',
+        phone: targetPhone || '+91851984666',
+        email: targetEmail || 'demo.emergency@campusflow.io',
+        isPrimary: true,
+      })
+    } else if (isOldPlaceholderContact) {
+      emergencyContact.name = 'Demo Emergency Contact'
+      emergencyContact.phone = '+91851984666'
+      if (!emergencyContact.email || emergencyContact.email.includes('udaykiran')) {
+        emergencyContact.email = 'demo.emergency@campusflow.io'
+      }
+      await emergencyContact.save()
     }
 
     const resolvedLat = lat ?? ride?.currentLat ?? vehicle?.currentLat ?? 17.398
@@ -307,6 +335,59 @@ export class SafetyService {
       console.log('[SafetyService] No emergency contact phone or SOS_ALERT_PHONE_NUMBER configured.')
     }
 
+    const campusSecurityPhone = ENV.CAMPUS_SECURITY_PHONE || '+916305649558'
+    let securityCallResult = { success: false, status: 'NOT_CONFIGURED' as const, callSid: '', message: '' }
+    let securitySmsResult = { sent: false, status: 'NOT_CONFIGURED' as const, message: '' }
+
+    if (campusSecurityPhone) {
+      // 2b. Dispatch Emergency Voice Call Alert directly to Campus Security
+      try {
+        const secCallRes = await twilioService.makeEmergencyCall({
+          recipientPhone: campusSecurityPhone,
+          recipientName: 'Campus Security Control',
+          senderName: user?.name || userId,
+          senderRole: userRole,
+          rideId: ride?.id,
+          routeName: ride ? routeName : undefined,
+          lat: resolvedLat,
+          lng: resolvedLng,
+          vehiclePlate: vehicle?.registrationNumber,
+        })
+        securityCallResult = {
+          success: secCallRes.success,
+          status: secCallRes.status,
+          callSid: secCallRes.callSid || '',
+          message: secCallRes.message || secCallRes.error || (secCallRes.success ? 'Twilio voice call to Campus Security initiated.' : 'Failed to call Campus Security'),
+        }
+      } catch (secCallErr: any) {
+        console.warn('[SafetyService] Twilio Campus Security Voice Call error:', secCallErr?.message)
+        securityCallResult = { success: false, status: 'FAILED' as const, callSid: '', message: secCallErr?.message || 'Twilio Security Voice Call failed' }
+      }
+
+      // 2c. Dispatch Emergency SMS Alert directly to Campus Security
+      try {
+        const secSmsRes = await twilioService.sendSOSAlert({
+          recipientPhone: campusSecurityPhone,
+          recipientName: 'Campus Security Control',
+          senderName: user?.name || userId,
+          senderRole: userRole,
+          rideId: ride?.id,
+          routeName: ride ? routeName : undefined,
+          lat: resolvedLat,
+          lng: resolvedLng,
+          vehiclePlate: vehicle?.registrationNumber,
+        })
+        securitySmsResult = {
+          sent: secSmsRes.success,
+          status: (secSmsRes.status === 'SENT' ? 'SENT' : secSmsRes.status === 'FAILED' ? 'FAILED' : 'NOT_CONFIGURED') as any,
+          message: secSmsRes.success ? 'Twilio emergency SMS to Campus Security dispatched.' : (secSmsRes.error || 'Failed SMS to Campus Security'),
+        }
+      } catch (secSmsErr: any) {
+        console.warn('[SafetyService] Twilio Campus Security SMS error:', secSmsErr?.message)
+        securitySmsResult = { sent: false, status: 'FAILED' as const, message: secSmsErr?.message || 'Twilio Security SMS failed' }
+      }
+    }
+
     // 3. Dispatch Emergency Email Alert to Emergency Contact
     let emailResult = { sent: false, status: 'NOT_CONFIGURED' as const, message: '' }
     if (targetEmail) {
@@ -339,11 +420,11 @@ export class SafetyService {
 
     const contactSummary = emergencyContact
       ? `${emergencyContact.name} (${emergencyContact.relationship}: ${emergencyContact.phone}${emergencyContact.email ? `, ${emergencyContact.email}` : ''})`
-      : (ENV.SOS_ALERT_PHONE_NUMBER ? `Campus Security (${ENV.SOS_ALERT_PHONE_NUMBER})` : 'None registered')
+      : `Campus Security (${campusSecurityPhone})`
 
     const message = isDriver
-      ? `CRITICAL DRIVER SOS: Driver ${user?.name || userId} triggered emergency alarm on ${routeName} (Vehicle: ${vehicle?.registrationNumber || vehicle?.name || 'TS 09 AB 1234'}, Passengers: ${passengerCount}). Emergency Contact: ${contactSummary}.`
-      : `CRITICAL SOS: Passenger ${user?.name || userId} triggered emergency alarm on ${routeName}. Driver: ${driverUser?.name || 'Assigned Driver'}. Emergency Contact: ${contactSummary}.`
+      ? `CRITICAL DRIVER SOS: Driver ${user?.name || userId} triggered emergency alarm on ${routeName} (Vehicle: ${vehicle?.registrationNumber || vehicle?.name || 'TS 09 AB 1234'}, Passengers: ${passengerCount}). Emergency Contact: ${contactSummary}. Campus Security: ${campusSecurityPhone}.`
+      : `CRITICAL SOS: Passenger ${user?.name || userId} triggered emergency alarm on ${routeName}. Driver: ${driverUser?.name || 'Assigned Driver'}. Emergency Contact: ${contactSummary}. Campus Security: ${campusSecurityPhone}.`
 
     const safetyEvent = await SafetyEventModel.create({
       id: eventId,
@@ -371,12 +452,22 @@ export class SafetyService {
             phone: emergencyContact.phone,
             email: emergencyContact.email || targetEmail || undefined,
           }
-        : (targetEmail ? { name: emergencyName || 'Emergency Contact', relationship: 'Emergency Contact', phone: targetPhone || '', email: targetEmail } : undefined),
+        : {
+            name: targetName || 'Demo Emergency Contact',
+            relationship: 'Primary Contact',
+            phone: targetPhone || '+91851984666',
+            email: targetEmail || undefined,
+          },
+      campusSecurityPhone,
       smsStatus: smsResult.status,
       smsMessage: smsResult.message,
       callStatus: callResult.status,
       callSid: callResult.callSid,
       callMessage: callResult.message,
+      securityCallStatus: securityCallResult.status,
+      securityCallMessage: securityCallResult.message,
+      securitySmsStatus: securitySmsResult.status,
+      securitySmsMessage: securitySmsResult.message,
       emailStatus: emailResult.status,
       emailMessage: emailResult.message,
     })
@@ -421,8 +512,13 @@ export class SafetyService {
       driver: driverUser ? { id: driverUser.id, name: driverUser.name, phone: driverUser.phone } : null,
       vehicle: vehicle ? { id: vehicle.id, name: vehicle.name, registration: vehicle.registrationNumber } : null,
       emergencyContact: safetyEvent.emergencyContact,
+      campusSecurityPhone,
       smsStatus: smsResult.status,
       callStatus: callResult.status,
+      securityCallStatus: securityCallResult.status,
+      securityCallMessage: securityCallResult.message,
+      securitySmsStatus: securitySmsResult.status,
+      securitySmsMessage: securitySmsResult.message,
       emailStatus: emailResult.status,
       emailMessage: emailResult.message,
       playAlarm: true,
@@ -433,8 +529,11 @@ export class SafetyService {
       user: user ? { name: user.name, phone: user.phone, role: user.role } : null,
       driver: driverUser ? { name: driverUser.name, phone: driverUser.phone } : null,
       emergencyContact: safetyEvent.emergencyContact || null,
+      campusSecurityPhone,
       smsResult,
       callResult,
+      securityCallResult,
+      securitySmsResult,
       emailResult,
       playAlarm: true,
     }

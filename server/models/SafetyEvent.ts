@@ -31,11 +31,16 @@ export interface ISafetyEvent extends Document {
     phone: string
     email?: string
   }
+  campusSecurityPhone?: string
   smsStatus?: 'SENT' | 'FAILED' | 'NOT_CONFIGURED'
   smsMessage?: string
   callStatus?: 'INITIATED' | 'QUEUED' | 'RINGING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'NOT_CONFIGURED'
   callSid?: string
   callMessage?: string
+  securityCallStatus?: 'INITIATED' | 'QUEUED' | 'RINGING' | 'IN_PROGRESS' | 'COMPLETED' | 'FAILED' | 'NOT_CONFIGURED'
+  securityCallMessage?: string
+  securitySmsStatus?: 'SENT' | 'FAILED' | 'NOT_CONFIGURED'
+  securitySmsMessage?: string
   emailStatus?: 'SENT' | 'FAILED' | 'NOT_CONFIGURED'
   emailMessage?: string
   createdAt: Date
@@ -86,11 +91,16 @@ const SafetyEventSchema = new Schema<ISafetyEvent>(
       phone: { type: String },
       email: { type: String },
     },
+    campusSecurityPhone: { type: String, default: '+916305649558' },
     smsStatus: { type: String, default: 'NOT_CONFIGURED' },
     smsMessage: { type: String },
     callStatus: { type: String, default: 'NOT_CONFIGURED' },
     callSid: { type: String },
     callMessage: { type: String },
+    securityCallStatus: { type: String, default: 'NOT_CONFIGURED' },
+    securityCallMessage: { type: String },
+    securitySmsStatus: { type: String, default: 'NOT_CONFIGURED' },
+    securitySmsMessage: { type: String },
     emailStatus: { type: String, default: 'NOT_CONFIGURED' },
     emailMessage: { type: String },
   },

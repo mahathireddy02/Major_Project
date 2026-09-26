@@ -13,7 +13,8 @@ export interface KnownDriverInfo {
 }
 
 export const KNOWN_DRIVERS: Record<string, KnownDriverInfo> = {
-  d1: { id: 'd1', name: 'Rahul Kumar', phone: '+91 99887 76655', avatar: 'RK', rating: 4.8, totalTrips: 312, vehicleId: 'v1', vehicleName: 'Campus Shuttle Bus 01 (V1)', vehicleRegistration: 'TS 09 AB 1234', vehicleType: 'Campus Shuttle Bus', licenseNumber: 'TS-09-2018-004521' },
+  d1: { id: 'd1', name: 'Demo Driver', phone: '+91 99887 76655', avatar: 'DD', rating: 4.8, totalTrips: 312, vehicleId: 'v1', vehicleName: 'Campus Shuttle Bus 01 (V1)', vehicleRegistration: 'TS 09 AB 1234', vehicleType: 'Campus Shuttle Bus', licenseNumber: 'TS-09-2018-004521' },
+  sd1: { id: 'sd1', name: 'Demo Student Driver', phone: '+91 98765 43299', avatar: 'SD', rating: 4.9, totalTrips: 45, vehicleId: 'v-sd1', vehicleName: 'Demo Student Car (V-SD1)', vehicleRegistration: 'TS 09 SD 2026', vehicleType: 'Car', licenseNumber: 'TS-09-2022-009876' },
   d2: { id: 'd2', name: 'Suresh Babu', phone: '+91 88776 65544', avatar: 'SB', rating: 4.6, totalTrips: 245, vehicleId: 'v2', vehicleName: 'Campus Van 07', vehicleRegistration: 'TS 09 CD 5678', vehicleType: 'Mini Van', licenseNumber: 'TS-09-2019-005612' },
   d3: { id: 'd3', name: 'Ravi Kumar', phone: '+91 77665 54433', avatar: 'RK', rating: 4.9, totalTrips: 428, vehicleId: 'v3', vehicleName: 'Campus Bus 03', vehicleRegistration: 'TS 09 EF 9012', vehicleType: 'Campus Bus', licenseNumber: 'TS-09-2017-003489' },
   d4: { id: 'd4', name: 'Mahesh Reddy', phone: '+91 66554 43322', avatar: 'MR', rating: 4.7, totalTrips: 189, vehicleId: 'v4', vehicleName: 'Campus Van 15', vehicleRegistration: 'TS 09 GH 3456', vehicleType: 'Mini Van', licenseNumber: 'TS-09-2020-006734' },

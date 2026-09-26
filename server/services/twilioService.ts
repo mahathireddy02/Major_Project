@@ -356,7 +356,8 @@ export class TwilioService {
 
   /** Universal SOS Emergency Alert SMS Dispatch */
   async sendSOSAlert(payload: SosAlertPayload): Promise<SendSmsResult> {
-    const targetPhone = payload.recipientPhone?.trim() || ENV.SOS_ALERT_PHONE_NUMBER?.trim()
+    const targetPhone = payload.recipientPhone?.trim() || ENV.SOS_ALERT_PHONE_NUMBER?.trim() || '+91851984666'
+    const campusSec = ENV.CAMPUS_SECURITY_PHONE || '+916305649558'
 
     if (!targetPhone) {
       return {
@@ -382,6 +383,7 @@ export class TwilioService {
       'Emergency location:',
       locationUrl,
       '',
+      'Campus Security Helpline: ' + campusSec,
       'Please contact the student and campus security immediately.',
     ].filter(Boolean).join('\n')
 
@@ -390,7 +392,8 @@ export class TwilioService {
 
   /** Universal SOS Emergency Voice Call Dispatch via Twilio */
   async makeEmergencyCall(payload: SosAlertPayload): Promise<SendCallResult> {
-    const targetPhone = payload.recipientPhone?.trim() || ENV.SOS_ALERT_PHONE_NUMBER?.trim()
+    const targetPhone = payload.recipientPhone?.trim() || ENV.SOS_ALERT_PHONE_NUMBER?.trim() || '+91851984666'
+    const campusSec = ENV.CAMPUS_SECURITY_PHONE || '+916305649558'
 
     if (!targetPhone) {
       return {
@@ -430,11 +433,11 @@ export class TwilioService {
     ${sender}, a registered ${role}, has activated an emergency S O S distress alert while on ${trip}, ${locationSpoken}.
     Immediate assistance has been requested.
     An S M S with live GPS coordinates and Google Maps link has been dispatched to your phone.
-    Please check your messages and contact ${sender} or campus security immediately.
+    Please check your messages and contact ${sender} or campus security at ${campusSec} immediately.
   </Say>
   <Pause length="2"/>
   <Say voice="alice" language="en-IN">
-    Repeating: Emergency S O S alert from ${sender}. Please check your phone immediately.
+    Repeating: Emergency S O S alert from ${sender}. Campus security helpline is ${campusSec}. Please check your phone immediately.
   </Say>
 </Response>`
 

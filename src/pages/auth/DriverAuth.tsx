@@ -234,7 +234,7 @@ export default function DriverAuth() {
   // Demo Driver Login (Uses real existing database credentials)
   const handleDemoDriverLogin = async () => {
     setLoading(true)
-    const email = 'rahul.kumar.driver@gmail.com'
+    const email = 'demodriver@gmail.com'
     const password = 'campus2026'
     setSignInCredential(email)
     setSignInPassword(password)
@@ -244,13 +244,41 @@ export default function DriverAuth() {
         password,
         role: 'driver',
       })
-      toast.success(`Welcome back, Driver ${res.user?.name || 'Rahul Kumar'}!`)
+      toast.success(`Welcome back, Driver ${res.user?.name || 'Demo Driver'}!`)
       navigate('/driver/dashboard')
     } catch (err: any) {
       toast.error(err.message || 'Driver demo login failed')
     } finally {
       setLoading(false)
     }
+  }
+
+  // Demo Student as Driver Login (Direct to Driver Dashboard)
+  const handleDemoStudentDriverLogin = async () => {
+    setLoading(true)
+    const email = 'demostudentdriver@gmail.com'
+    const password = 'campus2026'
+    setSignInCredential(email)
+    setSignInPassword(password)
+    try {
+      const res = await login({
+        email,
+        password,
+        role: 'driver',
+      })
+      toast.success(`Welcome back, Student Driver ${res.user?.name || 'Demo Student Driver'}!`)
+      navigate('/driver/dashboard')
+    } catch (err: any) {
+      toast.error(err.message || 'Student driver demo login failed')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSdDemoFill = () => {
+    setSdSignInEmail('demostudent@gmail.com')
+    setSdSignInPassword('campus2026')
+    toast.success('Filled with Demo Student credentials! Click "Verify Student Account".')
   }
 
   // Student-as-Driver: verify student account
@@ -441,7 +469,7 @@ export default function DriverAuth() {
                     required
                     value={signInCredential}
                     onChange={(e) => setSignInCredential(e.target.value)}
-                    placeholder="rahul.kumar.driver@gmail.com or 9988776655"
+                    placeholder="demodriver@gmail.com or 9988776655"
                     className="input-field pl-9 text-sm"
                   />
                 </div>
@@ -498,8 +526,8 @@ export default function DriverAuth() {
                       🚗
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">Driver Demo • Rahul Kumar</p>
-                      <p className="text-[11px] text-emerald-700 font-mono">Email: rahul.kumar.driver@gmail.com</p>
+                      <p className="font-bold text-slate-900 text-xs">Driver Demo • Demo Driver</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">Email: demodriver@gmail.com</p>
                       <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                     </div>
                   </div>
@@ -555,7 +583,7 @@ export default function DriverAuth() {
                         required
                         value={fullName}
                         onChange={(e) => { setFullName(e.target.value); setOcrResult(null) }}
-                        placeholder="e.g. Rahul Kumar"
+                        placeholder="e.g. Demo Driver"
                         className="input-field pl-9 text-sm"
                       />
                     </div>
@@ -1015,8 +1043,8 @@ export default function DriverAuth() {
                       🚗
                     </div>
                     <div>
-                      <p className="font-bold text-slate-900 text-xs">Driver Demo • Rahul Kumar</p>
-                      <p className="text-[11px] text-emerald-700 font-mono">Email: rahul.kumar.driver@gmail.com</p>
+                      <p className="font-bold text-slate-900 text-xs">Driver Demo • Demo Driver</p>
+                      <p className="text-[11px] text-emerald-700 font-mono">Email: demodriver@gmail.com</p>
                       <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                     </div>
                   </div>
@@ -1090,7 +1118,7 @@ export default function DriverAuth() {
                           <Mail size={16} className="absolute left-3 top-3 text-slate-400" />
                           <input type="email" required value={sdSignInEmail}
                             onChange={(e) => setSdSignInEmail(e.target.value)}
-                            placeholder="student@campus.edu"
+                            placeholder="demostudent@gmail.com"
                             className="input-field pl-9 text-sm" />
                         </div>
                       </div>
@@ -1114,6 +1142,44 @@ export default function DriverAuth() {
                         Verify Student Account
                         <ArrowRight size={16} />
                       </Button>
+
+                      {/* Demo Student-as-Driver Helper Buttons */}
+                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+                          ⚡ Sandbox Demo Credentials
+                        </span>
+
+                        {/* 1-Click Instant Login as Student Driver */}
+                        <button
+                          type="button"
+                          onClick={handleDemoStudentDriverLogin}
+                          disabled={sdLoading}
+                          className="w-full p-2.5 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100 hover:border-emerald-500 text-left transition-all flex items-center justify-between group cursor-pointer shadow-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shadow-sm">
+                              🎓
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-900 text-xs">Student Driver Demo • Demo Student Driver</p>
+                              <p className="text-[10px] text-emerald-700 font-mono">Email: demostudentdriver@gmail.com</p>
+                              <p className="text-[9px] text-slate-500 font-mono">Password: campus2026</p>
+                            </div>
+                          </div>
+                          <Badge variant="green" size="sm" className="font-semibold text-[10px]">
+                            1-Click Sign In →
+                          </Badge>
+                        </button>
+
+                        {/* Auto-fill to test 3-step verification flow */}
+                        <button
+                          type="button"
+                          onClick={handleSdDemoFill}
+                          className="w-full py-2 px-3 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-600 text-xs font-medium text-center transition-colors cursor-pointer"
+                        >
+                          📝 Auto-fill Demo Student (demostudent@gmail.com) to test wizard
+                        </button>
+                      </div>
                     </form>
                   )}
 

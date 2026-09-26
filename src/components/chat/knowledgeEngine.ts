@@ -218,7 +218,7 @@ export function generateBotResponse(
       return {
         text: `🚨 **Campus Safety & Emergency Protocol:**\n\n` +
           `• **Emergency SOS**: Tap the red SOS button to alert Dispatcher & Security immediately with real-time GPS telemetry.\n` +
-          `• **Campus Security Control**: \`+91 98765 43210\`\n` +
+          `• **Campus Security Control**: \`+916305649558\`\n` +
           `• **Driver Verification**: All drivers are institutional staff with verified credentials.\n` +
           `• **Corridor Monitoring**: System automatically alerts if a shuttle deviates from designated routes.`,
         actions: [
@@ -343,7 +343,7 @@ export function generateBotResponse(
         text: `⚠️ **Handling Delays & Route Deviations**:\n\n` +
           `• The GPS engine tracks your vehicle along the approved corridor.\n` +
           `• If you encounter roadblocks or severe traffic, you can trigger **Recalculate Route** on the trip screen to get an alternate OSRM path.\n` +
-          `• In case of breakdown or medical emergency, immediately notify Central Dispatch or call Security at \`+91 98765 43210\`.`,
+          `• In case of breakdown or medical emergency, immediately notify Central Dispatch or call Security at \`+916305649558\`.`,
         actions: [
           { label: 'Current Trip Controls', to: '/driver/trip', variant: 'secondary' },
         ],

@@ -27,7 +27,7 @@ export const demoRoutes: FastifyPluginAsync = async (fastify) => {
     const nextSeat = ride.bookedSeats + 1
     const student = await UserModel.findOne({ role: 'STUDENT', id: { $nin: ride.passengers.map((p: any) => p.studentId) } })
     const studentId = student?.id || `s-demo-${Date.now().toString().slice(-4)}`
-    const studentName = student?.name || 'Uday Kiran'
+    const studentName = student?.name || 'Demo Student'
     const pickup = ride.pickupPoints[0]?.name || 'Hostel A'
 
     ride.bookedSeats += 1

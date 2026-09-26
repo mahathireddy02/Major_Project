@@ -29,7 +29,7 @@ export const LOCATIONS: Record<string, { name: string; lat: number; lng: number 
 
 // ─── Students (10 Institutional Students) ─────────────────────────────────────
 export const STUDENTS: Student[] = [
-  { id: 's1',  name: 'Uday Kiran', email: 'uday.kiran@sriindu.ac.in', studentId: '21IND0501', rollNumber: '21IND0501', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science', year: 3, phone: '+91 98765 43210', avatar: 'UK', rating: 4.9, totalRides: 38, verified: true, role: 'student', gender: 'Male' },
+  { id: 's1',  name: 'Demo Student', email: 'demostudent@gmail.com', studentId: '21IND0501', rollNumber: '21IND0501', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science', year: 3, phone: '+91 98765 43210', avatar: 'DS', rating: 4.9, totalRides: 38, verified: true, role: 'student', gender: 'Male' },
   { id: 's2',  name: 'Arjun Rao',     email: 'arjun.rao@iith.ac.in', studentId: 'IITH2022015', rollNumber: 'EE22BTECH11015', collegeName: 'IIT Hyderabad', department: 'Electrical Engg', year: 2, phone: '+91 87654 32109', avatar: 'AR', rating: 4.7, totalRides: 22, verified: true, role: 'student', gender: 'Male' },
   { id: 's3',  name: 'Priya Sharma',  email: 'priya.sharma@nitw.ac.in', studentId: 'NITW2021034', rollNumber: 'ME21B034', collegeName: 'NIT Warangal', department: 'Mechanical Engg', year: 3, phone: '+91 76543 21098', avatar: 'PS', rating: 4.8, totalRides: 31, verified: true, role: 'student', gender: 'Female' },
   { id: 's4',  name: 'Rahul Varma',   email: 'rahul.varma@cbit.ac.in', studentId: 'CBIT2023007', rollNumber: '160123733007', collegeName: 'Chaitanya Bharathi Institute of Technology', department: 'Computer Science', year: 1, phone: '+91 65432 10987', avatar: 'RV', rating: 4.6, totalRides: 9,  verified: true, role: 'student', gender: 'Male' },
@@ -43,16 +43,17 @@ export const STUDENTS: Student[] = [
 
 // ─── Faculty (5 Institutional Faculty Members) ────────────────────────────────
 export const FACULTY: Faculty[] = [
-  { id: 'f1', name: 'Dr. Ramesh Sharma', email: 'ramesh.sharma@sriindu.ac.in', collegeId: 'FAC-2026-001', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science & Engineering', phone: '+91 91234 56780', avatar: 'RS', rating: 5.0, totalRides: 64, isVerified: true, role: 'faculty', gender: 'Male' },
+  { id: 'f1', name: 'Demo Faculty', email: 'demofaculty@gmail.com', collegeId: 'FAC-2026-001', collegeName: 'Sri Indu College of Engineering & Technology', department: 'Computer Science & Engineering', phone: '+91 91234 56780', avatar: 'DF', rating: 5.0, totalRides: 64, isVerified: true, role: 'faculty', gender: 'Male' },
   { id: 'f2', name: 'Prof. Lakshmi Nair', email: 'prof.lakshmi.nair@iith.ac.in', collegeId: 'FAC-IITH-012', collegeName: 'IIT Hyderabad', department: 'Electrical Engineering', phone: '+91 82345 67891', avatar: 'LN', rating: 4.9, totalRides: 42, isVerified: true, role: 'faculty', gender: 'Female' },
   { id: 'f3', name: 'Dr. Venkat Rao', email: 'dr.venkat.rao@nitw.ac.in', collegeId: 'FAC-NITW-045', collegeName: 'NIT Warangal', department: 'Mechanical Engineering', phone: '+91 73456 78902', avatar: 'VR', rating: 4.8, totalRides: 37, isVerified: true, role: 'faculty', gender: 'Male' },
   { id: 'f4', name: 'Prof. Sunita Gupta', email: 'prof.sunita.gupta@cbit.ac.in', collegeId: 'FAC-CBIT-088', collegeName: 'Chaitanya Bharathi Institute of Technology', department: 'Physics & Nanotech', phone: '+91 64567 89013', avatar: 'SG', rating: 4.9, totalRides: 51, isVerified: true, role: 'faculty', gender: 'Female' },
   { id: 'f5', name: 'Dr. Anil Kumar', email: 'dr.anil.kumar@osmania.ac.in', collegeId: 'FAC-OU-007', collegeName: 'Osmania University', department: 'Dean of Sciences', phone: '+91 55678 90124', avatar: 'AK', rating: 4.7, totalRides: 29, isVerified: true, role: 'faculty', gender: 'Male' },
 ]
 
-// ─── Drivers (20 Drivers with personal @gmail.com) ─────────────────────────────
+// ─── Drivers (Drivers with personal @gmail.com) ─────────────────────────────
 export const DRIVERS: Driver[] = [
-  { id: 'd1',  name: 'Rahul Kumar', email: 'rahul.kumar.driver@gmail.com', phone: '+91 99887 76655', avatar: 'RK', rating: 4.8, totalTrips: 312, verified: true, licenseNo: 'TS-09-2018-004521', role: 'driver', vehicleId: 'v1' },
+  { id: 'd1',  name: 'Demo Driver', email: 'demodriver@gmail.com', phone: '+91 99887 76655', avatar: 'DD', rating: 4.8, totalTrips: 312, verified: true, licenseNo: 'TS-09-2018-004521', role: 'driver', vehicleId: 'v1' },
+  { id: 'sd1', name: 'Demo Student Driver', email: 'demostudentdriver@gmail.com', phone: '+91 98765 43299', avatar: 'SD', rating: 4.9, totalTrips: 45, verified: true, licenseNo: 'TS-09-2022-009876', role: 'driver', vehicleId: 'v-sd1' },
   { id: 'd2',  name: 'Suresh Babu',    email: 'suresh.babu.driver@gmail.com', phone: '+91 88776 65544', avatar: 'SB', rating: 4.6, totalTrips: 245, verified: true, licenseNo: 'TS-09-2019-005612', role: 'driver', vehicleId: 'v2' },
   { id: 'd3',  name: 'Ravi Kumar',     email: 'ravi.kumar.cabs@gmail.com', phone: '+91 77665 54433', avatar: 'RK', rating: 4.9, totalTrips: 428, verified: true, licenseNo: 'TS-09-2017-003489', role: 'driver', vehicleId: 'v3' },
   { id: 'd4',  name: 'Mahesh Reddy',   email: 'mahesh.reddy.trans@gmail.com', phone: '+91 66554 43322', avatar: 'MR', rating: 4.7, totalTrips: 189, verified: true, licenseNo: 'TS-09-2020-006734', role: 'driver', vehicleId: 'v4' },

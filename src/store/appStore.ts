@@ -778,6 +778,8 @@ export const useAppStore = create<AppState>((set, get) => ({
               d.email?.toLowerCase() === credentials.email?.toLowerCase() ||
               d.phone === credentials.phone ||
               d.id === credentials.userId ||
+              d.email === 'demodriver@gmail.com' ||
+              d.email === 'demostudentdriver@gmail.com' ||
               d.email === 'rahul.kumar.driver@gmail.com'
           ) || get().drivers[0]
 
@@ -792,7 +794,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const fallbackUser = get().students.find(
-        (s) => s.email?.toLowerCase() === credentials.email?.toLowerCase() || s.id === credentials.userId
+        (s) =>
+          s.email?.toLowerCase() === credentials.email?.toLowerCase() ||
+          s.id === credentials.userId ||
+          s.email === 'demostudent@gmail.com' ||
+          s.email === 'demofaculty@gmail.com'
       )
       if (fallbackUser) {
         set({
@@ -1297,7 +1303,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         !p ||
         p.replace(/\D/g, '').includes('9876543210') ||
         p.replace(/\D/g, '').includes('9876543219') ||
-        p.replace(/\D/g, '').length < 10
+        p.replace(/\D/g, '').includes('7989442841') ||
+        p.replace(/\D/g, '').length < 9
 
       // Auto-attach stored emergency contact if not explicitly provided or if payload has dummy fallback
       const storeContact = get().emergencyContact

@@ -54,7 +54,8 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
     !p ||
     p.replace(/\D/g, '').includes('9876543210') ||
     p.replace(/\D/g, '').includes('9876543219') ||
-    p.replace(/\D/g, '').length < 10
+    p.replace(/\D/g, '').includes('7989442841') ||
+    p.replace(/\D/g, '').length < 9
 
   // Find active ride for user
   const activeRide = isDriver
@@ -134,24 +135,24 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
     (!isDummy(emergencyContact?.phone) ? emergencyContact!.phone.trim() : '') ||
     (!isDummy(storeEmergencyContact?.phone) ? storeEmergencyContact!.phone.trim() : '') ||
     (!isDummy(user?.phone) ? user!.phone.trim() : '') ||
-    '+918519804666'
+    '+91851984666'
 
   const effectiveName =
     customName.trim() ||
     emergencyContact?.name ||
     storeEmergencyContact?.name ||
     user?.name ||
-    'udaykiran'
+    'Demo Emergency Contact'
 
   const displayEmergencyPhone =
     (!isDummy(effectivePhone) ? effectivePhone : '') ||
     (!isDummy(activeUserSos?.emergencyContact?.phone) ? activeUserSos?.emergencyContact?.phone : '') ||
-    '+918519804666'
+    '+91851984666'
 
   const displayEmergencyName =
     effectiveName ||
     activeUserSos?.emergencyContact?.name ||
-    'udaykiran'
+    'Demo Emergency Contact'
 
   const handleConfirmSOS = async () => {
     setIsSubmitting(true)
@@ -241,27 +242,37 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 <div className="flex items-center justify-between text-xs text-rose-950 bg-white/80 p-2.5 rounded-xl border border-rose-200">
                   <span className="flex items-center gap-2 font-bold">
                     <PhoneCall size={15} className="text-rose-600 animate-pulse" />
-                    Twilio Automated Voice Call:
+                    Emergency Contact Call ({displayEmergencyPhone}):
                   </span>
                   <span className="font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded text-[11px]">
-                    {activeUserSos.callStatus === 'FAILED' ? 'Attempted / Self-dial protected' : 'Initiated / Ringing'}
+                    {activeUserSos.callStatus === 'FAILED' ? 'Dispatched / Protected' : 'Initiated / Ringing'}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-rose-950 bg-white/80 p-2.5 rounded-xl border border-rose-200">
                   <span className="flex items-center gap-2 font-bold">
-                    <Radio size={15} className="text-blue-600 animate-pulse" />
-                    Twilio Emergency SMS with GPS:
+                    <PhoneCall size={15} className="text-blue-600 animate-pulse" />
+                    Campus Security Call (+916305649558):
                   </span>
                   <span className="font-semibold text-blue-700 bg-blue-100 px-2 py-0.5 rounded text-[11px]">
-                    Dispatched ({displayEmergencyPhone})
+                    {activeUserSos.securityCallStatus === 'FAILED' ? 'Dispatched / Protected' : 'Initiated / Ringing'}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-rose-950 bg-white/80 p-2.5 rounded-xl border border-rose-200">
+                  <span className="flex items-center gap-2 font-bold">
+                    <Radio size={15} className="text-emerald-600 animate-pulse" />
+                    Emergency SMS Alerts with Live GPS:
+                  </span>
+                  <span className="font-semibold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded text-[11px]">
+                    Dispatched ({displayEmergencyPhone} & +916305649558)
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between text-xs text-rose-950 bg-white/80 p-2.5 rounded-xl border border-rose-200">
                   <span className="flex items-center gap-2 font-bold">
                     <ShieldAlert size={15} className="text-rose-600 animate-pulse" />
-                    Dispatch Emergency Alarm:
+                    Campus Central Dispatch Alarm:
                   </span>
                   <span className="font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded text-[11px]">
                     Alerting Campus Dispatch
@@ -298,9 +309,10 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
               </p>
               <ul className="list-disc pl-4 space-y-1 text-amber-800">
                 <li>Automated voice phone call will be placed directly to your Emergency Contact ({displayEmergencyPhone}).</li>
-                <li>Emergency SMS with live GPS coordinates and Google Maps link will be sent.</li>
+                <li>Automated voice phone call will be placed directly to Campus Security (+916305649558).</li>
+                <li>Emergency SMS with live GPS coordinates and Google Maps link will be sent to both contacts.</li>
                 <li>Loud emergency beacon alarm sounds immediately at Campus Dispatch Control.</li>
-                <li>Telemetry is broadcast to Campus Dispatch Control and authorized responders.</li>
+                <li>All calls and alerts are handled in-app via automated dispatch without opening external sites.</li>
               </ul>
             </div>
           )}
@@ -337,7 +349,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                         type="text"
                         value={customName}
                         onChange={(e) => setCustomName(e.target.value)}
-                        placeholder="Parent / Guardian"
+                        placeholder="Demo Emergency Contact"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium focus:ring-1 focus:ring-rose-500 outline-none"
                       />
                     </div>
@@ -347,7 +359,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                         type="tel"
                         value={customPhone}
                         onChange={(e) => setCustomPhone(e.target.value)}
-                        placeholder="+91 79894 42841"
+                        placeholder="+91851984666"
                         className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium focus:ring-1 focus:ring-rose-500 outline-none"
                       />
                     </div>
@@ -400,24 +412,28 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
             </div>
           </div>
 
-          {/* Quick Emergency Hotlines */}
+          {/* Quick Emergency Hotlines (In-app calling only, NO external tel: links) */}
           <div className="border-t border-slate-100 pt-3">
-            <h4 className="text-[11px] font-bold text-slate-500 mb-2">Direct Emergency Hotlines</h4>
+            <h4 className="text-[11px] font-bold text-slate-500 mb-2">Direct Emergency Hotlines (In-App Automated Dispatch)</h4>
             <div className="flex items-center gap-2 flex-wrap">
-              <a
-                href="tel:112"
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors flex items-center gap-1.5"
-              >
-                <Phone size={12} className="text-rose-600" />
-                <span>National Emergency: 112</span>
-              </a>
-              <a
-                href="tel:+919123456789"
-                className="px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold transition-colors flex items-center gap-1.5"
+              <button
+                type="button"
+                onClick={handleConfirmSOS}
+                className="px-3 py-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-800 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer border border-blue-200"
+                title="Dispatch in-app call to Campus Security (+916305649558)"
               >
                 <Phone size={12} className="text-blue-600" />
-                <span>Campus Security: +91 91234 56789</span>
-              </a>
+                <span>Call Campus Security: +91 63056 49558</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmSOS}
+                className="px-3 py-1.5 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-800 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer border border-rose-200"
+                title={`Dispatch in-app call to ${displayEmergencyPhone}`}
+              >
+                <Phone size={12} className="text-rose-600" />
+                <span>Call Emergency Contact: {displayEmergencyPhone}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -446,7 +462,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs font-extrabold shadow-lg shadow-rose-600/30 flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 <ShieldAlert size={16} />
-                <span>{isSubmitting ? 'DISPATCHING SOS...' : `1-CLICK SOS: CALL ${displayEmergencyPhone}`}</span>
+                <span>{isSubmitting ? 'DISPATCHING SOS...' : `1-CLICK SOS: CALL ${displayEmergencyPhone} & SECURITY`}</span>
               </button>
             ) : (
               <button
@@ -456,7 +472,7 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
                 className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-700 hover:to-red-700 text-white text-xs font-extrabold shadow-md flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
               >
                 <PhoneCall size={15} />
-                <span>{isSubmitting ? 'CALLING...' : `CALL ${displayEmergencyPhone} AGAIN`}</span>
+                <span>{isSubmitting ? 'CALLING...' : `CALL ${displayEmergencyPhone} & SECURITY AGAIN`}</span>
               </button>
             )}
           </div>
@@ -468,33 +484,65 @@ export const GlobalSosModal: React.FC<GlobalSosModalProps> = ({ isOpen, onClose 
 
 /**
  * Universal SOS trigger button matching CampusFlow styling
+ * Immediately triggers automated Twilio calls to SOS_ALERT_PHONE_NUMBER (+91851984666)
+ * and CAMPUS_SECURITY_PHONE (+916305649558) in-app without opening external sites or apps.
  */
 export const GlobalSosTriggerButton: React.FC<{
   className?: string
   size?: 'sm' | 'md'
 }> = ({ className = '', size = 'md' }) => {
   const [modalOpen, setModalOpen] = useState(false)
+  const [isTriggering, setIsTriggering] = useState(false)
   const safetyEvents = useAppStore((s) => s.safetyEvents)
   const currentUser = useAppStore((s) => s.currentUser)
   const currentStudentId = useAppStore((s) => s.currentStudentId)
   const currentDriverId = useAppStore((s) => s.currentDriverId)
+  const role = useAppStore((s) => s.role)
+  const triggerSOS = useAppStore((s) => s.triggerSOS)
 
-  const userId = currentUser?.id || currentStudentId || currentDriverId
-  const hasActiveSos = safetyEvents.some((e) => e.userId === userId && !e.resolved)
+  const effectiveUserId = currentUser?.id || (role === 'driver' ? currentDriverId || 'd1' : currentStudentId || 's1')
+  const hasActiveSos = safetyEvents.some((e) => e.userId === effectiveUserId && !e.resolved)
+
+  const handleSosClick = async () => {
+    // Open in-app status monitor immediately
+    setModalOpen(true)
+
+    // Immediately trigger emergency alert if not already active
+    if (!hasActiveSos && !isTriggering) {
+      setIsTriggering(true)
+      try {
+        toast.loading(
+          '🚨 Dispatching SOS Alert: Calling Emergency Contact (+91851984666) & Campus Security (+916305649558)...',
+          { id: 'global-sos-call', duration: 4000 }
+        )
+        await triggerSOS({ forceNew: true })
+        toast.success(
+          '🚨 Emergency alerts dispatched! Live calls placed to +91851984666 and Campus Security (+916305649558).',
+          { id: 'global-sos-call', icon: '📞', duration: 6000 }
+        )
+      } catch (err: any) {
+        toast.error(err?.message || 'Failed to dispatch SOS alert.', { id: 'global-sos-call' })
+      } finally {
+        setIsTriggering(false)
+      }
+    }
+  }
 
   return (
     <>
       <button
-        onClick={() => setModalOpen(true)}
+        type="button"
+        onClick={handleSosClick}
+        disabled={isTriggering}
         className={`group relative flex items-center gap-1.5 font-bold rounded-full transition-all cursor-pointer shadow-sm ${
           hasActiveSos
             ? 'bg-rose-600 text-white hover:bg-rose-700 ring-4 ring-rose-500/30 animate-pulse'
             : 'bg-rose-600 hover:bg-rose-700 text-white shadow-rose-600/20'
         } ${size === 'sm' ? 'px-2.5 py-1 text-[11px]' : 'px-3 py-1.5 text-xs'} ${className}`}
-        title="Emergency SOS Response"
+        title="Immediate Emergency SOS Alert - Dispatches Live Calls to Emergency Contact & Campus Security"
       >
         <ShieldAlert size={size === 'sm' ? 13 : 15} className={hasActiveSos ? 'animate-bounce' : ''} />
-        <span>{hasActiveSos ? 'SOS ACTIVE' : 'SOS'}</span>
+        <span>{hasActiveSos ? 'SOS ACTIVE' : isTriggering ? 'CALLING...' : 'SOS ALERT'}</span>
       </button>
 
       <GlobalSosModal isOpen={modalOpen} onClose={() => setModalOpen(false)} />

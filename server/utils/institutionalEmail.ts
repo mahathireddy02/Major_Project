@@ -78,6 +78,23 @@ export function validateInstitutionalEmail(
 
   const domain = match[1]
 
+  // Demo Sandbox Accounts whitelist (allows evaluators to test demo credentials seamlessly)
+  const DEMO_EMAILS = new Set([
+    'demostudent@gmail.com',
+    'demofaculty@gmail.com',
+    'demodriver@gmail.com',
+    'demostudentdriver@gmail.com',
+  ])
+  if (DEMO_EMAILS.has(trimmed)) {
+    return {
+      isValid: true,
+      domain,
+      reason: 'VALID_INSTITUTIONAL',
+      category: 'CUSTOM_INSTITUTIONAL',
+      message: '✓ Verified Sandbox Demo Account (@gmail.com)',
+    }
+  }
+
   // 1. Strict rejection of known consumer / personal email providers
   if (
     PERSONAL_EMAIL_DOMAINS.has(domain) ||

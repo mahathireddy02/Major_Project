@@ -558,6 +558,8 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
     // 3a. Alias normalization for common demo accounts and UI placeholders
     let normalizedCredential = credential
     const demoStudentAliases = [
+      'demostudent@gmail.com',
+      'demostudent',
       'student@campus.edu',
       'student@sriindu.ac.in',
       'student.demo@sriindu.ac.in',
@@ -566,9 +568,11 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       'student',
       'demo.student@sriindu.ac.in',
       'demo.student@campus.edu',
-      'demostudent',
+      'uday.kiran@sriindu.ac.in',
     ]
     const demoFacultyAliases = [
+      'demofaculty@gmail.com',
+      'demofaculty',
       'faculty@campus.edu',
       'faculty@sriindu.ac.in',
       'faculty.demo@sriindu.ac.in',
@@ -577,23 +581,148 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       'faculty',
       'demo.faculty@sriindu.ac.in',
       'demo.faculty@campus.edu',
-      'demofaculty',
+      'ramesh.sharma@sriindu.ac.in',
     ]
     const demoDriverAliases = [
+      'demodriver@gmail.com',
+      'demodriver',
       'driver@gmail.com',
       'driver.demo@gmail.com',
       'driver@campusflow.io',
       'driver.demo@campusflow.io',
       'driver',
-      'demodriver',
+      'rahul.kumar.driver@gmail.com',
+    ]
+    const demoStudentDriverAliases = [
+      'demostudentdriver@gmail.com',
+      'demostudentdriver',
+      'studentdriver@gmail.com',
+      'studentdriver',
+      'student-driver',
     ]
 
     if (demoStudentAliases.includes(credential) || (reqRole === 'student' && credential === 'demo')) {
-      normalizedCredential = 'uday.kiran@sriindu.ac.in'
+      normalizedCredential = 'demostudent@gmail.com'
+      try {
+        let sUser = await UserModel.findOne({ $or: [{ email: 'demostudent@gmail.com' }, { id: 's1' }, { email: 'uday.kiran@sriindu.ac.in' }] })
+        if (!sUser) {
+          await UserModel.create({
+            id: 's1',
+            name: 'Demo Student',
+            email: 'demostudent@gmail.com',
+            studentId: '21IND0501',
+            rollNumber: '21IND0501',
+            collegeName: 'Sri Indu College of Engineering & Technology',
+            department: 'Computer Science',
+            year: 3,
+            phone: '+91 98765 43210',
+            avatar: 'DS',
+            rating: 4.9,
+            totalRides: 38,
+            isVerified: true,
+            role: 'STUDENT',
+            passwordHash: await bcrypt.hash('campus2026', 10),
+          })
+        } else if (sUser.name !== 'Demo Student' || sUser.email !== 'demostudent@gmail.com') {
+          sUser.name = 'Demo Student'
+          sUser.email = 'demostudent@gmail.com'
+          sUser.avatar = 'DS'
+          await sUser.save()
+        }
+      } catch (e) {
+        console.warn('[Auth] Demo student setup warn:', e)
+      }
     } else if (demoFacultyAliases.includes(credential) || (reqRole === 'faculty' && credential === 'demo')) {
-      normalizedCredential = 'ramesh.sharma@sriindu.ac.in'
+      normalizedCredential = 'demofaculty@gmail.com'
+      try {
+        let fUser = await UserModel.findOne({ $or: [{ email: 'demofaculty@gmail.com' }, { id: 'f1' }, { email: 'ramesh.sharma@sriindu.ac.in' }] })
+        if (!fUser) {
+          await UserModel.create({
+            id: 'f1',
+            name: 'Demo Faculty',
+            email: 'demofaculty@gmail.com',
+            studentId: 'FAC-2026-001',
+            collegeId: 'FAC-2026-001',
+            collegeName: 'Sri Indu College of Engineering & Technology',
+            department: 'Computer Science & Engineering',
+            year: 1,
+            phone: '+91 91234 56780',
+            avatar: 'DF',
+            rating: 5.0,
+            totalRides: 64,
+            isVerified: true,
+            role: 'FACULTY',
+            passwordHash: await bcrypt.hash('campus2026', 10),
+          })
+        } else if (fUser.name !== 'Demo Faculty' || fUser.email !== 'demofaculty@gmail.com') {
+          fUser.name = 'Demo Faculty'
+          fUser.email = 'demofaculty@gmail.com'
+          fUser.avatar = 'DF'
+          await fUser.save()
+        }
+      } catch (e) {
+        console.warn('[Auth] Demo faculty setup warn:', e)
+      }
     } else if (demoDriverAliases.includes(credential) || (reqRole === 'driver' && credential === 'demo')) {
-      normalizedCredential = 'rahul.kumar.driver@gmail.com'
+      normalizedCredential = 'demodriver@gmail.com'
+      try {
+        let dUser = await UserModel.findOne({ $or: [{ email: 'demodriver@gmail.com' }, { id: 'd1' }, { email: 'rahul.kumar.driver@gmail.com' }] })
+        if (!dUser) {
+          await UserModel.create({
+            id: 'd1',
+            name: 'Demo Driver',
+            email: 'demodriver@gmail.com',
+            phone: '+91 99887 76655',
+            avatar: 'DD',
+            rating: 4.8,
+            totalTrips: 312,
+            isVerified: true,
+            role: 'DRIVER',
+            vehicleId: 'v1',
+            vehicleRegistration: 'TS 09 AB 1234',
+            vehicleType: 'Campus Shuttle Bus',
+            licenseNumber: 'TS-09-2018-004521',
+            passwordHash: await bcrypt.hash('campus2026', 10),
+          })
+        } else if (dUser.name !== 'Demo Driver' || dUser.email !== 'demodriver@gmail.com') {
+          dUser.name = 'Demo Driver'
+          dUser.email = 'demodriver@gmail.com'
+          dUser.avatar = 'DD'
+          await dUser.save()
+        }
+      } catch (e) {
+        console.warn('[Auth] Demo driver setup warn:', e)
+      }
+    } else if (demoStudentDriverAliases.includes(credential) || (reqRole === 'driver' && credential === 'studentdriver')) {
+      normalizedCredential = 'demostudentdriver@gmail.com'
+      try {
+        let sdUser = await UserModel.findOne({ $or: [{ email: 'demostudentdriver@gmail.com' }, { id: 'sd1' }] })
+        if (!sdUser) {
+          await UserModel.create({
+            id: 'sd1',
+            name: 'Demo Student Driver',
+            email: 'demostudentdriver@gmail.com',
+            phone: '+91 98765 43299',
+            avatar: 'SD',
+            rating: 4.9,
+            totalTrips: 45,
+            isVerified: true,
+            role: 'DRIVER',
+            vehicleId: 'v-sd1',
+            vehicleRegistration: 'TS 09 SD 2026',
+            vehicleType: 'Car',
+            licenseNumber: 'TS-09-2022-009876',
+            passwordHash: await bcrypt.hash('campus2026', 10),
+          })
+        } else if (sdUser.name !== 'Demo Student Driver' || sdUser.email !== 'demostudentdriver@gmail.com') {
+          sdUser.name = 'Demo Student Driver'
+          sdUser.email = 'demostudentdriver@gmail.com'
+          sdUser.avatar = 'SD'
+          await sdUser.save()
+        }
+      } catch (e) {
+        console.warn('[Auth] Demo student driver setup warn:', e)
+      }
     }
 
     const digitsOnly = normalizedCredential.replace(/\D/g, '')
@@ -852,7 +981,30 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       userId: { $in: searchIds },
     }).sort({ updatedAt: -1 })
 
-    return { success: true, data: contact || null }
+    if (contact && (contact.name === 'udaykiran' || contact.phone === '+917989442841')) {
+      contact.name = 'Demo Emergency Contact'
+      contact.phone = '+91851984666'
+      if (!contact.email || contact.email.includes('udaykiran')) {
+        contact.email = 'demo.emergency@campusflow.io'
+      }
+      await contact.save()
+      return { success: true, data: contact }
+    }
+
+    if (!contact) {
+      const defaultContact = {
+        id: `ec-${user?.id || id}-default`,
+        userId: user?.id || id,
+        name: 'Demo Emergency Contact',
+        relationship: 'Primary Contact',
+        phone: '+91851984666',
+        email: 'demo.emergency@campusflow.io',
+        isPrimary: true,
+      }
+      return { success: true, data: defaultContact }
+    }
+
+    return { success: true, data: contact }
   })
 
   fastify.post('/users/:id/emergency-contact', async (request, reply) => {
@@ -884,12 +1036,12 @@ export const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    // Phone format validation (allows +91 or 10 digits)
+    // Phone format validation (allows +91 or 9-15 digits)
     const cleanedPhone = phone.replace(/[\s\-\(\)]/g, '')
-    if (!cleanedPhone || cleanedPhone.length < 10) {
+    if (!cleanedPhone || cleanedPhone.length < 9) {
       return reply.status(400).send({
         success: false,
-        error: { code: 'INVALID_PHONE', message: 'Please enter a valid phone number (at least 10 digits).' },
+        error: { code: 'INVALID_PHONE', message: 'Please enter a valid phone number (at least 9 digits).' },
       })
     }
 

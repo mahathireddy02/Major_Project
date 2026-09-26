@@ -91,12 +91,25 @@ export default function Safety() {
       <div className="text-center mb-6">
         <button
           type="button"
-          onClick={() => setSosModalOpen(true)}
+          disabled={isCallingContact}
+          onClick={async () => {
+            setSosModalOpen(true)
+            if (!hasActiveSos) {
+              try {
+                toast.loading('🚨 Dispatching immediate SOS: Calling +91851984666 & Campus Security +916305649558...', { id: 'safety-sos', duration: 4000 })
+                await triggerSOS({ forceNew: true })
+                toast.success('🚨 Emergency alert dispatched! Live calls placed to +91851984666 & Campus Security (+916305649558).', { id: 'safety-sos', icon: '📞', duration: 6000 })
+              } catch (err: any) {
+                toast.error(err?.message || 'Failed to dispatch SOS.', { id: 'safety-sos' })
+              }
+            }
+          }}
           className={`w-36 h-36 rounded-full border-8 text-white font-heading font-bold text-xl transition-all duration-200 cursor-pointer shadow-lg hover:shadow-xl active:scale-95 mx-auto flex items-center justify-center flex-col gap-1 ${
             hasActiveSos
               ? 'bg-rose-700 border-rose-300 ring-8 ring-rose-500/30 animate-pulse'
               : 'bg-rose-600 hover:bg-rose-700 border-rose-200'
           }`}
+          title="Immediate Emergency SOS Alert - Calls Emergency Contact & Campus Security"
         >
           <AlertTriangle size={28} className={hasActiveSos ? 'animate-bounce' : ''} />
           <span>{hasActiveSos ? 'SOS ACTIVE' : 'SOS'}</span>
@@ -104,7 +117,7 @@ export default function Safety() {
         <p className="text-xs text-slate-400 mt-4">
           {hasActiveSos
             ? 'Distress beacon is active — tap to view responder status'
-            : 'Tap to trigger immediate emergency broadcast'}
+            : 'Tap to immediately dispatch emergency calls to +91851984666 & +916305649558'}
         </p>
       </div>
 
@@ -156,7 +169,7 @@ export default function Safety() {
             </div>
           )}
           {[
-            { name: 'Campus Security Control', number: '040-2345-6789' },
+            { name: 'Campus Security Control', number: '+916305649558' },
             { name: 'University 24/7 Helpline', number: '1800-CAMPUS-HELP' },
           ].map((c) => (
             <div key={c.name} className="flex items-center justify-between py-2 border-b border-slate-100 last:border-0">
@@ -164,12 +177,26 @@ export default function Safety() {
                 <p className="text-sm font-medium text-slate-800">{c.name}</p>
                 <p className="text-xs text-slate-400">{c.number}</p>
               </div>
-              <a
-                href={`tel:${c.number}`}
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    toast.loading(`Calling ${c.name} (${c.number})...`, { id: 'sec-quick' })
+                    await triggerSOS({
+                      emergencyPhone: c.number.startsWith('+') ? c.number : '+916305649558',
+                      emergencyName: c.name,
+                      forceNew: true,
+                    })
+                    toast.success(`Automated call placed to ${c.name} (${c.number})!`, { id: 'sec-quick', icon: '📞' })
+                  } catch (err: any) {
+                    toast.error(err?.message || 'Failed to place call.', { id: 'sec-quick' })
+                  }
+                }}
                 className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center cursor-pointer hover:bg-green-100 transition-colors"
+                title={`Call ${c.name} (${c.number}) in-app`}
               >
                 <Phone size={14} className="text-green-600" />
-              </a>
+              </button>
             </div>
           ))}
         </div>

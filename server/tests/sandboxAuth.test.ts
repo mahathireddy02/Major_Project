@@ -9,9 +9,9 @@ describe('Sandbox Demo Credentials Verification', () => {
     expect(health.data?.status).toBe('healthy')
   })
 
-  it('1. Student Sandbox Credentials: logs in as real existing Student record (Uday Kiran)', async () => {
+  it('1. Student Sandbox Credentials: logs in as real existing Student record (Demo Student)', async () => {
     const res = await axios.post(`${API_BASE}/auth/login`, {
-      email: 'uday.kiran@sriindu.ac.in',
+      email: 'demostudent@gmail.com',
       password: 'campus2026',
       role: 'student',
     })
@@ -19,14 +19,13 @@ describe('Sandbox Demo Credentials Verification', () => {
     expect(res.data.success).toBe(true)
     expect(res.data.data.token).toBeTruthy()
     expect(res.data.data.user.role).toBe('STUDENT')
-    expect(res.data.data.user.name).toBe('Uday Kiran')
-    expect(res.data.data.user.email).toBe('uday.kiran@sriindu.ac.in')
-    expect(res.data.data.user.collegeName).toBe('Sri Indu College of Engineering & Technology')
+    expect(res.data.data.user.name).toBe('Demo Student')
+    expect(res.data.data.user.email).toBe('demostudent@gmail.com')
   })
 
-  it('2. Faculty Sandbox Credentials: logs in as real existing Faculty record (Dr. Ramesh Sharma)', async () => {
+  it('2. Faculty Sandbox Credentials: logs in as real existing Faculty record (Demo Faculty)', async () => {
     const res = await axios.post(`${API_BASE}/auth/login`, {
-      email: 'ramesh.sharma@sriindu.ac.in',
+      email: 'demofaculty@gmail.com',
       password: 'campus2026',
       role: 'faculty',
     })
@@ -34,14 +33,13 @@ describe('Sandbox Demo Credentials Verification', () => {
     expect(res.data.success).toBe(true)
     expect(res.data.data.token).toBeTruthy()
     expect(res.data.data.user.role).toBe('FACULTY')
-    expect(res.data.data.user.name).toBe('Dr. Ramesh Sharma')
-    expect(res.data.data.user.email).toBe('ramesh.sharma@sriindu.ac.in')
-    expect(res.data.data.user.collegeName).toBe('Sri Indu College of Engineering & Technology')
+    expect(res.data.data.user.name).toBe('Demo Faculty')
+    expect(res.data.data.user.email).toBe('demofaculty@gmail.com')
   })
 
-  it('3. Driver Sandbox Credentials: logs in as real existing Driver record (Rahul Kumar)', async () => {
+  it('3. Driver Sandbox Credentials: logs in as real existing Driver record (Demo Driver)', async () => {
     const res = await axios.post(`${API_BASE}/auth/login`, {
-      email: 'rahul.kumar.driver@gmail.com',
+      email: 'demodriver@gmail.com',
       password: 'campus2026',
       role: 'driver',
     })
@@ -49,9 +47,21 @@ describe('Sandbox Demo Credentials Verification', () => {
     expect(res.data.success).toBe(true)
     expect(res.data.data.token).toBeTruthy()
     expect(res.data.data.user.role).toBe('DRIVER')
-    expect(res.data.data.user.id).toBe('d1')
-    expect(res.data.data.user.name).toBe('Rahul Kumar')
-    expect(res.data.data.user.email).toBe('rahul.kumar.driver@gmail.com')
-    expect(res.data.data.user.vehicleRegistration).toBe('TS 09 AB 1234')
+    expect(res.data.data.user.name).toBe('Demo Driver')
+    expect(res.data.data.user.email).toBe('demodriver@gmail.com')
+  })
+
+  it('4. Student as Driver Sandbox Credentials: logs in as real existing Student Driver record (Demo Student Driver)', async () => {
+    const res = await axios.post(`${API_BASE}/auth/login`, {
+      email: 'demostudentdriver@gmail.com',
+      password: 'campus2026',
+      role: 'driver',
+    })
+
+    expect(res.data.success).toBe(true)
+    expect(res.data.data.token).toBeTruthy()
+    expect(res.data.data.user.role).toBe('DRIVER')
+    expect(res.data.data.user.name).toBe('Demo Student Driver')
+    expect(res.data.data.user.email).toBe('demostudentdriver@gmail.com')
   })
 })

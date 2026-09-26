@@ -325,13 +325,13 @@ export default function StudentFacultyAuth() {
   // Quick Demo Login Handler (Uses real existing database credentials)
   const handleQuickDemoLogin = async (role: 'student' | 'faculty') => {
     setLoading(true)
-    const email = role === 'student' ? 'uday.kiran@sriindu.ac.in' : 'ramesh.sharma@sriindu.ac.in'
+    const email = role === 'student' ? 'demostudent@gmail.com' : 'demofaculty@gmail.com'
     const password = 'campus2026'
     setSignInEmail(email)
     setSignInPassword(password)
     try {
       const res = await login({ email, password, role })
-      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Uday Kiran' : 'Dr. Ramesh Sharma')}!`)
+      toast.success(`Welcome back, ${res.user?.name || (role === 'student' ? 'Demo Student' : 'Demo Faculty')}!`)
       navigate('/student/home')
     } catch (err: any) {
       toast.error(err.message || 'Demo login failed')
@@ -508,8 +508,8 @@ export default function StudentFacultyAuth() {
                         🎓
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Student Demo • Uday Kiran</p>
-                        <p className="text-[11px] text-primary-700 font-mono">Email: uday.kiran@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Student Demo • Demo Student</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: demostudent@gmail.com</p>
                         <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
@@ -529,8 +529,8 @@ export default function StudentFacultyAuth() {
                         👨‍🏫
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Faculty Demo • Dr. Ramesh Sharma</p>
-                        <p className="text-[11px] text-primary-700 font-mono">Email: ramesh.sharma@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Faculty Demo • Demo Faculty</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: demofaculty@gmail.com</p>
                         <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
@@ -1086,8 +1086,8 @@ export default function StudentFacultyAuth() {
                         🎓
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Student Demo • Uday Kiran</p>
-                        <p className="text-[11px] text-primary-700 font-mono">Email: uday.kiran@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Student Demo • Demo Student</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: demostudent@gmail.com</p>
                         <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
@@ -1107,8 +1107,8 @@ export default function StudentFacultyAuth() {
                         👨‍🏫
                       </div>
                       <div>
-                        <p className="font-bold text-slate-900 text-xs">Faculty Demo • Dr. Ramesh Sharma</p>
-                        <p className="text-[11px] text-primary-700 font-mono">Email: ramesh.sharma@sriindu.ac.in</p>
+                        <p className="font-bold text-slate-900 text-xs">Faculty Demo • Demo Faculty</p>
+                        <p className="text-[11px] text-primary-700 font-mono">Email: demofaculty@gmail.com</p>
                         <p className="text-[10px] text-slate-500 font-mono">Password: campus2026</p>
                       </div>
                     </div>
